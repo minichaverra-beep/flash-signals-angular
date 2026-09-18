@@ -1,0 +1,33 @@
+{
+  "name": "flash-signals-angular",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UI Angular + API local para señales BTC/US30 (Cursor Trading, sin Cursor AI)",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve --proxy-config proxy.conf.json",
+    "build": "ng build",
+    "api": "node server/index.js",
+    "start:all": "npx --yes concurrently -k -n api,ui -c cyan,magenta \"npm run api\" \"npm start\""
+  },
+  "dependencies": {
+    "@angular/animations": "^19.2.25",
+    "@angular/common": "^19.2.25",
+    "@angular/compiler": "^19.2.25",
+    "@angular/core": "^19.2.25",
+    "@angular/forms": "^19.2.25",
+    "@angular/platform-browser": "^19.2.25",
+    "@angular/platform-browser-dynamic": "^19.2.25",
+    "@angular/router": "^19.2.25",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.8.1",
+    "zone.js": "^0.15.0"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^19.2.27",
+    "@angular/cli": "^19.2.27",
+    "@angular/compiler-cli": "^19.2.25",
+    "@types/node": "^22.10.0",
+    "typescript": "~5.6.3"
+  }
+}
