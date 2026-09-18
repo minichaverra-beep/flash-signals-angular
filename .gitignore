@@ -19,10 +19,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Entorno
+# Entorno / secretos (nunca versionar)
 .env
 .env.local
 .env.*.local
+*.pem
+*.key
+credentials.json
 
 # IDE (quita .vscode/ de esta lista si quieres compartir settings del equipo)
 .idea/
@@ -38,3 +41,10 @@ Desktop.ini
 # Misc
 *.pid
 pids*.txt
+
+# Sonar
+.scannerwork/
+.sonar/
+
+# Docker buildx / local overrides (mantener compose y Dockerfiles versionados)
+.docker-cache/

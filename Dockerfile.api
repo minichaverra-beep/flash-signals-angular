@@ -1,0 +1,24 @@
+# API Express — Flash Signals
+# Imagen Linux/Node: health, latest, chart y proxy OK.
+# Señales reales (spawn de .ps1 → Python) requieren API en host Windows:
+#   .\run-api.ps1
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY server/index.js ./
+
+ENV NODE_ENV=production
+ENV PORT=3847
+ENV BIND_HOST=0.0.0.0
+ENV CURSOR_TRADING_ROOT=/trading
+
+EXPOSE 3847
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3847)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "index.js"]

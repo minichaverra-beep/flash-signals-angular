@@ -1,0 +1,53 @@
+# SonarCloud analysis — requires repo secret SONAR_TOKEN
+# Create project in SonarCloud first; match sonar.organization / sonar.projectKey
+# in sonar-project.properties. See docs/QUALITY.md.
+
+name: SonarCloud
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  sonarcloud:
+    name: SonarCloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install (UI)
+        run: npm ci --legacy-peer-deps
+
+      - name: Install (API)
+        working-directory: server
+        run: npm ci
+
+      - name: Typecheck Angular
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: Require SONAR_TOKEN
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::Falta el secreto SONAR_TOKEN. Crea el proyecto en SonarCloud y añade el token en GitHub → Settings → Secrets and variables → Actions. Ver docs/QUALITY.md."
+            exit 1
+          fi
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io

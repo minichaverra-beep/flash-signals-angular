@@ -1,0 +1,27 @@
+# Web Angular — multi-stage: build + nginx
+# Stage 1: compila la UI (no hace falta Node/Angular en el host)
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
+
+COPY angular.json tsconfig.json tsconfig.app.json proxy.conf.json ./
+COPY public ./public
+COPY src ./src
+
+RUN npx ng build --configuration=production
+
+# Stage 2: sirve estáticos y proxy /api
+FROM nginx:1.27-alpine AS runtime
+
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist/flash-signals-angular/browser /usr/share/nginx/html
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

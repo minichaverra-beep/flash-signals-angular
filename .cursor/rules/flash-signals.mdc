@@ -1,0 +1,61 @@
+---
+description: Contexto operativo Flash Signals Angular (UI + API local BTC/US30)
+alwaysApply: true
+---
+
+# Flash Signals Angular — reglas del proyecto
+
+## Qué es
+
+UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquestar señales **BTC / US30** del stack real **Cursor Trading** (`CURSOR_TRADING_ROOT`, default `D:\Danilo\Trading\Cursor Trading`).
+
+- **No usa Cursor AI** para generar señales.
+- **No inventar** veredictos, planes, scores ni charts: solo invocar `.ps1` del trading stack y mostrar el resultado o el **error real**.
+- Crédito / branding: *Flash Signals · fire & shadow*, **Danilo Chaverra**, logo `src/assets/logo.png`.
+
+## Stack
+
+- Frontend: Angular 19 (`src/app/…`), tabs **Modo Trader** / **Modo Inversor** / **Cómo usar**.
+- Backend: Express CommonJS (`server/`), puerto **3847**, bind default **127.0.0.1** (localhost only).
+- Proxy dev: `proxy.conf.json` → `/api` a `:3847`.
+- Docker: UI (nginx) sin Node en el host; señales reales → API en host Windows (`run-api.ps1` + `run-docker.ps1 -HostApi`).
+
+## Arquitectura UI
+
+| Tab | Contenido |
+|-----|-----------|
+| Modo Trader | Vista técnica: veredicto, plan, setup, scores, checklists, volumen, gráfico |
+| Modo Inversor | Vista simplificada: decisión, plan, riesgo, scores en lenguaje claro |
+| Cómo usar | Guía rápida (visible sin haber corrido señal) |
+
+- Cards colapsables (`<details>`).
+- Gráfico PNG **solo** vía `GET /api/signals/chart?market=btc|us30` (no inventar imágenes).
+- Formulario: mercado, tiers `context|light|high|history`, flags (Bullish/Bearish, Break/Reverse, ML, Neural, Ilustrate, Advanced, Entry en High).
+
+## API (no ampliar superficie sin necesidad)
+
+- `GET /api/health` — estado + `CURSOR_TRADING_ROOT` + `signalsRunnable`
+- `POST /api/signals/run` — una corrida a la vez (409 si running)
+- `GET /api/signals/status|latest|chart` + `GET /api/zentinel`
+- Sanitizar `entry` (solo numérico). No exponer la API a la LAN por defecto.
+- CORS: localhost (4200/8080) + `CORS_ORIGINS`.
+
+## Seguridad y secretos
+
+- No commit de `.env`, tokens, claves, ni rutas con credenciales.
+- No abrir `BIND_HOST=0.0.0.0` en producción pública; Docker usa `0.0.0.0` **dentro** de la red local del compose.
+- No loguear secretos. No sugerir exponer esta API a Internet.
+
+## Docker (honestidad)
+
+- Docker = correr **web** sin instalar Node/Angular.
+- Contenedor Linux **no** ejecuta bien el pipeline PowerShell→Python de Windows.
+- Preferir: `.\run-api.ps1` (host) + `.\run-docker.ps1 -HostApi` (UI).
+- ARM64: `.\run-docker-arm.ps1` / `platform: linux/arm64`.
+
+## Al editar código
+
+- Mantener español en UI y mensajes de error orientados a Danilo.
+- No copiar el repo Cursor Trading dentro de esta app; se invoca por path.
+- Cambios mínimos; no inventar features de trading (p.ej. Super High / TV live) no pedidas.
+- Tests/docs: actualizar README si cambian puertos, scripts o límites Docker.

@@ -14,11 +14,18 @@ UI local (Angular 19 + API Express) para orquestar señales **BTC / US30** del s
 
 ## Requisitos
 
+### Con Node local
+
 - **Node.js** 20+ (LTS recomendado; Node 23 suele funcionar con avisos)
 - **npm**
 - **Python** del mismo entorno que usas con Cursor Trading (`requirements*.txt` del stack)
 - **PowerShell** (Windows)
 - Variable **`CURSOR_TRADING_ROOT`** apuntando a la raíz del repo trading (default abajo)
+
+### Sin Node/Angular: Docker
+
+- **Docker Desktop** (Windows/macOS/Linux) con Compose v2
+- Para **señales reales**: PowerShell + Python + stack Cursor Trading en el **host Windows** (ver sección Docker)
 
 ## Instalación
 
@@ -37,15 +44,23 @@ cd ..
 |----------|---------|-------------|
 | `CURSOR_TRADING_ROOT` | `D:\Danilo\Trading\Cursor Trading` | Raíz del repo de señales |
 | `PORT` | `3847` | Puerto de la API |
+| `BIND_HOST` | `127.0.0.1` | Host de listen (solo loopback por defecto; Docker API usa `0.0.0.0`) |
+| `CORS_ORIGINS` | _(vacío)_ | Orígenes extra CSV para CORS (p.ej. `http://localhost:8080`) |
+| `WEB_PORT` | `8080` | Puerto host del contenedor web |
+| `API_PORT` | `3847` | Puerto host del contenedor API |
 
 ```powershell
 $env:CURSOR_TRADING_ROOT = "D:\Danilo\Trading\Cursor Trading"
 $env:PORT = "3847"
 ```
 
+## Calidad / SonarCloud
+
+Ver [docs/QUALITY.md](docs/QUALITY.md). Resumen: crea el proyecto en SonarCloud, añade el secreto GitHub `SONAR_TOKEN`, y el workflow `.github/workflows/sonarcloud.yml` hará el análisis.
+
 ## Arranque
 
-### Recomendado — scripts PowerShell
+### Recomendado — scripts PowerShell (con Node)
 
 Dos terminales desde la carpeta del proyecto:
 
@@ -91,6 +106,73 @@ npm start         # terminal 2
 npm run start:all
 ```
 
+## Sin Node/Angular: Docker
+
+Docker sirve para **correr la UI** sin instalar Node/Angular en el host.
+
+**Sé honesto con el pipeline:** los `.ps1` de Cursor Trading + Python viven en **Windows**. Un contenedor Linux con Node **no** spawnea `powershell.exe` de forma fiable. Por eso:
+
+| Modo | Comando | Qué hace | Señales reales |
+|------|---------|----------|----------------|
+| **Híbrido (recomendado)** | `.\run-api.ps1` + `.\run-docker.ps1 -HostApi` | API en host Windows; Docker solo UI (nginx → `host.docker.internal:3847`) | Sí |
+| Full compose | `.\run-docker.ps1` | `api` + `web` en Docker; volumen trading → `/trading` | No (health/latest/chart sí, si hay volumen); `POST /run` responde 503 |
+| ARM64 | `.\run-docker-arm.ps1` | Igual que arriba con `platform: linux/arm64` | Igual que el modo elegido |
+
+### Scripts
+
+```powershell
+cd "D:\Danilo\Trading\flash-signals-angular"
+
+# UI + API en Docker (desarrollo UI / health; señales limitadas)
+.\run-docker.ps1
+
+# Señales reales: API Windows + UI Docker
+.\run-api.ps1                  # terminal 1
+.\run-docker.ps1 -HostApi      # terminal 2 → http://localhost:8080
+
+# ARM64 (Apple Silicon / Windows ARM / buildx)
+.\run-docker-arm.ps1
+.\run-docker-arm.ps1 -HostApi
+
+# Bajar
+.\run-docker.ps1 -Down
+```
+
+| Servicio | Puerto host | URL |
+|----------|-------------|-----|
+| Web (nginx) | **8080** | http://localhost:8080 |
+| API (compose full) | **3847** | http://localhost:3847/api/health |
+
+Archivos: `Dockerfile.web` (multi-stage Angular→nginx), `Dockerfile.api` (Node Express), `docker-compose.yml`, `docker-compose.host-api.yml`, `docker-compose.arm.yml`, `docker/nginx*.conf`.
+
+### ARM64 / multi-arch
+
+```powershell
+# Vía script (platform linux/arm64 en compose)
+.\run-docker-arm.ps1
+
+# buildx multi-arch (opcional, avanzado)
+docker buildx create --name flash-signals --use
+docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.web -t flash-signals-web:multi .
+docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.api -t flash-signals-api:multi .
+```
+
+En `docker-compose.arm.yml` se fija `platform: linux/arm64` para los servicios.
+
+## Contexto para agentes (Cursor / Claude)
+
+| Recurso | Ubicación |
+|---------|-----------|
+| Reglas Cursor | [`.cursor/rules/flash-signals.mdc`](.cursor/rules/flash-signals.mdc) |
+| Contexto Claude | [`CLAUDE.md`](CLAUDE.md) |
+
+Resumen para agentes:
+
+- Arquitectura UI **Trader / Inversor / Cómo usar**; no inventar señales.
+- Gráficos PNG solo vía API; API localhost; branding Danilo / fire & shadow.
+- No commit de secretos; stack Express + Angular 19.
+- Docker = UI sin Node; pipeline PowerShell→Python suele necesitar `run-api.ps1` en Windows.
+
 ## Tabs de la UI
 
 | Tab | Qué muestra |
@@ -112,8 +194,8 @@ npm run start:all
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `GET` | `/api/health` | Estado, `CURSOR_TRADING_ROOT` y job actual |
-| `POST` | `/api/signals/run` | Lanza el `.ps1` correspondiente (una corrida a la vez) |
+| `GET` | `/api/health` | Estado, `CURSOR_TRADING_ROOT`, job, `signalsRunnable` / plataforma |
+| `POST` | `/api/signals/run` | Lanza el `.ps1` correspondiente (una corrida a la vez; 503 si API no-Windows) |
 | `GET` | `/api/signals/status` | Job actual (logs / done / error) |
 | `GET` | `/api/signals/latest?market=btc&tier=high` | Último `.md` parseado en `live/` |
 | `GET` | `/api/signals/chart?market=btc` | PNG anotado (`btc_m5_chart_annotated.png` / US30) |
@@ -146,6 +228,7 @@ Tiers: `context` | `light` | `high` | `history`.
 - **Context** no acepta flags de bias/ML (el script no los usa).
 - **Super High** (captura TV) no está en esta UI a propósito.
 - Si falla el runner de Cursor Trading, la UI muestra el error real (no inventa un plan).
+- **Docker Linux**: no ejecuta el pipeline `.ps1` Windows; usa modo `-HostApi` para señales reales.
 
 ## Estructura
 
@@ -156,8 +239,16 @@ flash-signals-angular/
   src/assets/logo.png   # Logo (versionado)
   server/index.js       # Express API (:3847)
   proxy.conf.json       # /api → :3847
-  run-api.ps1           # Arranca API
+  run-api.ps1           # Arranca API (host)
   run-local-web.ps1     # Arranca Angular (:4200)
+  run-docker.ps1        # UI(+API) vía Docker
+  run-docker-arm.ps1    # Docker ARM64
+  Dockerfile.web        # Build Angular + nginx
+  Dockerfile.api        # Runtime Express
+  docker-compose*.yml
+  docker/nginx*.conf
+  .cursor/rules/        # Reglas Cursor
+  CLAUDE.md             # Contexto Claude
   .run-logs/            # Logs locales de arranque (gitignored)
   README.md
 ```

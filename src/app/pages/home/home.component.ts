@@ -2,7 +2,6 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
-  ChecklistItem,
   JobStatus,
   LatestResponse,
   Market,
@@ -162,10 +161,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.marketRows(s).length > 0 || this.hasPlanMatrix(s);
   }
 
-  hasSetupCard(s: SignalSummary | null): boolean {
-    return this.setupRows(s).length > 0;
-  }
-
   hasScoresCard(s: SignalSummary | null): boolean {
     return (
       this.scoreKpiRows(s).length > 0 ||
@@ -179,15 +174,6 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   hasDetalleAdicional(s: SignalSummary | null, preview?: string | null): boolean {
     return !!(s?.volume || s?.redFlags?.length || preview);
-  }
-
-  kpiRows(s: SignalSummary | null): KpiRow[] {
-    return [
-      ...this.verdictRows(s),
-      ...this.marketRows(s),
-      ...this.setupRows(s),
-      ...this.scoreKpiRows(s),
-    ];
   }
 
   investorVerdictTitle(s: SignalSummary | null): string {
@@ -339,30 +325,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     return rows;
   }
 
-  barWidth(value: number | null | undefined): string {
-    if (value == null || Number.isNaN(value)) return '0%';
-    return `${Math.max(0, Math.min(100, value))}%`;
-  }
-
-  barTone(value: number | null | undefined): string {
-    if (value == null) return '';
-    if (value >= 70) return 'hi';
-    if (value >= 45) return 'mid';
-    return 'lo';
-  }
-
-  okLabel(ok: boolean | null | undefined): string {
-    if (ok === true) return 'OK';
-    if (ok === false) return 'NO';
-    return '—';
-  }
-
-  okClass(ok: boolean | null | undefined): string {
-    if (ok === true) return 'ok';
-    if (ok === false) return 'bad';
-    return 'na';
-  }
-
   verdictTone(v: string | null | undefined): string {
     const t = (v || '').toUpperCase();
     if (/NO_OPERAR|NO OPERAR|ESPERAR|WAIT/.test(t)) return 'warn';
@@ -387,14 +349,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   hasPlanMatrix(s: SignalSummary | null): boolean {
     const p = s?.planDetails;
     return !!(p && (p.entry || p.sl || p.tp || p.rr));
-  }
-
-  hasCharts(s: SignalSummary | null): boolean {
-    return !!(s?.chartScores?.length || s?.volume?.ratio != null || s?.confluencePct != null);
-  }
-
-  checklistRows(s: SignalSummary | null): ChecklistItem[] {
-    return s?.checklist2M5?.length ? s.checklist2M5 : [];
   }
 
   refreshHealth(): void {

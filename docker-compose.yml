@@ -1,0 +1,77 @@
+# Flash Signals — Docker Compose
+#
+# Uso típico (sin Node/Angular en el host):
+#   .\run-docker.ps1
+#
+# Señales REALES (PowerShell → Python del stack Cursor Trading):
+#   Terminal 1: .\run-api.ps1          # API en Windows
+#   Terminal 2: .\run-docker.ps1 -HostApi
+#
+# ARM64 (Apple Silicon / Windows ARM):
+#   .\run-docker-arm.ps1
+#
+# Limitación honesta: en contenedor Linux, spawn de powershell.exe / .ps1
+# de Windows NO es fiable. El servicio `api` sirve health + lectura de live/
+# si montas el volumen; el pipeline de señales suele necesitar API en host.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: flash-signals-api:local
+    container_name: flash-signals-api
+    ports:
+      - "${API_PORT:-3847}:3847"
+    environment:
+      PORT: "3847"
+      BIND_HOST: "0.0.0.0"
+      CURSOR_TRADING_ROOT: /trading
+      CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost,http://127.0.0.1"
+    volumes:
+      # Bind del stack trading (Windows path → /trading). Lectura de live/charts;
+      # ejecutar .ps1 desde Linux container no es el camino recomendado.
+      - type: bind
+        source: ${CURSOR_TRADING_ROOT:-D:/Danilo/Trading/Cursor Trading}
+        target: /trading
+        read_only: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3847/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    profiles:
+      - full
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: flash-signals-web:local
+    container_name: flash-signals-web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+# Perfil por defecto al usar run-docker.ps1 sin -HostApi: --profile full
+# Con -HostApi: solo `web` + override nginx → host.docker.internal:3847

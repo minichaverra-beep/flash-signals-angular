@@ -364,34 +364,12 @@
     <div class="collapsible-body">
       <div class="extra-section" *ngIf="s.checklist2M5?.length">
         <h4>Checklist 2M5</h4>
-        <div class="table-wrap">
-          <table class="matrix checklist">
-            <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
-            <tbody>
-              <tr *ngFor="let item of s.checklist2M5" [class.ok]="item.ok === true" [class.bad]="item.ok === false">
-                <td class="status">{{ item.ok === true ? '✓' : item.ok === false ? '✗' : '·' }}</td>
-                <td>{{ item.label }}</td>
-                <td>{{ item.note || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <ng-container *ngTemplateOutlet="checklistTable; context: { $implicit: s.checklist2M5 }"></ng-container>
       </div>
 
       <div class="extra-section" *ngIf="s.checklistE1?.length">
         <h4>Checklist E1</h4>
-        <div class="table-wrap">
-          <table class="matrix checklist">
-            <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
-            <tbody>
-              <tr *ngFor="let item of s.checklistE1" [class.ok]="item.ok === true" [class.bad]="item.ok === false">
-                <td class="status">{{ item.ok === true ? '✓' : item.ok === false ? '✗' : '·' }}</td>
-                <td>{{ item.label }}</td>
-                <td>{{ item.note || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <ng-container *ngTemplateOutlet="checklistTable; context: { $implicit: s.checklistE1 }"></ng-container>
       </div>
     </div>
   </details>
@@ -551,5 +529,20 @@
     <p class="investor-note">
       No necesitas saber de indicadores avanzados; esto resume la decisión del sistema.
     </p>
+  </div>
+</ng-template>
+
+<ng-template #checklistTable let-items>
+  <div class="table-wrap">
+    <table class="matrix checklist">
+      <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let item of items" [class.ok]="item.ok === true" [class.bad]="item.ok === false">
+          <td class="status">{{ item.ok === true ? '✓' : item.ok === false ? '✗' : '·' }}</td>
+          <td>{{ item.label }}</td>
+          <td>{{ item.note || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </ng-template>

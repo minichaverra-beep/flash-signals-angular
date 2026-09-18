@@ -9,9 +9,52 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const PORT = Number(process.env.PORT || 3847);
+/** Solo loopback: API local, no exponer a la LAN. */
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const TRADING_ROOT =
   process.env.CURSOR_TRADING_ROOT ||
   path.normalize('D:\\Danilo\\Trading\\Cursor Trading');
+
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:4200',
+  'http://127.0.0.1:4200',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost',
+  'http://127.0.0.1',
+]);
+
+/** Orígenes extra (CSV) p.ej. CORS_ORIGINS=http://localhost:8080,http://127.0.0.1:8080 */
+for (const origin of String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)) {
+  ALLOWED_ORIGINS.add(origin);
+}
+
+/** En Linux (Docker) no hay powershell.exe fiable para el pipeline Windows. */
+const SIGNALS_RUNNABLE = process.platform === 'win32';
+const MARKETS = new Set(['btc', 'us30']);
+const TIERS = new Set(['context', 'light', 'high', 'history']);
+
+/** Entry solo numérico (evita inyección vía args de PowerShell). */
+function sanitizeEntry(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s === '') return null;
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return undefined;
+  return s;
+}
+
+function normalizeMarket(value) {
+  const m = String(value || 'btc').toLowerCase();
+  return MARKETS.has(m) ? m : null;
+}
+
+function normalizeTier(value) {
+  const t = String(value || 'high').toLowerCase();
+  return TIERS.has(t) ? t : null;
+}
 
 const REPORTS = {
   btc: {
@@ -41,8 +84,24 @@ let currentJob = {
 };
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Sin Origin (curl / same-machine) o Angular local
+      if (!origin || ALLOWED_ORIGINS.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+  })
+);
 app.use(express.json({ limit: '1mb' }));
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
 
 function livePath(...parts) {
   return path.join(TRADING_ROOT, 'live', ...parts);
@@ -91,9 +150,9 @@ function buildPsArgs(body) {
   if (body.advanced) args.push('-Advanced');
   if (body.noOpen !== false) args.push('-NoOpen');
 
-  // Entry solo en High (history no lo cablea)
-  if (tier === 'high' && body.entry != null && String(body.entry).trim() !== '') {
-    args.push('-Entry', String(body.entry).trim());
+  // Entry solo en High (history no lo cablea); ya sanitizado en el handler
+  if (tier === 'high' && body.entry) {
+    args.push('-Entry', String(body.entry));
   }
 
   return args;
@@ -590,32 +649,35 @@ app.get('/api/health', (_req, res) => {
     tradingRoot: TRADING_ROOT,
     tradingRootExists: rootOk,
     jobStatus: currentJob.status,
+    platform: process.platform,
+    signalsRunnable: SIGNALS_RUNNABLE,
+    signalsNote: SIGNALS_RUNNABLE
+      ? 'API en Windows: puede spawnear .ps1 del stack Cursor Trading.'
+      : 'API en contenedor/no-Windows: health y lectura de live/ OK; para EJECUTAR señales usa run-api.ps1 en el host Windows.',
   });
 });
-
 app.get('/api/signals/status', (_req, res) => {
   res.json(currentJob);
 });
 
 app.get('/api/signals/latest', (req, res) => {
-  const market = String(req.query.market || 'btc').toLowerCase();
-  const tier = String(req.query.tier || 'high').toLowerCase();
-  if (!['btc', 'us30'].includes(market)) {
+  const market = normalizeMarket(req.query.market);
+  const tier = normalizeTier(req.query.tier) || 'high';
+  if (!market) {
     return res.status(400).json({ error: 'market debe ser btc|us30' });
   }
   const latest = readLatest(market, tier);
   if (!latest) {
     return res.status(404).json({
       error: 'No hay reporte live aún. Ejecuta una señal primero.',
-      liveDir: path.join(TRADING_ROOT, 'live'),
     });
   }
   res.json(latest);
 });
 
 app.get('/api/signals/chart', (req, res) => {
-  const market = String(req.query.market || 'btc').toLowerCase();
-  if (!['btc', 'us30'].includes(market)) {
+  const market = normalizeMarket(req.query.market);
+  if (!market) {
     return res.status(400).json({ error: 'market debe ser btc|us30' });
   }
   const chartName = REPORTS[market].chart;
@@ -629,14 +691,17 @@ app.get('/api/signals/chart', (req, res) => {
     return res.status(400).json({ error: 'path inválido' });
   }
   if (!fs.existsSync(chartFull)) {
-    return res.status(404).json({ error: 'PNG no encontrado', path: chartFull });
+    return res.status(404).json({ error: 'PNG no encontrado', chart: chartName });
   }
   res.setHeader('Content-Type', 'image/png');
   res.sendFile(chartFull);
 });
 
 app.get('/api/zentinel', (req, res) => {
-  const market = String(req.query.market || 'btc').toLowerCase();
+  const market = normalizeMarket(req.query.market);
+  if (!market) {
+    return res.status(400).json({ error: 'market debe ser btc|us30' });
+  }
   res.json(readZentinel(market));
 });
 
@@ -648,33 +713,60 @@ app.post('/api/signals/run', (req, res) => {
     });
   }
 
-  const body = req.body || {};
-  const market = String(body.market || 'btc').toLowerCase();
-  const tier = String(body.tier || 'high').toLowerCase();
+  const body = { ...(req.body || {}) };
+  const market = normalizeMarket(body.market);
+  const tier = normalizeTier(body.tier);
 
-  if (!['btc', 'us30'].includes(market)) {
+  if (!market) {
     return res.status(400).json({ error: 'market debe ser btc|us30' });
   }
-  if (!['context', 'light', 'high', 'history'].includes(tier)) {
+  if (!tier) {
     return res.status(400).json({
       error: 'tier debe ser context|light|high|history',
     });
   }
+
+  const entry = sanitizeEntry(body.entry);
+  if (body.entry != null && String(body.entry).trim() !== '' && entry === undefined) {
+    return res.status(400).json({
+      error: 'entry debe ser un número (ej. 97450.5)',
+    });
+  }
+  body.entry = entry;
+  body.market = market;
+  body.tier = tier;
+
   if (!fs.existsSync(TRADING_ROOT)) {
     return res.status(500).json({
-      error: `CURSOR_TRADING_ROOT no existe: ${TRADING_ROOT}`,
+      error: 'CURSOR_TRADING_ROOT no existe o no es accesible',
     });
   }
 
   const script = scriptFor(market, tier);
-  if (!script || !fs.existsSync(script)) {
+  const scriptsRoot = path.resolve(path.join(TRADING_ROOT, 'scripts', 'analyze'));
+  const scriptResolved = script ? path.resolve(script) : null;
+  const underScripts =
+    scriptResolved &&
+    (scriptResolved === scriptsRoot ||
+      scriptResolved.toLowerCase().startsWith(scriptsRoot.toLowerCase() + path.sep));
+  if (!scriptResolved || !underScripts || !fs.existsSync(scriptResolved)) {
     return res.status(500).json({
-      error: `Script no encontrado: ${script}`,
+      error: `Script no encontrado para market=${market} tier=${tier}`,
     });
   }
 
   const psArgs = buildPsArgs(body);
-  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" ${psArgs.join(' ')}`;
+  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptResolved}" ${psArgs.join(' ')}`;
+
+  if (!SIGNALS_RUNNABLE) {
+    return res.status(503).json({
+      error:
+        'Señales reales requieren API en host Windows (run-api.ps1). El contenedor Linux solo cubre UI/health.',
+      hint: 'En el host Windows: .\\run-api.ps1  y  .\\run-docker.ps1 -HostApi',
+      platform: process.platform,
+      command,
+    });
+  }
 
   currentJob = {
     status: 'running',
@@ -692,11 +784,12 @@ app.post('/api/signals/run', (req, res) => {
 
   const child = spawn(
     'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...psArgs],
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptResolved, ...psArgs],
     {
       cwd: TRADING_ROOT,
       env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
       windowsHide: true,
+      shell: false,
     }
   );
 
@@ -751,8 +844,8 @@ app.post('/api/signals/run', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Flash Signals API → http://localhost:${PORT}`);
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
   console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
   console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
 });

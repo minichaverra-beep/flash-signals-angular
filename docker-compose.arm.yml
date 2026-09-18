@@ -1,0 +1,6 @@
+# Override ARM64 — fuerza plataforma linux/arm64
+services:
+  api:
+    platform: linux/arm64
+  web:
+    platform: linux/arm64
