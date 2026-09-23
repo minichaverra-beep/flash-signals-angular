@@ -72,7 +72,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let item of items">
+          <tr *ngFor="let item of items; trackBy: trackById">
             <td>
               <div class="when">
                 <strong>{{ relativeTime(item.createdAt) }}</strong>
@@ -103,7 +103,7 @@
     </div>
 
     <div class="cards mobile">
-      <article class="hist-card" *ngFor="let item of items">
+      <article class="hist-card" *ngFor="let item of items; trackBy: trackById">
         <header>
           <span class="pill market">{{ item.market | uppercase }}</span>
           <span class="badge" [attr.data-tone]="tone(item.verdict)">{{ item.verdict || '—' }}</span>

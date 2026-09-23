@@ -177,10 +177,15 @@ function scanArtifacts() {
 function readArtifactMeta(relPath) {
   const resolved = resolveSafe(relPath);
   if (!resolved.ok) return resolved;
-  if (!fs.existsSync(resolved.full) || !fs.statSync(resolved.full).isFile()) {
+  let st;
+  try {
+    st = fs.statSync(resolved.full);
+  } catch {
     return { ok: false, status: 404, error: 'Artefacto no encontrado' };
   }
-  const st = fs.statSync(resolved.full);
+  if (!st.isFile()) {
+    return { ok: false, status: 404, error: 'Artefacto no encontrado' };
+  }
   const ext = path.extname(resolved.full).toLowerCase();
   const kind = kindForExt(ext);
   const mime = MIME[ext] || 'application/octet-stream';

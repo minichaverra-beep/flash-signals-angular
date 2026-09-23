@@ -6,6 +6,7 @@
 cd "D:\Danilo\Trading\flash-signals-angular"
 npm config set registry https://registry.npmjs.org
 npx tsc -p tsconfig.app.json --noEmit
+npm test
 # API: node --check server/index.js
 ```
 

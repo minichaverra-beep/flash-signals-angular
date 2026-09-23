@@ -177,4 +177,8 @@ export class HistorialComponent implements OnInit {
     if (!d.chartPath) return null;
     return `/api/signals/chart?market=${encodeURIComponent(d.market)}`;
   }
+
+  trackById(_index: number, item: HistoryListItem): number {
+    return item.id;
+  }
 }

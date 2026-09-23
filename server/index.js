@@ -886,21 +886,28 @@ app.get('/api/artifacts/raw', (req, res) => {
   if (!resolved.ok) {
     return res.status(resolved.status).json({ error: resolved.error });
   }
-  if (!fs.existsSync(resolved.full) || !fs.statSync(resolved.full).isFile()) {
+  let st;
+  try {
+    st = fs.statSync(resolved.full);
+  } catch {
+    return res.status(404).json({ error: 'Artefacto no encontrado' });
+  }
+  if (!st.isFile()) {
     return res.status(404).json({ error: 'Artefacto no encontrado' });
   }
   const ext = path.extname(resolved.full).toLowerCase();
   const mime = artifacts.MIME[ext] || 'application/octet-stream';
   res.setHeader('Content-Type', mime);
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Permitir embeber solo desde same-origin (Angular wiki iframe / PDF preview).
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  if (ext === '.html' || ext === '.htm') {
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; frame-ancestors 'self'"
-    );
-  }
+  // Embeber solo same-origin (wiki iframe / PDF). Sin http: en img-src (hotspot).
+  // HTML de artefactos: inline + fonts HTTPS; sin allow-same-origin+scripts en el iframe.
+  const cspHtml =
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: https:; frame-ancestors 'self'";
+  const cspEmbed = "frame-ancestors 'self'";
+  res.setHeader(
+    'Content-Security-Policy',
+    ext === '.html' || ext === '.htm' ? cspHtml : cspEmbed
+  );
   res.sendFile(resolved.full);
 });
 

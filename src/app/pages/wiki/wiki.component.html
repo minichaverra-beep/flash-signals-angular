@@ -44,7 +44,7 @@
       <p class="muted loading-pulse" *ngIf="loading && !items.length">Escaneando…</p>
 
       <ul class="artifact-list" *ngIf="filtered.length">
-        <li *ngFor="let item of filtered">
+        <li *ngFor="let item of filtered; trackBy: trackByPath">
           <button
             type="button"
             class="artifact-btn"
@@ -115,10 +115,10 @@
             (renderedHtml || iframeUrl || imageUrl || pdfUrl || textContent != null)
           "
         >
-          <div class="expand-bar" *ngIf="expanded">
+          <div class="expand-bar" *ngIf="expanded && selected as sel">
             <div class="expand-bar-meta">
-              <p class="eyebrow">{{ kindLabel(selected!.kind) }} · lectura</p>
-              <h2>{{ selected!.name }}</h2>
+              <p class="eyebrow">{{ kindLabel(sel.kind) }} · lectura</p>
+              <h2>{{ sel.name }}</h2>
             </div>
             <button
               type="button"
@@ -141,7 +141,7 @@
               *ngIf="iframeUrl"
               class="html-frame"
               [src]="iframeUrl"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              sandbox="allow-scripts allow-popups allow-forms"
               referrerpolicy="no-referrer"
               title="Vista HTML del artefacto"
             ></iframe>

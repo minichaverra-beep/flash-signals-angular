@@ -86,12 +86,13 @@ export class WikiComponent implements OnInit, OnDestroy {
   scan(): void {
     this.loading = true;
     this.error = '';
-    this.api.artifactsList().subscribe({
+    this.api.artifactsScan().subscribe({
       next: (res) => {
         this.items = res.items ?? [];
         this.loading = false;
         if (this.selected) {
-          const still = this.items.find((i) => i.path === this.selected!.path);
+          const selectedPath = this.selected.path;
+          const still = this.items.find((i) => i.path === selectedPath);
           if (still) {
             this.open(still);
           } else {
@@ -111,6 +112,10 @@ export class WikiComponent implements OnInit, OnDestroy {
           'No se pudo escanear artefactos. ¿API en :3847?';
       },
     });
+  }
+
+  trackByPath(_index: number, item: ArtifactItem): string {
+    return item.path;
   }
 
   open(item: ArtifactItem): void {
