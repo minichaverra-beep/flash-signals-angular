@@ -55,3 +55,73 @@ a {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Bias: bullish = ok/verde · bearish = fire/rojo · auto/neutro = muted */
+.bias-bullish,
+.bias-text.bias-bullish {
+  color: var(--ok);
+}
+
+.bias-bearish,
+.bias-text.bias-bearish {
+  color: var(--fire);
+}
+
+.bias-neutral,
+.bias-auto,
+.bias-text.bias-neutral,
+.bias-text.bias-auto {
+  color: var(--muted);
+}
+
+.badge.bias-bullish,
+.pill.bias-bullish {
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.badge.bias-bearish,
+.pill.bias-bearish {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+  background: color-mix(in srgb, var(--fire) 14%, transparent);
+}
+
+.badge.bias-neutral,
+.badge.bias-auto,
+.pill.bias-neutral,
+.pill.bias-auto {
+  border-color: color-mix(in srgb, var(--muted) 35%, transparent);
+  color: var(--muted);
+  background: transparent;
+}
+
+.badge[data-tone='bullish'],
+.badge[data-tone='ok'] {
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.badge[data-tone='bearish'] {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+  background: color-mix(in srgb, var(--fire) 14%, transparent);
+}
+
+select.bias-bullish {
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+  color: var(--ok);
+}
+
+select.bias-bearish {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+}
+
+select.bias-neutral,
+select.bias-auto {
+  border-color: var(--border);
+  color: var(--muted);
+}

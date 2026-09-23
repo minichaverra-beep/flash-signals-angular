@@ -179,7 +179,7 @@ function scanArtifactsDisk() {
 }
 
 /**
- * Escaneo + merge con artifact_meta (displayName / categoryId).
+ * Escaneo + merge con artifact_meta (displayName / categoryId / bias).
  */
 async function scanArtifacts() {
   const data = scanArtifactsDisk();
@@ -200,6 +200,7 @@ async function scanArtifacts() {
       ...item,
       displayName: wikiStore.stripDisplayExtension(raw) || raw,
       categoryId: meta.categoryId,
+      bias: meta.bias ?? null,
       metaUpdatedAt: meta.updatedAt,
     };
   });
@@ -225,6 +226,7 @@ async function readArtifactMeta(relPath) {
   const fileName = path.basename(resolved.full);
   let displayName = wikiStore.stripDisplayExtension(fileName) || fileName;
   let categoryId = null;
+  let bias = null;
   let metaUpdatedAt = null;
   try {
     const dbMeta = await wikiStore.getMeta(resolved.rel);
@@ -232,6 +234,7 @@ async function readArtifactMeta(relPath) {
       const raw = dbMeta.displayName || fileName;
       displayName = wikiStore.stripDisplayExtension(raw) || raw;
       categoryId = dbMeta.categoryId;
+      bias = dbMeta.bias ?? null;
       metaUpdatedAt = dbMeta.updatedAt;
     }
   } catch {
@@ -241,6 +244,7 @@ async function readArtifactMeta(relPath) {
     name: fileName,
     displayName,
     categoryId,
+    bias,
     metaUpdatedAt,
     path: resolved.rel,
     ext,
@@ -342,6 +346,11 @@ async function patchArtifactMeta(body = {}) {
     patch.categoryId = body.categoryId;
   } else if (Object.prototype.hasOwnProperty.call(body, 'category_id')) {
     patch.categoryId = body.category_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'bias')) {
+    patch.bias = body.bias;
+  } else if (Object.prototype.hasOwnProperty.call(body, 'direction')) {
+    patch.bias = body.direction;
   }
 
   const upserted = await wikiStore.upsertMeta(patch);

@@ -9,20 +9,23 @@ import {
   hasScoresCard,
   investorActionHint,
   investorPlanRows,
-  investorRiskParagraphs,
+  investorRiskCard,
   investorScoreRows,
   investorScoresWaitTip,
   investorVerdictExplain,
   investorVerdictTitle,
   marketRows,
+  riskGaugeHint,
+  riskGaugeNeedle,
   scoreKpiRows,
   setupRows,
   verdictRows,
   verdictTone,
+  biasTone,
   volMarkerPct,
 } from './signal-report.helpers';
 
-export type ReportViewMode = 'trader' | 'inversor';
+export type ReportViewMode = 'trader' | 'inversor' | 'rapida';
 
 @Component({
   selector: 'app-signal-report-viewer',
@@ -52,11 +55,22 @@ export class SignalReportViewerComponent {
   readonly investorVerdictTitle = investorVerdictTitle;
   readonly investorVerdictExplain = investorVerdictExplain;
   readonly investorActionHint = investorActionHint;
-  readonly investorRiskParagraphs = investorRiskParagraphs;
+  readonly investorRiskCard = investorRiskCard;
   readonly investorScoreRows = investorScoreRows;
   readonly investorScoresWaitTip = investorScoresWaitTip;
   readonly investorPlanRows = investorPlanRows;
+  readonly riskGaugeNeedle = riskGaugeNeedle;
+  readonly riskGaugeHint = riskGaugeHint;
   readonly volMarkerPct = volMarkerPct;
+
+  biasClass(campoOrValue: string | null | undefined, valor?: string | null): string {
+    const isDireccion = valor !== undefined && /direcci[oó]n/i.test(campoOrValue || '');
+    const raw = valor !== undefined ? valor : campoOrValue;
+    const t = biasTone(raw);
+    if (!t) return '';
+    if (isDireccion || t === 'bullish' || t === 'bearish') return `bias-${t}`;
+    return '';
+  }
 
   href(): string | null {
     return chartHref(this.market, this.chartUrl, this.chartPath);

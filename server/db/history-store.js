@@ -180,8 +180,30 @@ function parseJson(raw, fallback) {
   }
 }
 
+/**
+ * Bias elegido en la corrida: flags bullish/bearish del job, o summary.bias.
+ * @param {Record<string, boolean>|null|undefined} flags
+ * @param {string|null|undefined} summaryBias
+ */
+function resolveBias(flags, summaryBias) {
+  if (flags?.bullish) return 'bullish';
+  if (flags?.bearish) return 'bearish';
+  const fromSummary =
+    summaryBias != null && String(summaryBias).trim()
+      ? String(summaryBias).trim()
+      : null;
+  if (fromSummary) return fromSummary;
+  if (flags && ('bullish' in flags || 'bearish' in flags)) return 'auto';
+  return null;
+}
+
 function rowToListItem(row) {
   if (!row) return null;
+  const flags = parseJson(row.flags_json, {});
+  const summaryBias =
+    row.summary_bias != null && String(row.summary_bias).trim()
+      ? String(row.summary_bias).trim()
+      : null;
   return {
     id: Number(row.id),
     createdAt: row.created_at,
@@ -197,16 +219,21 @@ function rowToListItem(row) {
         : null,
     entry: row.entry || null,
     error: row.error || null,
-    flags: parseJson(row.flags_json, {}),
+    flags,
+    bias: resolveBias(flags, summaryBias),
   };
 }
 
 function rowToDetail(row) {
   if (!row) return null;
-  const base = rowToListItem(row);
+  const summary = parseJson(row.summary_json, null);
+  const base = rowToListItem({
+    ...row,
+    summary_bias: summary?.bias ?? row.summary_bias ?? null,
+  });
   return {
     ...base,
-    summary: parseJson(row.summary_json, null),
+    summary,
     reportPath: row.report_path || null,
     chartPath: row.chart_path || null,
     preview: row.preview || null,
@@ -280,7 +307,8 @@ async function listHistory(opts = {}) {
     );
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error
+              flags_json, entry, verdict, score_combined, error,
+              json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        WHERE market = ?
        ORDER BY created_at DESC, id DESC
@@ -291,7 +319,8 @@ async function listHistory(opts = {}) {
     total = e.get(`SELECT COUNT(*) AS c FROM signal_history`);
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error
+              flags_json, entry, verdict, score_combined, error,
+              json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        ORDER BY created_at DESC, id DESC
        LIMIT ? OFFSET ?`,

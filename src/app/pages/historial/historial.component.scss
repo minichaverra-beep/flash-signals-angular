@@ -259,6 +259,16 @@ button:disabled {
   color: var(--ok);
 }
 
+.badge[data-tone='bullish'] {
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  color: var(--ok);
+}
+
+.badge[data-tone='bearish'] {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+}
+
 .badge[data-tone='warn'] {
   border-color: color-mix(in srgb, var(--warn) 50%, transparent);
   color: var(--warn);
@@ -291,6 +301,13 @@ button:disabled {
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.45rem;
+}
+
+.header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
 }
 
 .card-actions {

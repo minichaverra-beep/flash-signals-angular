@@ -179,7 +179,14 @@
                 [class.active]="selected?.path === item.path"
                 (click)="open(item)"
               >
-                <span class="pill kind">{{ kindLabel(item.kind) }}</span>
+                <span class="artifact-badges">
+                  <span class="pill kind">{{ kindLabel(item.kind) }}</span>
+                  <span
+                    class="pill"
+                    [ngClass]="biasClass(artifactBias(item) || 'auto')"
+                    title="Dirección (meta)"
+                  >{{ biasText(artifactBias(item) || 'auto') }}</span>
+                </span>
                 <span class="meta">
                   <strong>{{ displayTitle(item) }}</strong>
                   <span class="muted tiny">{{ item.path }} · {{ formatSize(item.size) }}</span>
@@ -284,6 +291,26 @@
               Archivo: {{ selected.name }} · {{ selected.path }} ·
               {{ formatSize(selected.size) }} · {{ formatMtime(selected.mtime) }}
             </p>
+
+            <div class="bias-actions">
+              <label class="cat-label" for="artifact-bias">Dirección</label>
+              <select
+                id="artifact-bias"
+                class="bias-select"
+                [ngModel]="artifactBias(selected) || 'auto'"
+                (ngModelChange)="saveBias($event)"
+                [ngClass]="biasClass(artifactBias(selected) || 'auto')"
+                [disabled]="savingMeta"
+              >
+                <option value="auto">default</option>
+                <option value="bullish">alcista</option>
+                <option value="bearish">bajista</option>
+              </select>
+              <span
+                class="pill"
+                [ngClass]="biasClass(artifactBias(selected) || 'auto')"
+              >{{ biasText(artifactBias(selected) || 'auto') }}</span>
+            </div>
 
             <div class="cat-actions">
               <div class="cat-current">

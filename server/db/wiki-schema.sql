@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS artifact_meta (
   path TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,
   category_id INTEGER REFERENCES wiki_categories(id) ON DELETE SET NULL,
+  -- Dirección de sesgo: bullish | bearish | auto (NULL = sin definir).
+  -- No se infiere del path/filename; es meta explícita.
+  bias TEXT,
   updated_at TEXT NOT NULL
 );
 

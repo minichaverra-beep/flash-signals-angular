@@ -64,6 +64,7 @@
           <tr>
             <th>Fecha</th>
             <th>Mercado</th>
+            <th>Dirección</th>
             <th>Tier</th>
             <th>Veredicto</th>
             <th>Score</th>
@@ -80,6 +81,12 @@
               </div>
             </td>
             <td><span class="pill market">{{ item.market | uppercase }}</span></td>
+            <td>
+              <span
+                class="badge"
+                [ngClass]="biasClass(itemBias(item))"
+              >{{ biasText(itemBias(item)) }}</span>
+            </td>
             <td>{{ item.tier }}</td>
             <td>
               <span
@@ -106,7 +113,10 @@
       <article class="hist-card" *ngFor="let item of items; trackBy: trackById">
         <header>
           <span class="pill market">{{ item.market | uppercase }}</span>
-          <span class="badge" [attr.data-tone]="tone(item.verdict)">{{ item.verdict || '—' }}</span>
+          <span class="header-badges">
+            <span class="badge" [ngClass]="biasClass(itemBias(item))">{{ biasText(itemBias(item)) }}</span>
+            <span class="badge" [attr.data-tone]="tone(item.verdict)">{{ item.verdict || '—' }}</span>
+          </span>
         </header>
         <p class="when">
           <strong>{{ relativeTime(item.createdAt) }}</strong>
@@ -145,10 +155,17 @@
         <button
           type="button"
           role="tab"
+          [attr.aria-selected]="detailMode === 'rapida'"
+          [class.active]="detailMode === 'rapida'"
+          (click)="detailMode = 'rapida'"
+        >Vista rápida</button>
+        <button
+          type="button"
+          role="tab"
           [attr.aria-selected]="detailMode === 'trader'"
           [class.active]="detailMode === 'trader'"
           (click)="detailMode = 'trader'"
-        >Modo Trader</button>
+        >Vista detallada</button>
         <button
           type="button"
           role="tab"
@@ -157,14 +174,16 @@
           (click)="detailMode = 'inversor'"
         >Modo Inversor</button>
       </div>
+      <p class="mode-hint muted" *ngIf="detailMode === 'rapida'">
+        Solo lo esencial: veredicto, gráfico, barras de probabilidad y tablas de scores.
+      </p>
       <p class="mode-hint muted" *ngIf="detailMode === 'trader'">
-        Vista técnica: veredicto, plan, setup, scores, checklists y gráfico.
+        Análisis completo: plan de entrada, contexto del setup, scores, reglas cumplidas y gráfico.
       </p>
       <p class="mode-hint muted" *ngIf="detailMode === 'inversor'">
-        Vista simplificada: decisión, plan, riesgo y scores en lenguaje claro.
+        En lenguaje simple: qué hacer, el plan, el riesgo y qué tan fuerte es la idea.
       </p>
 
-      <p class="path" *ngIf="d.reportPath && detailMode === 'trader'"><code>{{ d.reportPath }}</code></p>
       <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
 
       <app-signal-report-viewer
@@ -172,8 +191,8 @@
         [summary]="d.summary"
         [mode]="detailMode"
         [preview]="detailMode === 'trader' ? d.preview ?? null : null"
-        [chartUrl]="detailMode === 'trader' ? chartUrlFor(d) : null"
-        [chartPath]="detailMode === 'trader' ? (d.chartPath ?? null) : null"
+        [chartUrl]="detailMode === 'inversor' ? null : chartUrlFor(d)"
+        [chartPath]="detailMode === 'inversor' ? null : (d.chartPath ?? null)"
         [market]="d.market"
       />
 

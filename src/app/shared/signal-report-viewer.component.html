@@ -1,21 +1,24 @@
 @if (summary; as s) {
   @if (mode === 'trader') {
-    <!-- Modo Trader: vista técnica completa (solo este bloque) -->
+    <!-- Vista detallada: análisis completo con etiquetas claras -->
     @if (verdictRows(s); as vRows) {
       @if (vRows.length) {
-        <details class="report-card collapsible" open>
+        <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible" open>
           <summary>Veredicto</summary>
           <div class="collapsible-body">
+            <p class="card-hint muted">Decisión del sistema para esta corrida (operar, esperar o no entrar).</p>
             <div class="table-wrap">
               <table class="matrix kpi-table">
-                <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                <thead><tr><th>Qué mirar</th><th>Resultado</th></tr></thead>
                 <tbody>
                   @for (row of vRows; track row.campo) {
                     <tr class="verdict-row">
                       <th>{{ row.campo }}</th>
                       <td
                         [class.warn]="verdictTone(row.valor) === 'warn'"
-                        [class.ok-text]="verdictTone(row.valor) === 'ok'"
+                        [class.ok-text]="verdictTone(row.valor) === 'ok' || verdictTone(row.valor) === 'bullish'"
+                        [class.bias-bearish]="verdictTone(row.valor) === 'bearish'"
+                        [class.bias-bullish]="verdictTone(row.valor) === 'bullish'"
                       >{{ row.valor }}</td>
                     </tr>
                   }
@@ -29,13 +32,14 @@
 
     @if (hasMarketPlan(s)) {
       <details class="report-card collapsible" open>
-        <summary>Mercado y plan</summary>
+        <summary>Precio y plan de la operación</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">Dónde está el precio y, si hay setup, los niveles de entrada, stop y objetivo.</p>
           @if (marketRows(s); as mRows) {
             @if (mRows.length) {
               <div class="table-wrap">
                 <table class="matrix kpi-table">
-                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                  <thead><tr><th>Qué mirar</th><th>Valor</th></tr></thead>
                   <tbody>
                     @for (row of mRows; track row.campo) {
                       <tr>
@@ -55,10 +59,10 @@
                 <table class="matrix plan-grid">
                   <thead>
                     <tr>
-                      <th>Entry</th>
-                      <th>SL</th>
-                      <th>TP</th>
-                      <th>R:R</th>
+                      <th>Entrada</th>
+                      <th>Stop</th>
+                      <th>Objetivo</th>
+                      <th>Riesgo/beneficio</th>
                       <th>Riesgo</th>
                     </tr>
                   </thead>
@@ -80,13 +84,13 @@
                 <table class="matrix">
                   <tbody>
                     @if (pd.trigger) {
-                      <tr><th>Trigger</th><td>{{ pd.trigger }}</td></tr>
+                      <tr><th>Disparador</th><td>{{ pd.trigger }}</td></tr>
                     }
                     @if (pd.confirmation) {
                       <tr><th>Confirmación</th><td>{{ pd.confirmation }}</td></tr>
                     }
                     @if (pd.invalidation) {
-                      <tr><th>Invalidación</th><td>{{ pd.invalidation }}</td></tr>
+                      <tr><th>Se invalida si</th><td>{{ pd.invalidation }}</td></tr>
                     }
                   </tbody>
                 </table>
@@ -100,16 +104,20 @@
     @if (setupRows(s); as setupR) {
       @if (setupR.length) {
         <details class="report-card collapsible" open>
-          <summary>Setup</summary>
+          <summary>Contexto del setup</summary>
           <div class="collapsible-body">
+            <p class="card-hint muted">Dirección, estructura y tipo de idea que evaluó el pipeline.</p>
             <div class="table-wrap">
               <table class="matrix kpi-table">
-                <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                <thead><tr><th>Qué mirar</th><th>Valor</th></tr></thead>
                 <tbody>
                   @for (row of setupR; track row.campo) {
                     <tr>
                       <th>{{ row.campo }}</th>
-                      <td>{{ row.valor }}</td>
+                      <td
+                        [class.bias-text]="!!biasClass(row.campo, row.valor)"
+                        [ngClass]="biasClass(row.campo, row.valor)"
+                      >{{ row.valor }}</td>
                     </tr>
                   }
                 </tbody>
@@ -121,14 +129,15 @@
     }
 
     @if (hasScoresCard(s)) {
-      <details class="report-card collapsible" open>
-        <summary>Scores / confluencia</summary>
+      <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
+        <summary>Notas y capas de probabilidad</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">Porcentajes de reglas, ML y nota global. Las barras resumen cada capa.</p>
           @if (scoreKpiRows(s); as scoreRows) {
             @if (scoreRows.length) {
               <div class="table-wrap">
                 <table class="matrix kpi-table">
-                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                  <thead><tr><th>Qué mirar</th><th>Valor</th></tr></thead>
                   <tbody>
                     @for (row of scoreRows; track row.campo) {
                       <tr>
@@ -170,9 +179,9 @@
                 <thead>
                   <tr>
                     <th>Capa</th>
-                    <th>Score</th>
-                    <th>Peso</th>
                     <th>Nota</th>
+                    <th>Peso</th>
+                    <th>Comentario</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,11 +203,12 @@
 
     @if (hasChecklistsCard(s)) {
       <details class="report-card collapsible" open>
-        <summary>Checklists</summary>
+        <summary>Reglas revisadas</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">✓ = cumple · ✗ = no cumple. Sirve para auditar por qué salió el veredicto.</p>
           @if (s.checklist2M5?.length) {
             <div class="extra-section">
-              <h4>Checklist 2M5</h4>
+              <h4>Estructura 2M5</h4>
               <div class="table-wrap">
                 <table class="matrix checklist">
                   <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
@@ -218,7 +228,7 @@
 
           @if (s.checklistE1?.length) {
             <div class="extra-section">
-              <h4>Checklist E1</h4>
+              <h4>Reglas E1</h4>
               <div class="table-wrap">
                 <table class="matrix checklist">
                   <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
@@ -240,24 +250,25 @@
     }
 
     @if (href(); as chartHref) {
-      <details class="report-card collapsible" open>
-        <summary>Gráfico</summary>
+      <details id="sec-grafico" data-section="sec-grafico" class="report-card collapsible" open>
+        <summary>Gráfico de la señal</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">Imagen generada por el pipeline para esta corrida.</p>
+          <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
+            <img class="rapida-chart" [src]="chartHref" alt="Gráfico de la señal" />
+          </a>
           <p class="path chart-link">
-            <a [href]="chartHref" target="_blank" rel="noopener">Abrir gráfico PNG</a>
-            @if (chartPath) {
-              <span class="muted tiny"> · <code>{{ chartPath }}</code></span>
-            }
+            <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
           </p>
-          <p class="muted tiny">Se abre en pestaña nueva vía <code>/api/signals/chart</code>.</p>
         </div>
       </details>
     }
 
     @if (hasDetalleAdicional(s, preview)) {
       <details class="report-card collapsible">
-        <summary>Detalle adicional</summary>
+        <summary>Detalle opcional (volumen, alertas, texto)</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">Información extra; no hace falta para decidir si no buscas auditoría.</p>
           @if (s.volume; as vol) {
             <div class="extra-section">
               <h4>Volumen</h4>
@@ -268,7 +279,7 @@
                       <tr><th>Banda</th><td>{{ vol.band }}</td></tr>
                     }
                     @if (vol.ratio != null) {
-                      <tr><th>Ratio</th><td>{{ vol.ratio | number:'1.2-2' }}×</td></tr>
+                      <tr><th>Ratio vs media</th><td>{{ vol.ratio | number:'1.2-2' }}×</td></tr>
                     }
                     @if (vol.preset) {
                       <tr><th>Preset</th><td>{{ vol.preset }}</td></tr>
@@ -278,7 +289,7 @@
               </div>
               @if (vol.thresholds; as th) {
                 <div class="vol-chart">
-                  <p class="muted tiny">Ratio vs umbrales del preset (bajo / alto / extremo)</p>
+                  <p class="muted tiny">Ratio frente a umbrales (muy bajo / bajo / alto / extremo)</p>
                   <div class="vol-track">
                     <div class="vol-zone band-vl" [style.width.%]="volMarkerPct(th.very_low ?? 0, s)"></div>
                     <div
@@ -318,7 +329,7 @@
 
           @if (s.redFlags?.length) {
             <div class="extra-section">
-              <h4>Red flags</h4>
+              <h4>Alertas / red flags</h4>
               <ul class="flags-list">
                 @for (f of s.redFlags; track f) {
                   <li>{{ f }}</li>
@@ -329,7 +340,7 @@
 
           @if (preview) {
             <div class="extra-section">
-              <h4>Markdown crudo</h4>
+              <h4>Texto completo del reporte</h4>
               <pre class="raw-md-pre">{{ preview }}</pre>
             </div>
           }
@@ -337,13 +348,13 @@
       </details>
     }
   } @else if (mode === 'inversor') {
-    <!-- Modo Inversor: vista simplificada (nunca mezcla cards del Trader) -->
+    <!-- Modo Inversor: lenguaje simple, sin jerga técnica -->
     <div class="investor">
-      <details class="report-card collapsible investor-verdict" open [attr.data-tone]="verdictTone(s.verdict)">
-        <summary>Decisión</summary>
+      <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible investor-verdict" open [attr.data-tone]="verdictTone(s.verdict)">
+        <summary>¿Qué hacer ahora?</summary>
         <div class="collapsible-body">
           <div class="investor-card" [attr.data-tone]="verdictTone(s.verdict)">
-            <p class="eyebrow">Qué hacer</p>
+            <p class="eyebrow">Recomendación</p>
             <h3 class="investor-title">{{ investorVerdictTitle(s) }}</h3>
             <p>{{ investorVerdictExplain(s) }}</p>
             <p class="investor-action">{{ investorActionHint(s) }}</p>
@@ -352,14 +363,15 @@
       </details>
 
       <details class="report-card collapsible" open>
-        <summary>Plan en palabras</summary>
+        <summary>Plan de la operación</summary>
         <div class="collapsible-body">
+          <p class="card-hint muted">Niveles en palabras simples: dónde entrar, dónde protegerte y dónde tomar ganancia.</p>
           @if (investorPlanRows(s); as planRows) {
             @if (planRows.length) {
               <div class="table-wrap">
                 <table class="matrix">
                   <thead>
-                    <tr><th>Campo</th><th>Valor</th></tr>
+                    <tr><th>Paso</th><th>Nivel</th></tr>
                   </thead>
                   <tbody>
                     @for (row of planRows; track row.campo) {
@@ -372,31 +384,81 @@
                 </table>
               </div>
             } @else {
-              <p class="muted">Aún no hay un plan Entry / Stop / Objetivo en este reporte.</p>
+              <p class="muted">En este reporte aún no hay un plan con entrada, stop y objetivo.</p>
             }
           }
         </div>
       </details>
 
-      <details class="report-card collapsible" open>
-        <summary>Riesgo</summary>
+      <details id="sec-riesgo" data-section="sec-riesgo" class="report-card collapsible" open>
+        <summary>Riesgo en claro</summary>
         <div class="collapsible-body">
-          @for (p of investorRiskParagraphs(s); track p) {
-            <p class="investor-risk">{{ p }}</p>
+          @if (investorRiskCard(s); as risk) {
+            @if (risk.active) {
+              <div
+                class="risk-hot"
+                [attr.data-heat]="risk.heat"
+                [attr.title]="riskGaugeHint(risk)"
+                tabindex="0"
+                role="img"
+                [attr.aria-label]="riskGaugeHint(risk)"
+              >
+                <div class="risk-hot-meta">
+                  <p class="risk-hot-title">{{ risk.title }}</p>
+                  <strong class="risk-hot-badge">{{ risk.heatLabel }}</strong>
+                </div>
+                <div
+                  class="risk-hot-track"
+                  role="meter"
+                  [attr.aria-valuenow]="risk.barPct"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  [attr.aria-label]="risk.heatLabel"
+                >
+                  <div class="risk-hot-zones" aria-hidden="true">
+                    <span class="z-cool"></span>
+                    <span class="z-warm"></span>
+                    <span class="z-hot"></span>
+                  </div>
+                  <div
+                    class="risk-hot-marker"
+                    [style.left.%]="risk.barPct"
+                    [attr.data-heat]="risk.heat"
+                  ></div>
+                </div>
+                <div class="risk-hot-scale">
+                  <span>Fresco</span>
+                  <span>Templado</span>
+                  <span>Caliente</span>
+                </div>
+                @if (risk.rewardMultiple != null || risk.vsPricePct != null) {
+                  <div class="risk-hot-stats">
+                    @if (risk.rewardMultiple != null) {
+                      <span>Premio ≈ ×{{ risk.rewardMultiple | number:'1.1-2' }}</span>
+                    }
+                    @if (risk.vsPricePct != null) {
+                      <span>Stop ≈ {{ risk.vsPricePct | number:'1.2-2' }}% del precio</span>
+                    }
+                  </div>
+                }
+                <div class="risk-hot-tip" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
+              </div>
+            }
           }
         </div>
       </details>
 
       @if (investorScoreRows(s); as invScores) {
         @if (invScores.length) {
-          <details class="report-card collapsible" open>
-            <summary>Scores / confluencias</summary>
+          <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
+            <summary>Qué tan fuerte es la idea</summary>
             <div class="collapsible-body">
+              <p class="card-hint muted">Notas de 0 a 100. No son garantía de ganancia: miden cuánto respaldo tiene la idea.</p>
               <div class="table-wrap">
                 <table class="matrix investor-scores">
                   <thead>
                     <tr>
-                      <th>Campo</th>
+                      <th>Medida</th>
                       <th>Valor</th>
                       <th>Qué significa</th>
                     </tr>
@@ -421,8 +483,193 @@
       }
 
       <p class="investor-note">
-        No necesitas saber de indicadores avanzados; esto resume la decisión del sistema.
+        Esta vista evita jerga técnica. Si quieres el desglose completo, usa «Vista detallada».
       </p>
+    </div>
+  } @else if (mode === 'rapida') {
+    <!-- Vista rápida: veredicto + gráfico, barras y tablas de probabilidad -->
+    <div class="rapida">
+      @if (verdictRows(s); as vRows) {
+        @if (vRows.length) {
+          <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible rapida-verdict" open [attr.data-tone]="verdictTone(s.verdict)">
+            <summary>Veredicto</summary>
+            <div class="collapsible-body">
+              <div class="table-wrap">
+                <table class="matrix kpi-table">
+                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                  <tbody>
+                    @for (row of vRows; track row.campo) {
+                      <tr class="verdict-row">
+                        <th>{{ row.campo }}</th>
+                        <td
+                          [class.warn]="verdictTone(row.valor) === 'warn'"
+                          [class.ok-text]="verdictTone(row.valor) === 'ok' || verdictTone(row.valor) === 'bullish'"
+                          [class.bias-bearish]="verdictTone(row.valor) === 'bearish'"
+                          [class.bias-bullish]="verdictTone(row.valor) === 'bullish'"
+                        >{{ row.valor }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        }
+      }
+
+      @if (investorRiskCard(s); as risk) {
+        @if (risk.active && (risk.riskRaw || risk.rewardMultiple != null || risk.heat !== 'none')) {
+          <details id="sec-riesgo" data-section="sec-riesgo" class="report-card collapsible" open>
+            <summary>Riesgo en claro</summary>
+            <div class="collapsible-body">
+              <div
+                class="risk-hot"
+                [attr.data-heat]="risk.heat"
+                [attr.title]="riskGaugeHint(risk)"
+                tabindex="0"
+                role="img"
+                [attr.aria-label]="riskGaugeHint(risk)"
+              >
+                <div class="risk-hot-meta">
+                  <p class="risk-hot-title">{{ risk.title }}</p>
+                  <strong class="risk-hot-badge">{{ risk.heatLabel }}</strong>
+                </div>
+                <div
+                  class="risk-hot-track"
+                  role="meter"
+                  [attr.aria-valuenow]="risk.barPct"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  [attr.aria-label]="risk.heatLabel"
+                >
+                  <div class="risk-hot-zones" aria-hidden="true">
+                    <span class="z-cool"></span>
+                    <span class="z-warm"></span>
+                    <span class="z-hot"></span>
+                  </div>
+                  <div
+                    class="risk-hot-marker"
+                    [style.left.%]="risk.barPct"
+                    [attr.data-heat]="risk.heat"
+                  ></div>
+                </div>
+                <div class="risk-hot-scale">
+                  <span>Fresco</span>
+                  <span>Templado</span>
+                  <span>Caliente</span>
+                </div>
+                @if (risk.rewardMultiple != null || risk.vsPricePct != null) {
+                  <div class="risk-hot-stats">
+                    @if (risk.rewardMultiple != null) {
+                      <span>Premio ≈ ×{{ risk.rewardMultiple | number:'1.1-2' }}</span>
+                    }
+                    @if (risk.vsPricePct != null) {
+                      <span>Stop ≈ {{ risk.vsPricePct | number:'1.2-2' }}% del precio</span>
+                    }
+                  </div>
+                }
+                <div class="risk-hot-tip" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
+              </div>
+            </div>
+          </details>
+        }
+      }
+
+      @if (s.chartScores?.length) {
+        <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
+          <summary>Probabilidades</summary>
+          <div class="collapsible-body">
+            <div class="charts charts-rapida">
+              @for (bar of s.chartScores; track bar.label) {
+                <div class="bar-row">
+                  <div class="bar-meta">
+                    <span>{{ bar.label }}</span>
+                    <strong>{{ bar.value != null ? (bar.value | number:'1.0-1') + '%' : (bar.raw || '—') }}</strong>
+                  </div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      [style.width.%]="bar.value ?? 0"
+                    ></div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        </details>
+      }
+
+      @if (scoreKpiRows(s); as scoreRows) {
+        @if (scoreRows.length) {
+          <details
+            [attr.id]="s.chartScores?.length ? null : 'sec-scores'"
+            [attr.data-section]="s.chartScores?.length ? null : 'sec-scores'"
+            class="report-card collapsible"
+            open
+          >
+            <summary>Scores</summary>
+            <div class="collapsible-body">
+              <div class="table-wrap">
+                <table class="matrix kpi-table">
+                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                  <tbody>
+                    @for (row of scoreRows; track row.campo) {
+                      <tr>
+                        <th>{{ row.campo }}</th>
+                        <td>{{ row.valor }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        }
+      }
+
+      @if (href(); as chartHref) {
+        <details id="sec-grafico" data-section="sec-grafico" class="report-card collapsible" open>
+          <summary>Gráfico</summary>
+          <div class="collapsible-body">
+            <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
+              <img class="rapida-chart" [src]="chartHref" alt="Gráfico de la señal" />
+            </a>
+            <p class="path chart-link">
+              <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+            </p>
+          </div>
+        </details>
+      }
+
+      @if (s.scorecard?.length) {
+        <details class="report-card collapsible" open>
+          <summary>Tabla de confluencia</summary>
+          <div class="collapsible-body">
+            <div class="table-wrap">
+              <table class="matrix">
+                <thead>
+                  <tr>
+                    <th>Capa</th>
+                    <th>Score</th>
+                    <th>Peso</th>
+                    <th>Nota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of s.scorecard; track row.label) {
+                    <tr [class.emphasis]="(row.label || '').toLowerCase().includes('combinado')">
+                      <td>{{ row.label }}</td>
+                      <td>{{ row.raw || (row.value != null ? row.value : '—') }}</td>
+                      <td>{{ row.weight || '—' }}</td>
+                      <td>{{ row.note || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      }
     </div>
   }
 }

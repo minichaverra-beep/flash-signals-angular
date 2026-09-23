@@ -2,6 +2,11 @@
   display: block;
 }
 
+.rpt-anchor,
+[data-section^='sec-'] {
+  scroll-margin-top: 1.25rem;
+}
+
 .muted {
   color: var(--muted);
   margin: 0;
@@ -20,6 +25,12 @@
 
 .stack-gap {
   margin-top: 0.75rem;
+}
+
+.card-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
 .chart-link {
@@ -76,6 +87,16 @@
   font-weight: 700;
 }
 
+.kpi-table td.bias-bullish {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.kpi-table td.bias-bearish {
+  color: var(--fire);
+  font-weight: 700;
+}
+
 .verdict-row td {
   font-family: var(--font-display);
   letter-spacing: 0.02em;
@@ -107,7 +128,9 @@
 }
 
 .investor-verdict[data-tone='warn'] > summary,
-.investor-verdict[data-tone='ok'] > summary {
+.investor-verdict[data-tone='ok'] > summary,
+.investor-verdict[data-tone='bullish'] > summary,
+.investor-verdict[data-tone='bearish'] > summary {
   color: color-mix(in srgb, var(--gold) 80%, white);
 }
 
@@ -116,9 +139,15 @@
   box-shadow: 0 0 16px color-mix(in srgb, var(--warn) 12%, transparent);
 }
 
-.investor-card[data-tone='ok'] {
+.investor-card[data-tone='ok'],
+.investor-card[data-tone='bullish'] {
   border-color: color-mix(in srgb, var(--ok) 45%, transparent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.investor-card[data-tone='bearish'] {
+  border-color: color-mix(in srgb, var(--fire) 45%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--fire) 12%, transparent);
 }
 
 .investor-title {
@@ -446,4 +475,237 @@ pre {
   font-size: 0.78rem;
   white-space: pre-wrap;
   color: var(--muted);
+}
+
+/* —— Vista rápida —— */
+.rapida {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.rapida-verdict[data-tone='ok'] summary,
+.rapida-verdict[data-tone='bullish'] summary {
+  color: var(--ok);
+}
+
+.rapida-verdict[data-tone='warn'] summary {
+  color: var(--fire);
+}
+
+.rapida-verdict[data-tone='bearish'] summary {
+  color: var(--fire);
+}
+
+.rapida-chart-link {
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #0e0808;
+}
+
+.rapida-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+  background: #0e0808;
+}
+
+.charts-rapida .bar-fill {
+  background: linear-gradient(90deg, #e67a22 0%, #c0392b 100%);
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* —— Riesgo en claro: track por zonas + marcador —— */
+.risk-hot {
+  position: relative;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  background: color-mix(in srgb, var(--panel-deep) 85%, #1a1010);
+  box-shadow: 0 4px 16px color-mix(in srgb, black 22%, transparent);
+  cursor: help;
+  outline: none;
+}
+
+.risk-hot:hover,
+.risk-hot:focus-visible {
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+}
+
+.risk-hot[data-heat='cool'] {
+  border-color: color-mix(in srgb, var(--teal) 45%, transparent);
+}
+
+.risk-hot[data-heat='warm'] {
+  border-color: color-mix(in srgb, var(--fire) 42%, transparent);
+}
+
+.risk-hot[data-heat='hot'] {
+  border-color: color-mix(in srgb, var(--red) 50%, transparent);
+}
+
+.risk-hot-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.risk-hot-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.risk-hot-badge {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--charcoal) 60%, black);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.risk-hot[data-heat='cool'] .risk-hot-badge {
+  border-color: color-mix(in srgb, var(--teal) 55%, transparent);
+  color: color-mix(in srgb, var(--teal) 75%, white);
+  background: color-mix(in srgb, var(--teal) 14%, var(--panel-deep));
+}
+
+.risk-hot[data-heat='warm'] .risk-hot-badge {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: color-mix(in srgb, var(--fire) 80%, white);
+  background: color-mix(in srgb, var(--fire) 14%, var(--panel-deep));
+}
+
+.risk-hot[data-heat='hot'] .risk-hot-badge {
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+  color: color-mix(in srgb, var(--red) 75%, white);
+  background: color-mix(in srgb, var(--red) 14%, var(--panel-deep));
+}
+
+.risk-hot-track {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
+  background: #120c0c;
+}
+
+.risk-hot-zones {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.risk-hot-zones .z-cool {
+  background: color-mix(in srgb, var(--teal) 72%, #1a3030);
+}
+
+.risk-hot-zones .z-warm {
+  background: color-mix(in srgb, var(--fire) 78%, #3a2010);
+}
+
+.risk-hot-zones .z-hot {
+  background: color-mix(in srgb, var(--red) 78%, #301010);
+}
+
+.risk-hot-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 22px;
+  margin-left: -7px;
+  transform: translateY(-50%);
+  border-radius: 4px;
+  border: 2px solid #fff;
+  background: var(--gold);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, black 55%, transparent),
+    0 0 12px color-mix(in srgb, var(--fire) 45%, transparent);
+  transition: left 0.35s ease, background 0.2s ease;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.risk-hot-marker[data-heat='cool'] {
+  background: var(--teal);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, black 55%, transparent),
+    0 0 12px color-mix(in srgb, var(--teal) 45%, transparent);
+}
+
+.risk-hot-marker[data-heat='warm'] {
+  background: var(--fire);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, black 55%, transparent),
+    0 0 12px color-mix(in srgb, var(--fire) 50%, transparent);
+}
+
+.risk-hot-marker[data-heat='hot'] {
+  background: var(--red);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, black 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--red) 55%, transparent);
+}
+
+.risk-hot-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.risk-hot-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1rem;
+  margin-top: 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--gold) 65%, white);
+}
+
+.risk-hot-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-deep) 95%, black);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 5;
+  box-shadow: 0 6px 16px color-mix(in srgb, black 35%, transparent);
+}
+
+.risk-hot:hover .risk-hot-tip,
+.risk-hot:focus-visible .risk-hot-tip {
+  opacity: 1;
 }

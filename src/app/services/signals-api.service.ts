@@ -250,6 +250,8 @@ export interface HistoryListItem {
   tier: string;
   status: string;
   verdict?: string | null;
+  /** Bias elegido (bullish/bearish/auto) o texto del summary. */
+  bias?: string | null;
   scoreCombined?: number | null;
   entry?: string | null;
   error?: string | null;
@@ -291,6 +293,11 @@ export interface ArtifactItem {
   /** Nombre de display (meta local); por defecto = name del archivo. */
   displayName?: string;
   categoryId?: number | null;
+  /**
+   * Dirección de sesgo (meta local): bullish | bearish | auto.
+   * No se infiere del path/filename.
+   */
+  bias?: string | null;
   metaUpdatedAt?: string | null;
 }
 
@@ -324,6 +331,9 @@ export interface ArtifactMetaPatch {
   path: string;
   displayName?: string;
   categoryId?: number | null;
+  /** Dirección: bullish | bearish | auto | null. Alias: direction. */
+  bias?: string | null;
+  direction?: string | null;
   /** Si true, intenta renombrar el archivo en disco (mismo directorio). */
   renameFile?: boolean;
 }
@@ -337,6 +347,7 @@ export interface ArtifactMetaPatchResponse {
     path: string;
     displayName: string;
     categoryId: number | null;
+    bias: string | null;
     updatedAt: string;
   };
 }

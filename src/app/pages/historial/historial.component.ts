@@ -11,7 +11,7 @@ import {
   ReportViewMode,
   SignalReportViewerComponent,
 } from '../../shared/signal-report-viewer.component';
-import { verdictTone } from '../../shared/signal-report.helpers';
+import { verdictTone, biasTone, biasLabel, resolveRunBias } from '../../shared/signal-report.helpers';
 
 @Component({
   selector: 'app-historial',
@@ -35,7 +35,7 @@ export class HistorialComponent implements OnInit {
 
   detail: HistoryDetail | null = null;
   detailLoading = false;
-  detailMode: ReportViewMode = 'trader';
+  detailMode: ReportViewMode = 'rapida';
   drawerOpen = false;
 
   readonly markets: { id: Market | ''; label: string }[] = [
@@ -109,6 +109,19 @@ export class HistorialComponent implements OnInit {
 
   tone(verdict: string | null | undefined): string {
     return verdictTone(verdict);
+  }
+
+  itemBias(item: HistoryListItem): string {
+    return item.bias ?? resolveRunBias(item.flags, null) ?? 'auto';
+  }
+
+  biasClass(value: string | null | undefined): string {
+    const t = biasTone(value) || 'neutral';
+    return `bias-${t}`;
+  }
+
+  biasText(value: string | null | undefined): string {
+    return biasLabel(value);
   }
 
   openDetail(item: HistoryListItem): void {

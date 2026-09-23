@@ -509,6 +509,37 @@ code {
   cursor: not-allowed;
 }
 
+.bias-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.bias-actions .bias-select {
+  min-width: 8rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.bias-actions .pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
 .cat-actions {
   display: flex;
   flex-direction: column;
@@ -644,6 +675,25 @@ code {
   padding: 0.55rem 0.65rem;
   cursor: pointer;
   font: inherit;
+}
+
+.artifact-badges {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: stretch;
+  min-width: 4.2rem;
+}
+
+.artifact-badges .pill {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.18rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
 }
 
 .artifact-btn:hover {

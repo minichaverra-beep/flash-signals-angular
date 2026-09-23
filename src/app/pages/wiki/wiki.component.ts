@@ -17,6 +17,7 @@ import {
   WikiCategory,
   SignalsApiService,
 } from '../../services/signals-api.service';
+import { biasLabel, biasTone } from '../../shared/signal-report.helpers';
 
 export interface WikiGroup {
   id: number | null;
@@ -194,6 +195,58 @@ export class WikiComponent implements OnInit, OnDestroy {
     if (!item) return '';
     const raw = item.displayName || item.name;
     return this.stripDisplayExtension(raw);
+  }
+
+  /** Bias solo desde meta; nunca del path/filename. */
+  artifactBias(item: ArtifactItem | null | undefined): string | null {
+    const b = (item?.bias || '').trim();
+    return b || null;
+  }
+
+  biasClass(value: string | null | undefined): string {
+    const t = biasTone(value) || 'neutral';
+    return `bias-${t}`;
+  }
+
+  biasText(value: string | null | undefined): string {
+    if (value == null || !String(value).trim()) return 'default';
+    return biasLabel(value);
+  }
+
+  saveBias(bias: string, itemPath?: string): void {
+    const path = itemPath || this.selected?.path;
+    if (!path || this.savingMeta) return;
+    const current = this.items.find((i) => i.path === path);
+    const next = bias || 'auto';
+    if (current && (current.bias || 'auto') === next) return;
+    this.savingMeta = true;
+    this.error = '';
+    this.api.artifactPatchMeta({ path, bias: next }).subscribe({
+      next: (res) => {
+        this.savingMeta = false;
+        this.patchLocalItem(path, {
+          bias: res.meta.bias,
+          displayName: res.meta.displayName,
+          categoryId: res.meta.categoryId,
+        });
+        if (this.selected?.path === path) {
+          this.selected = {
+            ...this.selected,
+            bias: res.meta.bias,
+            displayName: res.meta.displayName,
+            categoryId: res.meta.categoryId,
+          };
+        }
+        if (this.detail?.path === path) {
+          this.detail = { ...this.detail, bias: res.meta.bias };
+        }
+      },
+      error: (err) => {
+        this.savingMeta = false;
+        this.error =
+          err?.error?.error || err?.message || 'No se pudo guardar la dirección';
+      },
+    });
   }
 
   @HostListener('document:keydown.escape')
@@ -402,6 +455,7 @@ export class WikiComponent implements OnInit, OnDestroy {
             path: newPath,
             displayName: res.meta.displayName,
             categoryId: res.meta.categoryId,
+            bias: res.meta.bias,
             name: res.pathChanged
               ? newPath.split('/').pop() || this.selected!.name
               : this.selected!.name,
@@ -412,6 +466,7 @@ export class WikiComponent implements OnInit, OnDestroy {
               path: newPath,
               displayName: res.meta.displayName,
               categoryId: res.meta.categoryId,
+              bias: res.meta.bias,
               name: res.pathChanged
                 ? newPath.split('/').pop() || this.selected.name
                 : this.selected.name,
@@ -423,6 +478,7 @@ export class WikiComponent implements OnInit, OnDestroy {
               path: newPath,
               displayName: res.meta.displayName,
               categoryId: res.meta.categoryId,
+              bias: res.meta.bias,
               rawUrl: `/api/artifacts/raw?path=${encodeURIComponent(newPath)}`,
             };
           }
@@ -457,12 +513,14 @@ export class WikiComponent implements OnInit, OnDestroy {
           this.patchLocalItem(path, {
             categoryId: res.meta.categoryId,
             displayName: res.meta.displayName,
+            bias: res.meta.bias,
           });
           if (this.selected?.path === path) {
             this.selected = {
               ...this.selected,
               categoryId: res.meta.categoryId,
               displayName: res.meta.displayName,
+              bias: res.meta.bias,
             };
           }
           this.closeCatPicker();

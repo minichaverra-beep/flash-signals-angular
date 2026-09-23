@@ -8,8 +8,14 @@ import {
   chartHref,
   verdictRows,
   verdictTone,
+  biasTone,
+  biasLabel,
+  resolveRunBias,
   marketRows,
   hasDetalleAdicional,
+  parseRewardMultiple,
+  investorRiskCard,
+  riskGaugeHint,
 } from './signal-report.helpers.ts';
 
 describe('signal-report.helpers', () => {
@@ -29,11 +35,34 @@ describe('signal-report.helpers', () => {
     assert.equal(chartHref('btc', null, null), null);
   });
 
-  it('verdictTone clasifica warn / ok', () => {
+  it('verdictTone clasifica warn / ok / bullish / bearish', () => {
     assert.equal(verdictTone('NO_OPERAR'), 'warn');
     assert.equal(verdictTone('ESPERAR'), 'warn');
-    assert.equal(verdictTone('OPERAR_LONG'), 'ok');
+    assert.equal(verdictTone('OPERAR_LONG'), 'bullish');
+    assert.equal(verdictTone('OPERAR_SHORT'), 'bearish');
+    assert.equal(verdictTone('OPERAR'), 'ok');
     assert.equal(verdictTone(null), '');
+  });
+
+  it('biasTone y biasLabel colorean dirección', () => {
+    assert.equal(biasTone('bullish'), 'bullish');
+    assert.equal(biasTone('Bearish'), 'bearish');
+    assert.equal(biasTone('alcista'), 'bullish');
+    assert.equal(biasTone('bajista'), 'bearish');
+    assert.equal(biasTone('auto'), 'neutral');
+    assert.equal(biasTone('break'), '');
+    assert.equal(biasLabel('bullish'), 'alcista');
+    assert.equal(biasLabel('auto'), 'default');
+    assert.equal(biasLabel(null), '—');
+    assert.equal(biasLabel('bajista'), 'bajista');
+  });
+
+  it('resolveRunBias prioriza flags sobre summary', () => {
+    assert.equal(resolveRunBias({ bullish: true, bearish: false }), 'bullish');
+    assert.equal(resolveRunBias({ bullish: false, bearish: true }), 'bearish');
+    assert.equal(resolveRunBias({ bullish: false, bearish: false }), 'auto');
+    assert.equal(resolveRunBias({}, 'Bullish M5'), 'Bullish M5');
+    assert.equal(resolveRunBias(null, null), null);
   });
 
   it('verdictRows y marketRows parsean summary vacío vs con datos', () => {
@@ -55,5 +84,27 @@ describe('signal-report.helpers', () => {
     assert.equal(hasDetalleAdicional(null, 'preview'), true);
     assert.equal(hasDetalleAdicional({ redFlags: ['x'] }), true);
     assert.equal(hasDetalleAdicional({}), false);
+  });
+
+  it('parseRewardMultiple entiende 1:2, 1/3 y número suelto', () => {
+    assert.equal(parseRewardMultiple('1:2.1'), 2.1);
+    assert.equal(parseRewardMultiple('1 / 3'), 3);
+    assert.equal(parseRewardMultiple('2.5'), 2.5);
+    assert.equal(parseRewardMultiple(null), null);
+  });
+
+  it('investorRiskCard: Templado cae en zona media (33–66)', () => {
+    const s: SignalSummary = {
+      verdict: 'OPERAR_LONG',
+      price: '83000',
+      plan: 'break',
+      planDetails: { entry: '83000', sl: '82700', tp: '83600', rr: '1:2.1', risk: '300.5' },
+    };
+    const card = investorRiskCard(s);
+    assert.equal(card.heat, 'warm');
+    assert.equal(card.heatLabel, 'Templado');
+    assert.ok(card.barPct >= 33 && card.barPct <= 66, `barPct=${card.barPct}`);
+    assert.match(riskGaugeHint(card), /Templado/);
+    assert.match(riskGaugeHint(card), /300\.5/);
   });
 });

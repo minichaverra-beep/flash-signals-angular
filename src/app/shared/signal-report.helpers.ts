@@ -37,19 +37,19 @@ export function verdictRows(s: SignalSummary | null): KpiRow[] {
 export function marketRows(s: SignalSummary | null): KpiRow[] {
   if (!s) return [];
   const rows: KpiRow[] = [];
-  if (s.price) rows.push({ campo: 'Precio', valor: s.price });
-  if (s.entryOptima) rows.push({ campo: 'Entrada óptima', valor: s.entryOptima });
-  if (s.plan) rows.push({ campo: 'Plan', valor: s.plan });
+  if (s.price) rows.push({ campo: 'Precio actual', valor: s.price });
+  if (s.entryOptima) rows.push({ campo: 'Entrada sugerida', valor: s.entryOptima });
+  if (s.plan) rows.push({ campo: 'Tipo de plan', valor: s.plan });
   return rows;
 }
 
 export function setupRows(s: SignalSummary | null): KpiRow[] {
   if (!s) return [];
   const rows: KpiRow[] = [];
-  if (s.bias) rows.push({ campo: 'Bias', valor: s.bias });
-  if (s.twoM5) rows.push({ campo: '2M5', valor: s.twoM5 });
-  if (s.setup) rows.push({ campo: 'Setup', valor: s.setup });
-  if (s.winrate) rows.push({ campo: 'Winrate', valor: s.winrate });
+  if (s.bias) rows.push({ campo: 'Dirección', valor: s.bias });
+  if (s.twoM5) rows.push({ campo: 'Estructura (2M5)', valor: s.twoM5 });
+  if (s.setup) rows.push({ campo: 'Tipo de setup', valor: s.setup });
+  if (s.winrate) rows.push({ campo: 'Tasa de acierto', valor: s.winrate });
   if (s.impulso) rows.push({ campo: 'Impulso', valor: s.impulso });
   return rows;
 }
@@ -57,17 +57,21 @@ export function setupRows(s: SignalSummary | null): KpiRow[] {
 export function scoreKpiRows(s: SignalSummary | null): KpiRow[] {
   if (!s) return [];
   const rows: KpiRow[] = [];
-  if (s.rulesPct != null) rows.push({ campo: 'Rules', valor: `${s.rulesPct}%` });
-  if (s.mlPct != null) rows.push({ campo: 'ML', valor: `${s.mlPct}%` });
+  if (s.rulesPct != null) {
+    rows.push({ campo: 'Cumplimiento de reglas', valor: `${s.rulesPct}%` });
+  }
+  if (s.mlPct != null) {
+    rows.push({ campo: 'Modelo automático (ML)', valor: `${s.mlPct}%` });
+  }
   if (s.confluencePct != null) {
     const label = s.confluenceLabel ? `${s.confluenceLabel} · ` : '';
-    rows.push({ campo: 'Confluencia', valor: `${label}${s.confluencePct}%` });
+    rows.push({ campo: 'Acuerdo entre capas', valor: `${label}${s.confluencePct}%` });
   }
   if (s.scoreCombined != null) {
-    rows.push({ campo: 'Score combinado', valor: `${s.scoreCombined}%` });
+    rows.push({ campo: 'Nota combinada', valor: `${s.scoreCombined}%` });
   }
   if (s.scoreExtended != null) {
-    rows.push({ campo: 'Score extendido', valor: `${s.scoreExtended}%` });
+    rows.push({ campo: 'Nota extendida', valor: `${s.scoreExtended}%` });
   }
   return rows;
 }
@@ -102,82 +106,308 @@ export function hasDetalleAdicional(
 export function verdictTone(v: string | null | undefined): string {
   const t = (v || '').toUpperCase();
   if (/NO_OPERAR|NO OPERAR|ESPERAR|WAIT/.test(t)) return 'warn';
-  if (/OPERAR|LONG|SHORT|GO/.test(t) && !/NO_/.test(t)) return 'ok';
+  if (/SHORT/.test(t) && !/NO_/.test(t)) return 'bearish';
+  if (/LONG/.test(t) && !/NO_/.test(t)) return 'bullish';
+  if (/OPERAR|GO/.test(t) && !/NO_/.test(t)) return 'ok';
   return '';
+}
+
+/** Tone visual para bias: bullish=verde, bearish=rojo, auto/neutro=muted. */
+export type BiasTone = 'bullish' | 'bearish' | 'neutral' | '';
+
+export function biasTone(value: string | null | undefined): BiasTone {
+  const t = (value || '').trim().toLowerCase();
+  if (!t) return '';
+  if (/^(auto|neutr(?:al|o)?|sin forzar|none|n\/a|—|-)$/i.test(t)) return 'neutral';
+  if (/bearish|bajista|\bbear\b/.test(t)) return 'bearish';
+  if (/bullish|alcista|\bbull\b/.test(t)) return 'bullish';
+  if (/auto|neutr|sin forzar/.test(t)) return 'neutral';
+  return '';
+}
+
+/** Etiqueta corta para grids (alcista / bajista / default). */
+export function biasLabel(value: string | null | undefined): string {
+  const tone = biasTone(value);
+  if (tone === 'bullish') return 'alcista';
+  if (tone === 'bearish') return 'bajista';
+  if (tone === 'neutral') return 'default';
+  return '—';
+}
+
+/**
+ * Bias elegido en la corrida: flags del job (prioridad) o summary.bias.
+ * Usado en historial list/detail.
+ */
+export function resolveRunBias(
+  flags?: Record<string, boolean> | null,
+  summaryBias?: string | null
+): string | null {
+  if (flags?.['bullish']) return 'bullish';
+  if (flags?.['bearish']) return 'bearish';
+  const fromSummary = (summaryBias || '').trim();
+  if (fromSummary) return fromSummary;
+  if (flags && ('bullish' in flags || 'bearish' in flags)) return 'auto';
+  return null;
 }
 
 export function investorVerdictTitle(s: SignalSummary | null): string {
   const v = (s?.verdict || '').toUpperCase();
   if (/NO_OPERAR|NO OPERAR/.test(v)) return 'No operar ahora';
-  if (/ESPERAR|WAIT/.test(v)) return 'Esperar';
-  if (/OPERAR|LONG|SHORT|GO/.test(v) && !/NO_/.test(v)) return 'Hay señal de entrada';
-  return s?.verdict || 'Sin veredicto aún';
+  if (/ESPERAR|WAIT/.test(v)) return 'Esperar confirmación';
+  if (/SHORT/.test(v) && !/NO_/.test(v)) return 'Hay señal de venta (corto)';
+  if (/LONG/.test(v) && !/NO_/.test(v)) return 'Hay señal de compra (largo)';
+  if (/OPERAR|GO/.test(v) && !/NO_/.test(v)) return 'Hay señal de entrada';
+  return s?.verdict || 'Sin decisión todavía';
 }
 
 export function investorVerdictExplain(s: SignalSummary | null): string {
   const v = (s?.verdict || '').toUpperCase();
   if (/NO_OPERAR|NO OPERAR/.test(v)) {
-    return 'El sistema recomienda no abrir una operación en este momento. Las condiciones no son favorables.';
+    return 'Las condiciones no favorecen abrir una operación. No es una señal de compra ni de venta.';
   }
   if (/ESPERAR|WAIT/.test(v)) {
-    return 'Conviene esperar: aún faltan confirmaciones. No entres solo por impulso.';
+    return 'La idea aún no está lista: faltan confirmaciones. Mejor no entrar solo por impulso.';
   }
-  if (/OPERAR|LONG|SHORT|GO/.test(v) && !/NO_/.test(v)) {
+  if (/SHORT/.test(v) && !/NO_/.test(v)) {
+    return 'El sistema ve una oportunidad a la baja. Si operas, sigue el plan (entrada, stop y objetivo).';
+  }
+  if (/LONG/.test(v) && !/NO_/.test(v)) {
+    return 'El sistema ve una oportunidad al alza. Si operas, sigue el plan (entrada, stop y objetivo).';
+  }
+  if (/OPERAR|GO/.test(v) && !/NO_/.test(v)) {
     return 'El sistema ve una oportunidad. Si decides operar, sigue el plan de entrada, stop y objetivo.';
   }
-  return 'Cuando ejecutes una señal, aquí verás en lenguaje simple qué conviene hacer.';
+  return 'Cuando haya un reporte, aquí verás en lenguaje simple qué conviene hacer.';
 }
 
 export function investorActionHint(s: SignalSummary | null): string {
   const v = (s?.verdict || '').toUpperCase();
   if (/NO_OPERAR|NO OPERAR|ESPERAR|WAIT/.test(v)) {
-    return 'Acción sugerida: no entrar. Espera una nueva señal más clara.';
+    return 'Qué hacer: no entrar. Espera una idea más clara.';
   }
   if (/OPERAR|LONG|SHORT|GO/.test(v) && !/NO_/.test(v)) {
-    return 'Acción sugerida: solo si aceptas el riesgo del plan (entrada, stop y objetivo).';
+    return 'Qué hacer: entra solo si entiendes y aceptas el riesgo del plan.';
   }
   return 'Ejecuta una señal o recarga el último reporte para ver la recomendación.';
 }
 
-export function investorRiskParagraphs(s: SignalSummary | null): string[] {
-  if (!s) return ['Aún no hay datos de riesgo.'];
+export type RiskHeat = 'none' | 'cool' | 'warm' | 'hot';
+
+export interface InvestorRiskCard {
+  active: boolean;
+  heat: RiskHeat;
+  /** 0–100: más alto = más “calor” (peor relación o más riesgo relativo). */
+  barPct: number;
+  heatLabel: string;
+  riskRaw: string | null;
+  riskNumber: number | null;
+  rrRaw: string | null;
+  rewardMultiple: number | null;
+  vsPricePct: number | null;
+  title: string;
+  lead: string;
+  bullets: string[];
+  tip: string | null;
+}
+
+function parseFirstNumber(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const m = String(raw).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Interpreta R:R tipo "1:2.5", "2.5", "1 a 3". Devuelve múltiplo de recompensa. */
+export function parseRewardMultiple(rr: string | null | undefined): number | null {
+  if (!rr) return null;
+  const t = String(rr).trim().toLowerCase().replace(',', '.');
+  const ratio = t.match(/(\d+(?:\.\d+)?)\s*[:/a]\s*(\d+(?:\.\d+)?)/i);
+  if (ratio) {
+    const a = Number(ratio[1]);
+    const b = Number(ratio[2]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return null;
+    // "1:2" = arriesgo 1 para ganar 2 → múltiplo 2
+    // Si viene "2:1" raro, tomamos max/min para no invertir mal si a>b
+    return b >= a ? b / a : a / b;
+  }
+  const single = t.match(/(\d+(?:\.\d+)?)/);
+  if (!single) return null;
+  const n = Number(single[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function heatFromRewardMultiple(mult: number): { heat: RiskHeat; barPct: number; label: string } {
+  // Escala visual: Fresco 0–33 · Templado 33–66 · Caliente 66–100
+  // Más premio (R:R alto) → más a la izquierda (fresco).
+  if (mult >= 2.2) {
+    const t = Math.min(1, Math.max(0, (mult - 2.2) / 0.5));
+    return { heat: 'cool', barPct: Math.round(33 - t * 25), label: 'Fresco' };
+  }
+  if (mult >= 1.4) {
+    const t = (2.2 - mult) / 0.8; // 2.2→0 · 1.4→1
+    return { heat: 'warm', barPct: Math.round(33 + t * 33), label: 'Templado' };
+  }
+  const t = Math.min(1, Math.max(0, (1.4 - mult) / 0.6));
+  return { heat: 'hot', barPct: Math.round(66 + t * 34), label: 'Caliente' };
+}
+
+function heatFromPricePct(pct: number): { heat: RiskHeat; barPct: number; label: string } {
+  // % del precio entre entrada y stop — más % → más caliente (derecha).
+  if (pct < 0.35) {
+    const t = Math.max(0, pct) / 0.35;
+    return { heat: 'cool', barPct: Math.round(8 + t * 25), label: 'Fresco' };
+  }
+  if (pct < 0.9) {
+    const t = (pct - 0.35) / 0.55;
+    return { heat: 'warm', barPct: Math.round(33 + t * 33), label: 'Templado' };
+  }
+  const t = Math.min(1, (pct - 0.9) / 0.9);
+  return { heat: 'hot', barPct: Math.round(66 + t * 34), label: 'Caliente' };
+}
+
+/** Ángulo de aguja del gauge (180° = fresco/izq → 0° = caliente/der). */
+export function riskGaugeNeedle(barPct: number): {
+  x: number;
+  y: number;
+  cx: number;
+  cy: number;
+  angleDeg: number;
+} {
+  const pct = Math.max(0, Math.min(100, barPct));
+  const angleRad = Math.PI * (1 - pct / 100);
+  const cx = 100;
+  const cy = 108;
+  const r = 70;
+  return {
+    cx,
+    cy,
+    x: cx + r * Math.cos(angleRad),
+    y: cy - r * Math.sin(angleRad),
+    angleDeg: (angleRad * 180) / Math.PI,
+  };
+}
+
+/** Tooltip corto para el gauge (sin essays). */
+export function riskGaugeHint(card: InvestorRiskCard): string {
+  const parts: string[] = [];
+  if (card.heatLabel && card.heat !== 'none') parts.push(card.heatLabel);
+  if (card.riskRaw) parts.push(`Riesgo ${card.riskRaw}`);
+  if (card.rewardMultiple != null) {
+    parts.push(`R:R 1:${card.rewardMultiple.toFixed(1)}`);
+  } else if (card.rrRaw) {
+    parts.push(`R:R ${card.rrRaw}`);
+  }
+  return parts.join(' · ') || 'Sin dato';
+}
+
+/**
+ * Tarjeta de riesgo para Modo Inversor / Vista rápida.
+ * La barra de calor mide comodidad del plan (R:R o distancia vs precio), no el $ de la cuenta.
+ */
+export function investorRiskCard(s: SignalSummary | null): InvestorRiskCard {
+  const empty: InvestorRiskCard = {
+    active: false,
+    heat: 'none',
+    barPct: 0,
+    heatLabel: 'Sin dato',
+    riskRaw: null,
+    riskNumber: null,
+    rrRaw: null,
+    rewardMultiple: null,
+    vsPricePct: null,
+    title: 'Sin riesgo activo',
+    lead: 'Todavía no hay datos de riesgo en este reporte.',
+    bullets: [],
+    tip: null,
+  };
+  if (!s) return empty;
 
   const v = (s.verdict || '').toUpperCase();
   const noOperar = /NO_OPERAR|NO OPERAR/.test(v);
-  const risk = s.planDetails?.risk?.trim() || null;
+  const riskRaw = s.planDetails?.risk?.trim() || null;
+  const riskNumber = parseFirstNumber(riskRaw);
+  const rrRaw = s.planDetails?.rr?.trim() || null;
+  const rewardMultiple = parseRewardMultiple(rrRaw);
+  const entry = parseFirstNumber(s.planDetails?.entry || s.entryOptima || s.price);
   const hasPlan = hasPlanMatrix(s) || !!(s.plan && String(s.plan).trim());
 
-  if (noOperar || (!hasPlan && !risk)) {
+  if (noOperar || (!hasPlan && !riskRaw)) {
     if (noOperar) {
-      return [
-        'No hay riesgo activo porque el sistema recomienda no operar. En esta idea no hay una operación que debas asumir.',
-      ];
+      return {
+        ...empty,
+        active: true,
+        heat: 'cool',
+        barPct: 8,
+        heatLabel: 'Fresco',
+        title: 'Sin riesgo activo',
+        lead: 'Sin riesgo',
+        bullets: [],
+        tip: null,
+      };
     }
-    return [
-      'No hay un plan de entrada con stop en este reporte, así que no hay un riesgo de operación definido.',
-    ];
+    return {
+      ...empty,
+      active: true,
+      title: 'Riesgo no definido',
+      lead: 'Sin dato',
+      bullets: [],
+      tip: null,
+    };
   }
 
-  if (risk) {
-    return [
-      `Riesgo del plan: ${risk}. Es la distancia (puntos o $ del reporte) entre la entrada y el stop: lo máximo que podrías perder en esta idea si el precio toca el stop.`,
-      'No es una garantía de resultado ni el tamaño de tu cuenta: solo el riesgo de esta operación según el plan.',
-      'Si no estás cómodo perdiendo esa cantidad, no entres.',
-    ];
+  let vsPricePct: number | null = null;
+  if (riskNumber != null && entry != null && entry !== 0) {
+    vsPricePct = Math.abs((riskNumber / entry) * 100);
   }
 
-  const entry = s.planDetails?.entry?.trim();
-  const sl = s.planDetails?.sl?.trim();
-  if (entry && sl) {
-    return [
-      `El plan marca entrada en ${entry} y stop (protección) en ${sl}. El riesgo es lo que podrías perder si el precio llega al stop desde la entrada.`,
-      'Si no estás cómodo con esa pérdida posible, no entres.',
-    ];
+  let heat: RiskHeat = 'warm';
+  let barPct = 50;
+  let heatLabel = 'Templado';
+  if (rewardMultiple != null) {
+    const h = heatFromRewardMultiple(rewardMultiple);
+    heat = h.heat;
+    barPct = h.barPct;
+    heatLabel = h.label;
+  } else if (vsPricePct != null) {
+    const h = heatFromPricePct(vsPricePct);
+    heat = h.heat;
+    barPct = h.barPct;
+    heatLabel = h.label;
+  } else if (riskNumber != null) {
+    heat = 'warm';
+    barPct = 55;
+    heatLabel = 'Templado';
   }
 
-  return [
-    'Hay un plan, pero el reporte no trae el número de riesgo. Opera solo con un tamaño que puedas asumir si el stop se activa.',
-  ];
+  const title = riskRaw ? `Riesgo ${riskRaw}` : 'Riesgo del plan';
+  const lead = heatLabel;
+  const bullets: string[] = [];
+  if (riskRaw) bullets.push(riskRaw);
+  if (rewardMultiple != null) bullets.push(`1:${rewardMultiple.toFixed(1)}`);
+
+  return {
+    active: true,
+    heat,
+    barPct,
+    heatLabel,
+    riskRaw,
+    riskNumber,
+    rrRaw,
+    rewardMultiple,
+    vsPricePct,
+    title,
+    lead,
+    bullets,
+    tip: null,
+  };
+}
+
+/** @deprecated Preferir investorRiskCard; se mantiene por compatibilidad. */
+export function investorRiskParagraphs(s: SignalSummary | null): string[] {
+  const card = investorRiskCard(s);
+  if (!card.active) return [card.lead];
+  return [card.lead, ...card.bullets, ...(card.tip ? [card.tip] : [])];
 }
 
 export function investorScoreRows(s: SignalSummary | null): InvestorExplainRow[] {
@@ -185,16 +415,16 @@ export function investorScoreRows(s: SignalSummary | null): InvestorExplainRow[]
   const rows: InvestorExplainRow[] = [];
   if (s.rulesPct != null) {
     rows.push({
-      campo: 'Rules',
+      campo: 'Reglas',
       valor: `${s.rulesPct}%`,
-      significado: 'Qué tan alineadas están las reglas del plan con esta idea.',
+      significado: 'Qué tan bien cumple esta idea las reglas del sistema (más alto = más alineada).',
     });
   }
   if (s.mlPct != null) {
     rows.push({
-      campo: 'ML',
+      campo: 'Modelo automático',
       valor: `${s.mlPct}%`,
-      significado: 'Qué tan fuerte ve la señal el modelo automático.',
+      significado: 'Qué tan fuerte ve la idea el modelo de machine learning.',
     });
   }
   if (s.confluencePct != null || s.confluenceLabel) {
@@ -202,23 +432,23 @@ export function investorScoreRows(s: SignalSummary | null): InvestorExplainRow[]
     if (s.confluenceLabel) parts.push(s.confluenceLabel);
     if (s.confluencePct != null) parts.push(`${s.confluencePct}%`);
     rows.push({
-      campo: 'Confluencia',
+      campo: 'Acuerdo',
       valor: parts.join(' · ') || '—',
-      significado: 'Cuántos factores van a favor a la vez (más alto = más acuerdo).',
+      significado: 'Cuántas capas van a favor a la vez. Más alto = más consenso.',
     });
   }
   if (s.scoreCombined != null) {
     rows.push({
-      campo: 'Score combinado',
+      campo: 'Nota global',
       valor: `${s.scoreCombined}%`,
-      significado: 'Nota global de la idea, de 0 a 100.',
+      significado: 'Resumen de 0 a 100 de la fuerza de la idea.',
     });
   }
   if (s.scoreExtended != null) {
     rows.push({
-      campo: 'Score extendido',
+      campo: 'Nota ampliada',
       valor: `${s.scoreExtended}%`,
-      significado: 'Nota ampliada con más capas del sistema (también 0–100).',
+      significado: 'Misma escala 0–100, pero con más capas del análisis.',
     });
   }
   return rows;
@@ -232,7 +462,7 @@ export function investorScoresWaitTip(s: SignalSummary | null): string | null {
     (s.confluencePct != null && s.confluencePct < 50);
   const scoreBajo = s.scoreCombined != null && s.scoreCombined < 50;
   if (baja || scoreBajo) {
-    return 'Tip: la nota o la confluencia es baja. Mejor esperar otra oportunidad más clara.';
+    return 'Tip: la nota o el acuerdo entre capas es bajo. Mejor esperar otra oportunidad más clara.';
   }
   return null;
 }
@@ -240,14 +470,14 @@ export function investorScoresWaitTip(s: SignalSummary | null): string | null {
 export function investorPlanRows(s: SignalSummary | null): KpiRow[] {
   const pd = s?.planDetails;
   if (!pd) {
-    if (s?.plan) return [{ campo: 'Plan', valor: s.plan }];
+    if (s?.plan) return [{ campo: 'Tipo de plan', valor: s.plan }];
     return [];
   }
   const rows: KpiRow[] = [];
-  if (pd.entry) rows.push({ campo: 'Entrada', valor: pd.entry });
-  if (pd.sl) rows.push({ campo: 'Stop (protección)', valor: pd.sl });
-  if (pd.tp) rows.push({ campo: 'Objetivo', valor: pd.tp });
-  if (pd.rr) rows.push({ campo: 'Relación riesgo/beneficio', valor: pd.rr });
+  if (pd.entry) rows.push({ campo: 'Dónde entrar', valor: pd.entry });
+  if (pd.sl) rows.push({ campo: 'Stop (dónde salir si falla)', valor: pd.sl });
+  if (pd.tp) rows.push({ campo: 'Objetivo (dónde tomar ganancia)', valor: pd.tp });
+  if (pd.rr) rows.push({ campo: 'Relación riesgo / beneficio', valor: pd.rr });
   return rows;
 }
 

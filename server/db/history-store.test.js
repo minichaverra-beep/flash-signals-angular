@@ -114,7 +114,17 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
   });
 
   it('getById: detalle con summary parseado; ids inválidos → null', async () => {
-    const { id } = await store.insertSnapshot(sampleSnap());
+    const { id } = await store.insertSnapshot(
+      sampleSnap({
+        flags: { bullish: true, bearish: false, ml: true },
+        summary: {
+          verdict: 'OPERAR_LONG',
+          scoreCombined: 72,
+          price: '92100',
+          bias: 'bullish',
+        },
+      })
+    );
     const detail = await store.getById(id);
     assert.ok(detail);
     assert.equal(detail.id, id);
@@ -124,11 +134,42 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(detail.summary?.price, '92100');
     assert.equal(detail.reportPath, '/tmp/report.md');
     assert.equal(detail.flags?.ml, true);
+    assert.equal(detail.bias, 'bullish');
 
     assert.equal(await store.getById(0), null);
     assert.equal(await store.getById(-1), null);
     assert.equal(await store.getById('x'), null);
     assert.equal(await store.getById(999999), null);
+  });
+
+  it('listHistory expone bias desde flags o summary', async () => {
+    await store.insertSnapshot(
+      sampleSnap({
+        flags: { bullish: false, bearish: true },
+        summary: { verdict: 'OPERAR_SHORT', scoreCombined: 55, bias: 'ignored-when-flag' },
+      })
+    );
+    await store.insertSnapshot(
+      sampleSnap({
+        market: 'us30',
+        flags: { bullish: false, bearish: false },
+        summary: { verdict: 'ESPERAR', scoreCombined: 40, bias: 'auto' },
+      })
+    );
+    await store.insertSnapshot(
+      sampleSnap({
+        market: 'xauusd',
+        flags: { ml: true },
+        summary: { verdict: 'OPERAR_LONG', scoreCombined: 60, bias: 'alcista' },
+      })
+    );
+
+    const all = await store.listHistory({ pageSize: 10 });
+    assert.equal(all.total, 3);
+    const byMarket = Object.fromEntries(all.items.map((i) => [i.market, i.bias]));
+    assert.equal(byMarket.btc, 'bearish');
+    assert.equal(byMarket.us30, 'auto');
+    assert.equal(byMarket.xauusd, 'alcista');
   });
 
   it('deleteById elimina uno y no afecta otros', async () => {

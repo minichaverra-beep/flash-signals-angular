@@ -85,6 +85,7 @@ describe('wiki-store categorías y meta', () => {
     assert.equal(up.meta.path, 'foo/bar.md');
     assert.equal(up.meta.displayName, 'Bar display');
     assert.equal(up.meta.categoryId, cat.category.id);
+    assert.equal(up.meta.bias, null);
 
     const got = await store.getMeta('foo/bar.md');
     assert.equal(got.displayName, 'Bar display');
@@ -98,6 +99,53 @@ describe('wiki-store categorías y meta', () => {
     assert.equal(cleared.meta.displayName, 'Bar display');
 
     assert.equal((await store.upsertMeta({ path: '../x' })).ok, false);
+  });
+
+  it('guarda bias/dirección como meta (no desde path)', async () => {
+    const up = await store.upsertMeta({
+      path: 'Petrolio - premium - bajista.html',
+      displayName: 'Petrolio premium',
+      bias: 'bajista',
+    });
+    assert.equal(up.ok, true);
+    assert.equal(up.meta.bias, 'bearish');
+    assert.equal(up.meta.displayName, 'Petrolio premium');
+
+    const viaDirection = await store.upsertMeta({
+      path: 'Petrolio - premium - bajista.html',
+      direction: 'alcista',
+    });
+    assert.equal(viaDirection.ok, true);
+    assert.equal(viaDirection.meta.bias, 'bullish');
+
+    const auto = await store.upsertMeta({
+      path: 'Petrolio - premium - bajista.html',
+      bias: 'default',
+    });
+    assert.equal(auto.ok, true);
+    assert.equal(auto.meta.bias, 'auto');
+
+    const bad = await store.upsertMeta({
+      path: 'Petrolio - premium - bajista.html',
+      bias: 'desde-el-path-no',
+    });
+    assert.equal(bad.ok, false);
+    assert.equal(bad.status, 400);
+
+    assert.equal(store.sanitizeBias('bearish'), 'bearish');
+    assert.equal(store.sanitizeBias('alcista'), 'bullish');
+    assert.equal(store.sanitizeBias(null), null);
+  });
+
+  it('moveMetaPath conserva bias al renombrar', async () => {
+    await store.upsertMeta({
+      path: 'old.md',
+      displayName: 'Viejo',
+      bias: 'bullish',
+    });
+    const moved = await store.moveMetaPath('old.md', 'new.md', 'Nuevo título');
+    assert.equal(moved.ok, true);
+    assert.equal((await store.getMeta('new.md')).bias, 'bullish');
   });
 
   it('borra categoría vacía; con meta exige reassignTo o force', async () => {

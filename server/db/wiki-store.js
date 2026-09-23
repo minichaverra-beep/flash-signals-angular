@@ -41,10 +41,7 @@ function openBetterSqlite3() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(readSchemaSql());
-  db.prepare(
-    `INSERT OR IGNORE INTO wiki_schema_migrations (id, applied_at) VALUES (?, ?)`
-  ).run('001_wiki_init', new Date().toISOString());
-  return {
+  const engine = {
     kind: 'better-sqlite3',
     db,
     run(sql, params = []) {
@@ -57,6 +54,8 @@ function openBetterSqlite3() {
       return db.prepare(sql).all(...params);
     },
   };
+  applyWikiMigrations(engine);
+  return engine;
 }
 
 async function openSqlJs() {
@@ -74,14 +73,6 @@ async function openSqlJs() {
   }
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(readSchemaSql());
-  try {
-    db.run(
-      `INSERT OR IGNORE INTO wiki_schema_migrations (id, applied_at) VALUES (?, ?)`,
-      ['001_wiki_init', new Date().toISOString()]
-    );
-  } catch {
-    /* ignore */
-  }
 
   const persist = () => {
     const data = db.export();
@@ -101,7 +92,7 @@ async function openSqlJs() {
     }
   };
 
-  return {
+  const engine = {
     kind: 'sql.js',
     db,
     save: persist,
@@ -134,6 +125,35 @@ async function openSqlJs() {
       return rows;
     },
   };
+  applyWikiMigrations(engine);
+  return engine;
+}
+
+/**
+ * Migraciones incrementales (CREATE IF NOT EXISTS no altera tablas viejas).
+ */
+function applyWikiMigrations(e) {
+  const now = new Date().toISOString();
+  e.run(
+    `INSERT OR IGNORE INTO wiki_schema_migrations (id, applied_at) VALUES (?, ?)`,
+    ['001_wiki_init', now]
+  );
+
+  const has002 = e.get(
+    `SELECT id FROM wiki_schema_migrations WHERE id = ?`,
+    ['002_artifact_bias']
+  );
+  if (!has002) {
+    const cols = e.all(`PRAGMA table_info(artifact_meta)`) || [];
+    const hasBias = cols.some((c) => String(c.name) === 'bias');
+    if (!hasBias) {
+      e.run(`ALTER TABLE artifact_meta ADD COLUMN bias TEXT`);
+    }
+    e.run(
+      `INSERT OR IGNORE INTO wiki_schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['002_artifact_bias', now]
+    );
+  }
 }
 
 async function getEngine() {
@@ -190,8 +210,37 @@ function rowToMeta(row) {
       row.category_id != null && row.category_id !== ''
         ? Number(row.category_id)
         : null,
+    bias: normalizeStoredBias(row.bias),
     updatedAt: row.updated_at,
   };
+}
+
+/**
+ * Canoniza bias de artefacto: bullish | bearish | auto | null.
+ * No parsea paths ni filenames — solo valores explícitos de meta.
+ */
+function sanitizeBias(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '' || value === 'null') return null;
+  const t = String(value).trim().toLowerCase();
+  if (!t) return null;
+  if (t === 'bullish' || t === 'alcista' || t === 'bull') return 'bullish';
+  if (t === 'bearish' || t === 'bajista' || t === 'bear') return 'bearish';
+  if (
+    t === 'auto' ||
+    t === 'default' ||
+    t === 'neutral' ||
+    t === 'none' ||
+    t === 'n/a'
+  ) {
+    return 'auto';
+  }
+  return null;
+}
+
+function normalizeStoredBias(value) {
+  const s = sanitizeBias(value);
+  return s === undefined ? null : s;
 }
 
 function normalizePathKey(relPath) {
@@ -410,7 +459,7 @@ async function deleteCategory(id, { reassignTo, force } = {}) {
 async function listMeta() {
   const e = await getEngine();
   const rows = e.all(
-    `SELECT path, display_name, category_id, updated_at FROM artifact_meta`
+    `SELECT path, display_name, category_id, bias, updated_at FROM artifact_meta`
   );
   return (rows || []).map(rowToMeta);
 }
@@ -420,17 +469,23 @@ async function getMeta(relPath) {
   const key = normalizePathKey(relPath);
   if (!key) return null;
   const row = e.get(
-    `SELECT path, display_name, category_id, updated_at FROM artifact_meta WHERE path = ?`,
+    `SELECT path, display_name, category_id, bias, updated_at FROM artifact_meta WHERE path = ?`,
     [key]
   );
   return rowToMeta(row);
 }
 
 /**
- * Upsert de meta. categoryId: number | null | undefined (undefined = no tocar).
+ * Upsert de meta. categoryId / bias: valor | null | undefined (undefined = no tocar).
  * @returns {{ ok: true, meta: object, pathChanged?: boolean, oldPath?: string } | { ok: false, status: number, error: string }}
  */
-async function upsertMeta({ path: relPath, displayName, categoryId } = {}) {
+async function upsertMeta({
+  path: relPath,
+  displayName,
+  categoryId,
+  bias,
+  direction,
+} = {}) {
   const e = await getEngine();
   const key = normalizePathKey(relPath);
   if (!key) {
@@ -462,15 +517,35 @@ async function upsertMeta({ path: relPath, displayName, categoryId } = {}) {
     }
   }
 
+  let nextBias = existing?.bias ?? null;
+  const biasRaw = bias !== undefined ? bias : direction;
+  if (biasRaw !== undefined) {
+    const sanitized = sanitizeBias(biasRaw);
+    if (
+      biasRaw != null &&
+      biasRaw !== '' &&
+      biasRaw !== 'null' &&
+      sanitized === null
+    ) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'bias inválido (usa bullish/bearish/auto o alcista/bajista/default)',
+      };
+    }
+    nextBias = sanitized;
+  }
+
   const now = new Date().toISOString();
   e.run(
-    `INSERT INTO artifact_meta (path, display_name, category_id, updated_at)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO artifact_meta (path, display_name, category_id, bias, updated_at)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(path) DO UPDATE SET
        display_name = excluded.display_name,
        category_id = excluded.category_id,
+       bias = excluded.bias,
        updated_at = excluded.updated_at`,
-    [key, nextDisplay, nextCat, now]
+    [key, nextDisplay, nextCat, nextBias, now]
   );
   return { ok: true, meta: await getMeta(key) };
 }
@@ -493,18 +568,20 @@ async function moveMetaPath(oldPath, newPath, displayName) {
     stripDisplayExtension(path.basename(to)) ||
     path.basename(to);
   const cat = existing?.categoryId ?? null;
+  const bias = existing?.bias ?? null;
 
   if (existing) {
     e.run(`DELETE FROM artifact_meta WHERE path = ?`, [from]);
   }
   e.run(
-    `INSERT INTO artifact_meta (path, display_name, category_id, updated_at)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO artifact_meta (path, display_name, category_id, bias, updated_at)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(path) DO UPDATE SET
        display_name = excluded.display_name,
        category_id = excluded.category_id,
+       bias = excluded.bias,
        updated_at = excluded.updated_at`,
-    [to, name, cat, now]
+    [to, name, cat, bias, now]
   );
   return { ok: true, meta: await getMeta(to), pathChanged: true, oldPath: from };
 }
@@ -534,6 +611,7 @@ module.exports = {
   normalizePathKey,
   sanitizeDisplayName,
   sanitizeArtifactDisplayName,
+  sanitizeBias,
   stripDisplayExtension,
   safeFileBaseName,
   clearAll,
