@@ -125,3 +125,71 @@ select.bias-auto {
   border-color: var(--border);
   color: var(--muted);
 }
+
+/* Chrome compartido: hero / brand / top-nav (home, historial, wiki, plataforma) */
+.hero {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  min-width: min(100%, 28rem);
+}
+
+.brand .logo,
+.logo {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--fire) 28%, transparent);
+  flex-shrink: 0;
+  background: #000;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.top-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.top-nav a {
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.5rem 0.95rem;
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.top-nav a:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  color: var(--text);
+}
+
+.top-nav a.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel-deep));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent);
+}

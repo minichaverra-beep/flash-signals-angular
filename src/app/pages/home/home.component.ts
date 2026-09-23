@@ -198,10 +198,11 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private findSectionEl(id: string): HTMLElement | null {
-    return (
-      document.getElementById(id) ||
-      (document.querySelector(`[data-section="${id}"]`) as HTMLElement | null)
-    );
+    const byId = document.getElementById(id);
+    if (byId) return byId;
+    const safe = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '');
+    const el = document.querySelector(`[data-section="${safe}"]`);
+    return el instanceof HTMLElement ? el : null;
   }
 
   private smoothScrollTo(el: HTMLElement): void {
@@ -300,12 +301,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.message = 'Señal en ejecución…';
         this.startPolling();
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.busy = false;
-        this.message =
-          err?.error?.error ||
-          err?.message ||
-          'Error al iniciar la señal (revisa la API).';
+        this.message = this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
       },
     });
   }
@@ -329,10 +327,16 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
             this.loadLatest();
           }
         },
-        error: (err) => {
+        error: (err: unknown) => {
           this.busy = false;
-          this.message = err?.message || 'Error al consultar estado.';
+          this.message = this.errMsg(err, 'Error al consultar estado.');
         },
       });
+  }
+
+  private errMsg(err: unknown, fallback: string): string {
+    if (!err || typeof err !== 'object') return fallback;
+    const e = err as { error?: { error?: string }; message?: string };
+    return e.error?.error || e.message || fallback;
   }
 }

@@ -1,0 +1,133 @@
+<div class="page plataforma">
+  <header class="hero chrome">
+    <div class="brand">
+      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <div>
+        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <h1>Plataforma</h1>
+        <p class="sub">Señales reales · Colombia / LATAM</p>
+      </div>
+    </div>
+    <nav class="top-nav" aria-label="Navegación principal">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
+      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+    </nav>
+  </header>
+
+  <section class="splash" aria-labelledby="splash-title">
+    <div class="splash-glow" aria-hidden="true"></div>
+    <div class="splash-copy">
+      <p class="splash-kicker">Desde Colombia · para LATAM</p>
+      <h2 id="splash-title" class="splash-brand">Flash Signals</h2>
+      <p class="splash-lead">
+        Corrida completa de señales de mercado: BTC, US30 y XAUUSD con pipeline real —
+        reglas, ML y neural en una sola plataforma oscura fire &amp; gold.
+      </p>
+      <div class="splash-cta">
+        <a routerLink="/" class="btn-fire">Correr una señal</a>
+        <a routerLink="/historial" class="btn-ghost">Ver historial</a>
+      </div>
+      <ul class="market-pills" aria-label="Mercados">
+        <li>BTC</li>
+        <li>US30</li>
+        <li>XAUUSD</li>
+      </ul>
+    </div>
+    <div class="splash-stage" aria-hidden="true">
+      <div class="ring ring-a"></div>
+      <div class="ring ring-b"></div>
+      <div class="pulse-core">
+        <span>FS</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="offer-title">
+    <h2 id="offer-title">Qué ofrece</h2>
+    <p class="block-lead">Cuatro tiers. Un motor. Sin relleno inventado.</p>
+    <div class="tier-grid">
+      @for (t of tiers; track t.id) {
+        <article class="tier-card">
+          <h3>{{ t.title }}</h3>
+          <p>{{ t.hint }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="block how" aria-labelledby="how-title">
+    <div class="how-copy">
+      <h2 id="how-title">Cómo correr una señal</h2>
+      <p class="block-lead">Del formulario al reporte en minutos — API local en :3847.</p>
+      <ol class="steps">
+        @for (s of steps; track s) {
+          <li>{{ s }}</li>
+        }
+      </ol>
+      <a routerLink="/" class="btn-fire sm">Ir a Señales</a>
+    </div>
+    <aside class="how-panel" aria-label="Flujo">
+      <p class="flow-label">Pipeline</p>
+      <div class="flow">
+        <span>UI</span>
+        <span class="arrow" aria-hidden="true">→</span>
+        <span>API</span>
+        <span class="arrow" aria-hidden="true">→</span>
+        <span>Stack</span>
+        <span class="arrow" aria-hidden="true">→</span>
+        <span>Reporte</span>
+      </div>
+      <p class="how-note">
+        No se inventan veredictos ni charts: solo lo que devolvió el runner — o el error real.
+      </p>
+    </aside>
+  </section>
+
+  <section class="block" aria-labelledby="trust-title">
+    <h2 id="trust-title">Confianza en capas</h2>
+    <p class="block-lead">Reglas + ML + neural. Cada capa aporta; ninguna miente por ti.</p>
+    <div class="trust-grid">
+      @for (c of trust; track c.label) {
+        <article class="trust-card">
+          <h3>{{ c.label }}</h3>
+          <p>{{ c.text }}</p>
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="block dual" aria-labelledby="tools-title">
+    <h2 id="tools-title" class="sr-only">Herramientas locales</h2>
+    <article class="tool-card">
+      <h3>Historial local</h3>
+      <p>
+        Cada corrida real queda en SQLite embebido (hive box). Filtra por mercado, abre el
+        detalle Trader / Inversor y audita P&amp;L sin nube.
+      </p>
+      <a routerLink="/historial" class="btn-ghost sm">Abrir Historial</a>
+    </article>
+    <article class="tool-card">
+      <h3>Wiki / artefactos</h3>
+      <p>
+        Tutoriales, gestión de dinero y notas Cursor AI en <code>docs/Artifacts</code> —
+        preview seguro, categorías y bias en meta local.
+      </p>
+      <a routerLink="/wiki" class="btn-ghost sm">Abrir Wiki</a>
+    </article>
+  </section>
+
+  <section class="closing" aria-labelledby="closing-title">
+    <h2 id="closing-title">Listo para la siguiente señal</h2>
+    <p>Flash Signals · Colombia. Pipeline real. Sin dashboards genéricos.</p>
+    <div class="splash-cta">
+      <a routerLink="/" class="btn-fire">Empezar en Señales</a>
+      <a routerLink="/historial" class="btn-ghost">Revisar Historial</a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Creado por Danilo Chaverra · Flash Signals · fire &amp; shadow</p>
+  </footer>
+</div>

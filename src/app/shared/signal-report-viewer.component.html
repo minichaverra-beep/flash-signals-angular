@@ -14,12 +14,7 @@
                   @for (row of vRows; track row.campo) {
                     <tr class="verdict-row">
                       <th>{{ row.campo }}</th>
-                      <td
-                        [class.warn]="verdictTone(row.valor) === 'warn'"
-                        [class.ok-text]="verdictTone(row.valor) === 'ok' || verdictTone(row.valor) === 'bullish'"
-                        [class.bias-bearish]="verdictTone(row.valor) === 'bearish'"
-                        [class.bias-bullish]="verdictTone(row.valor) === 'bullish'"
-                      >{{ row.valor }}</td>
+                      <td [ngClass]="verdictCellClass(row.valor)">{{ row.valor }}</td>
                     </tr>
                   }
                 </tbody>
@@ -501,12 +496,7 @@
                     @for (row of vRows; track row.campo) {
                       <tr class="verdict-row">
                         <th>{{ row.campo }}</th>
-                        <td
-                          [class.warn]="verdictTone(row.valor) === 'warn'"
-                          [class.ok-text]="verdictTone(row.valor) === 'ok' || verdictTone(row.valor) === 'bullish'"
-                          [class.bias-bearish]="verdictTone(row.valor) === 'bearish'"
-                          [class.bias-bullish]="verdictTone(row.valor) === 'bullish'"
-                        >{{ row.valor }}</td>
+                        <td [ngClass]="verdictCellClass(row.valor)">{{ row.valor }}</td>
                       </tr>
                     }
                   </tbody>

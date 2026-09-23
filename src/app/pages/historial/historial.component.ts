@@ -67,14 +67,17 @@ export class HistorialComponent implements OnInit {
           this.page = res.page;
           this.loading = false;
         },
-        error: (err) => {
+        error: (err: unknown) => {
           this.loading = false;
-          this.error =
-            err?.error?.error ||
-            err?.message ||
-            'No se pudo cargar el historial. ¿API en :3847?';
+          this.error = this.errMsg(err, 'No se pudo cargar el historial. ¿API en :3847?');
         },
       });
+  }
+
+  private errMsg(err: unknown, fallback: string): string {
+    if (!err || typeof err !== 'object') return fallback;
+    const e = err as { error?: { error?: string }; message?: string };
+    return e.error?.error || e.message || fallback;
   }
 
   setMarket(m: Market | ''): void {
@@ -134,10 +137,9 @@ export class HistorialComponent implements OnInit {
         this.detail = d;
         this.detailLoading = false;
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.detailLoading = false;
-        this.error =
-          err?.error?.error || err?.message || 'No se pudo abrir el detalle';
+        this.error = this.errMsg(err, 'No se pudo abrir el detalle');
         this.drawerOpen = false;
       },
     });
@@ -158,8 +160,8 @@ export class HistorialComponent implements OnInit {
         if (this.detail?.id === item.id) this.closeDetail();
         this.load(this.page);
       },
-      error: (err) => {
-        this.error = err?.error?.error || 'No se pudo borrar';
+      error: (err: unknown) => {
+        this.error = this.errMsg(err, 'No se pudo borrar');
       },
     });
   }
@@ -179,9 +181,9 @@ export class HistorialComponent implements OnInit {
         this.closeDetail();
         this.load(1);
       },
-      error: (err) => {
+      error: (err: unknown) => {
         this.clearing = false;
-        this.error = err?.error?.error || 'No se pudo limpiar el historial';
+        this.error = this.errMsg(err, 'No se pudo limpiar el historial');
       },
     });
   }

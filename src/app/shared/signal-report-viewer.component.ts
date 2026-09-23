@@ -72,6 +72,17 @@ export class SignalReportViewerComponent {
     return '';
   }
 
+  /** Una sola evaluación de tone → clases (evita 4× verdictTone en el template). */
+  verdictCellClass(valor: string | null | undefined): Record<string, boolean> {
+    const t = verdictTone(valor);
+    return {
+      warn: t === 'warn',
+      'ok-text': t === 'ok' || t === 'bullish',
+      'bias-bearish': t === 'bearish',
+      'bias-bullish': t === 'bullish',
+    };
+  }
+
   href(): string | null {
     return chartHref(this.market, this.chartUrl, this.chartPath);
   }
