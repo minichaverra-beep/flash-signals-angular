@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 function historyListParams(opts: {
   page?: number;
   pageSize?: number;
-  market?: 'btc' | 'us30' | '';
+  market?: 'btc' | 'us30' | 'xauusd' | '';
 } = {}): Record<string, string> {
   const params: Record<string, string> = {
     page: String(opts.page ?? 1),

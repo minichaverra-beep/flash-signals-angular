@@ -42,6 +42,7 @@ export class HistorialComponent implements OnInit {
     { id: '', label: 'Todos' },
     { id: 'btc', label: 'BTC' },
     { id: 'us30', label: 'US30' },
+    { id: 'xauusd', label: 'XAUUSD' },
   ];
 
   ngOnInit(): void {

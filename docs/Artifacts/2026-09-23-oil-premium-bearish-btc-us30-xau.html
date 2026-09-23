@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Oil Premium → Bearish · BTC / US30 / XAU · Flash Signals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      /* Flash Signals — fire & shadow */
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --accent: var(--teal);
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--red) 16%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+
+    .shell {
+      max-width: var(--shell);
+      margin: 0 auto;
+      padding: 28px 22px 72px;
+    }
+
+    /* —— Hero —— */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 30px 30px 22px;
+      margin-bottom: 18px;
+      box-shadow: var(--glow);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--red));
+    }
+
+    .eyebrow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: var(--bg-soft);
+      color: var(--muted);
+    }
+
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+
+    .hero-sub {
+      color: var(--muted);
+      font-size: 0.98rem;
+      max-width: 64ch;
+      line-height: 1.55;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+    }
+
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+
+    .stat .val {
+      font-family: var(--display);
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      margin-bottom: 4px;
+    }
+
+    .stat .lbl {
+      font-size: 0.72rem;
+      color: var(--muted-2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stat.fire .val { color: var(--fire); }
+    .stat.err .val { color: #ff8a8a; }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+
+    .disclaimer {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--warn-dim);
+      border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8;
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    /* —— Nav / TOC —— */
+    .tabs-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--stroke);
+      margin: 0 -22px 22px;
+      padding: 12px 22px;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: var(--shell);
+      margin: 0 auto;
+    }
+
+    .tab {
+      appearance: none;
+      border: 1px solid var(--stroke);
+      background: var(--bg-elev);
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+
+    .tab:hover {
+      color: var(--text);
+      border-color: var(--stroke-strong);
+    }
+
+    .tab.active,
+    .tab:focus-visible {
+      background: linear-gradient(135deg, #ff8c00 0%, #cd1818 100%);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: var(--glow);
+      outline: none;
+    }
+
+    /* Sin JS: todas las secciones visibles + TOC como anclas */
+    .no-js .panel {
+      display: block !important;
+      margin-bottom: 36px;
+      padding-top: 8px;
+      border-top: 1px solid var(--stroke);
+    }
+
+    .no-js .panel:first-of-type { border-top: none; padding-top: 0; }
+
+    .has-js .panel { display: none; animation: fade 0.2s ease; }
+    .has-js .panel.active { display: block; }
+
+    .no-js .js-only-hint { display: none; }
+
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    h2 {
+      font-family: var(--display);
+      font-size: 1.4rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-family: var(--display);
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 26px 0 12px;
+      color: var(--fire);
+    }
+
+    .section-lead {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 18px;
+      max-width: 70ch;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    @media (max-width: 860px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px;
+    }
+
+    .card.a { border-top: 3px solid var(--ok); }
+    .card.b { border-top: 3px solid var(--err); }
+    .card.accent { border-top: 3px solid var(--teal); }
+    .card.amber-top { border-top: 3px solid var(--fire); }
+
+    .card-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card p, .card li {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .card ul {
+      padding-left: 1.15rem;
+      margin-top: 8px;
+    }
+
+    .card li { margin-bottom: 6px; }
+    .card strong { color: var(--text); }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .badge.up { background: var(--ok-dim); color: var(--ok); }
+    .badge.down { background: var(--err-dim); color: #ff8a8a; }
+    .badge.neu { background: rgba(196, 168, 255, 0.14); color: var(--violet); }
+
+    /* —— Tables —— */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      margin: 12px 0 22px;
+      background: var(--bg-elev);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      min-width: 520px;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 14px;
+      background: var(--bg-soft);
+      color: var(--gold);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--stroke);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    td strong { color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: color-mix(in srgb, var(--fire) 6%, transparent); }
+
+    .tone-a td:first-child,
+    .tone-b td:first-child,
+    .tone-info td:first-child,
+    .tone-warn td:first-child {
+      border-left: 3px solid transparent;
+      padding-left: 12px;
+    }
+
+    .tone-a td:first-child { border-left-color: var(--ok); }
+    .tone-b td:first-child { border-left-color: var(--err); }
+    .tone-info td:first-child { border-left-color: var(--teal); }
+    .tone-warn td:first-child { border-left-color: var(--fire); }
+
+    .corr-inv { color: var(--ok); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-pos { color: #ff8a8a; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-mix { color: var(--warn); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-neu { color: #7ec8c9; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+
+    /* Barras CSS de correlación */
+    .corr-viz {
+      display: grid;
+      gap: 10px;
+      margin: 8px 0 22px;
+    }
+
+    .corr-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 140px) 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 640px) {
+      .corr-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+
+    .corr-row .pair { font-weight: 700; color: var(--text); }
+    .corr-row .hint { color: var(--muted-2); font-size: 0.78rem; text-align: right; }
+
+    .bar-track {
+      height: 10px;
+      border-radius: 999px;
+      background: var(--bg-soft);
+      border: 1px solid var(--stroke);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-track::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: color-mix(in srgb, var(--gold) 40%, transparent);
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: calc(var(--mag, 0.4) * 50%);
+      border-radius: 999px;
+    }
+
+    .bar-fill.inv {
+      margin-left: calc(50% - (var(--mag, 0.4) * 50%));
+      background: linear-gradient(90deg, var(--ok), #7dffc0);
+    }
+
+    .bar-fill.pos {
+      margin-left: 50%;
+      background: linear-gradient(90deg, #ff8a8a, var(--fire));
+    }
+
+    .bar-fill.mix {
+      margin-left: calc(50% - 8%);
+      width: 28%;
+      background: linear-gradient(90deg, var(--warn), var(--fire));
+    }
+
+    .callout {
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 16px 0;
+      font-size: 0.9rem;
+      border: 1px solid var(--stroke);
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .callout.info { background: var(--info-dim); border-color: color-mix(in srgb, var(--teal) 45%, transparent); }
+    .callout.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .callout.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .callout.danger { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text);
+      font-family: var(--display);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+
+    /* Details / colapsables */
+    details.fold {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      margin: 12px 0;
+      overflow: hidden;
+    }
+
+    details.fold > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      font-size: 0.92rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      user-select: none;
+    }
+
+    details.fold > summary::-webkit-details-marker { display: none; }
+
+    details.fold > summary::after {
+      content: "+";
+      font-family: var(--mono);
+      color: var(--fire);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    details.fold[open] > summary::after { content: "−"; }
+
+    details.fold > summary:hover { background: color-mix(in srgb, var(--fire) 8%, transparent); }
+
+    details.fold .fold-body {
+      padding: 0 16px 16px;
+      border-top: 1px solid var(--stroke);
+      padding-top: 14px;
+    }
+
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 16px 0;
+    }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .flow-step strong { color: var(--text); }
+
+    .flow-arrow {
+      text-align: center;
+      color: var(--fire);
+      font-size: 1.15rem;
+      padding: 2px 0;
+      line-height: 1;
+    }
+
+    .steps {
+      display: grid;
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #ff8c00, #cd1818);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--glow);
+    }
+
+    .step strong { display: block; font-size: 0.9rem; color: var(--text); }
+    .step span { font-size: 0.82rem; color: var(--muted); }
+
+    .score-list { list-style: none; display: grid; gap: 8px; margin: 14px 0; }
+
+    .score-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .score-item:hover { border-color: var(--stroke-strong); }
+    .score-item.checked {
+      border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+      background: var(--ok-dim);
+      color: var(--text);
+    }
+
+    .score-item input { margin-top: 3px; accent-color: var(--ok); width: 16px; height: 16px; }
+    .score-item .n {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--fire);
+      min-width: 1.5rem;
+    }
+
+    .score-bar-wrap {
+      margin: 16px 0;
+      background: var(--bg-soft);
+      border-radius: 999px;
+      height: 12px;
+      overflow: hidden;
+      border: 1px solid var(--stroke);
+    }
+
+    .score-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--err);
+      transition: width 0.25s, background 0.25s;
+    }
+
+    .score-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .score-meta .pass { color: var(--ok); font-weight: 700; }
+    .score-meta .fail { color: #ff8a8a; font-weight: 700; }
+
+    pre.tpl {
+      background: var(--bg-elev);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      line-height: 1.65;
+    }
+
+    .checklist label {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 11px 13px;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .checklist label:hover { border-color: var(--stroke-strong); }
+    .checklist input { margin-top: 3px; accent-color: var(--fire); }
+
+    .footer-meta {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--stroke);
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .footer-meta code {
+      font-family: var(--mono);
+      color: #7ec8c9;
+      font-size: 0.75rem;
+    }
+
+    .tag-code {
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      background: var(--bg-soft);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #7ec8c9;
+      white-space: nowrap;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      background: var(--fire);
+      color: #111;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      z-index: 100;
+    }
+
+    .skip-link:focus { left: 12px; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <div class="shell">
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">Flash Signals</span>
+        <span class="chip warn">Oil premium → bearish</span>
+        <span class="chip">BTC · US30 · XAUUSD</span>
+        <span class="chip ok">v1.2 · Lectura mejorada</span>
+      </div>
+      <h1>Petróleo en prima → inicio bajista</h1>
+      <p class="hero-sub">
+        Análisis multi-activo y playbook profesional: qué pasa con BTC, US30 y XAUUSD
+        cuando el crudo cotiza con premium e inicia giro bajista.
+      </p>
+      <div class="stats">
+        <div class="stat fire"><div class="val">Premium</div><div class="lbl">Punto de partida oil</div></div>
+        <div class="stat err"><div class="val">↓ Bear start</div><div class="lbl">Inicio esperado</div></div>
+        <div class="stat ok"><div class="val">Régimen A</div><div class="lbl">Unwind → risk-on</div></div>
+        <div class="stat teal"><div class="val">Régimen B</div><div class="lbl">Demanda → risk-off</div></div>
+      </div>
+      <div class="disclaimer">
+        No es consejo financiero. Las correlaciones cambian de régimen. Clasifica A vs B antes de operar.
+      </div>
+    </header>
+
+    <nav class="tabs-wrap" aria-label="Tabla de contenidos">
+      <div class="tabs" role="tablist">
+        <a class="tab active" href="#resumen" data-tab="resumen" role="tab">Resumen</a>
+        <a class="tab" href="#regimenes" data-tab="regimenes" role="tab">Regímenes</a>
+        <a class="tab" href="#correlacion" data-tab="correlacion" role="tab">Correlación</a>
+        <a class="tab" href="#activos" data-tab="activos" role="tab">Activos</a>
+        <a class="tab" href="#pro" data-tab="pro" role="tab">Trading pro</a>
+        <a class="tab" href="#score" data-tab="score" role="tab">Scorecard</a>
+        <a class="tab" href="#checklist" data-tab="checklist" role="tab">Checklist</a>
+      </div>
+    </nav>
+
+    <div id="contenido">
+    <!-- RESUMEN -->
+    <section id="resumen" class="panel active" role="tabpanel">
+      <h2>Resumen ejecutivo</h2>
+      <p class="section-lead">Si el petróleo está en premium e inicia bearish, el efecto cruzado no es uniforme.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Activo</th>
+              <th>Régimen A — unwind</th>
+              <th>Régimen B — demanda</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a">
+              <td><strong>US30</strong></td>
+              <td><span class="badge up">Alcista</span> márgenes + alivio inflación</td>
+              <td><span class="badge down">Bajista</span> / cautela</td>
+            </tr>
+            <tr class="tone-a">
+              <td><strong>BTC</strong></td>
+              <td><span class="badge up">Alcista</span> liquidez / risk-on</td>
+              <td><span class="badge down">Bajista</span> beta de riesgo</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>XAUUSD</strong></td>
+              <td><span class="badge down">Bajista</span> sale el hedge</td>
+              <td><span class="badge up">Neutral / ↑</span> refugio</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout ok">
+        <strong>Regla de oro</strong>
+        Confirma si la caída del oil es <em>desmonte de prima</em> o <em>destrucción de demanda</em>. Eso decide el lado de US30, BTC y XAU.
+      </div>
+
+      <h3>Escenario base</h3>
+      <div class="grid-2">
+        <div class="card amber-top">
+          <div class="card-title">“Petróleo en precio premium”</div>
+          <p>El mercado ya pagó sobreprecio por:</p>
+          <ul>
+            <li>Riesgo geopolítico (estrechos, conflictos)</li>
+            <li>Shock de oferta / cortes de pipeline</li>
+            <li>Expectativa de inflación sticky vía energía</li>
+          </ul>
+          <p style="margin-top:10px">El precio puede seguir “caro”, pero el <strong>premium</strong> es lo que el tape puede desmontar rápido.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">“Necesita iniciar bearish”</div>
+          <p>No es free-fall. Es el <strong>inicio</strong> del giro:</p>
+          <ul>
+            <li>Fallo de extensión / rejection en zona premium</li>
+            <li>Ruptura de estructura (LH → break de pivot)</li>
+            <li>Narrativa: “prima se deshace”</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- REGÍMENES -->
+    <section id="regimenes" class="panel" role="tabpanel">
+      <h2>Dos regímenes</h2>
+      <p class="section-lead">Obligatorio clasificar antes de operar. Umbral Flash Signals: no long US30/BTC por oil↓ si ≥2 checks apuntan a B.</p>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Régimen A — Desmonte de prima <span class="badge up">Risk-on</span></div>
+          <ul>
+            <li>Oil ↓ por alivio de oferta / geopolítica</li>
+            <li>Yields e inflación implícita aflojan</li>
+            <li>Equities reaccionan al alza</li>
+            <li>Oro a menudo <strong>baja con</strong> el oil</li>
+            <li>BTC = risk asset, no commodity</li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">Régimen B — Demanda rota <span class="badge down">Risk-off</span></div>
+          <ul>
+            <li>Oil ↓ porque se rompe la demanda</li>
+            <li>Equities y BTC caen</li>
+            <li>Oro puede <strong>subir</strong> o aguantar</li>
+            <li>El “barato” del oil avisa deterioro macro</li>
+          </ul>
+        </div>
+      </div>
+
+      <details class="fold" open>
+        <summary>Clasificador rápido (5 checks)</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead>
+                <tr><th>Check</th><th>Apunta a A</th><th>Apunta a B</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Headline oil</strong></td><td>Oferta / geopolítica se alivia</td><td>Growth / PMI / demanda</td></tr>
+                <tr><td><strong>US10Y / US2Y</strong></td><td>Bajan o dejan de subir</td><td>Bajan por pánico + equities ↓</td></tr>
+                <tr><td><strong>US30 / NDX</strong></td><td>Suben con oil ↓</td><td>Bajan con oil ↓</td></tr>
+                <tr><td><strong>XAUUSD</strong></td><td>Baja con oil</td><td>Sube o diverge al alza</td></tr>
+                <tr><td><strong>VIX</strong></td><td>Baja o estable</td><td>Sube fuerte</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <h3>Cadena causal (Régimen A)</h3>
+      <div class="flow">
+        <div class="flow-step">Oil premium se desmonta → inicio bearish del crudo</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">Expectativas de inflación / presión Fed ↓</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">Yields / DXY dejan de apretar → liquidez percibida ↑</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><strong>US30 + BTC</strong> reciben risk-on · <strong>XAU</strong> pierde demanda de hedge</div>
+      </div>
+    </section>
+
+    <!-- CORRELACIÓN -->
+    <section id="correlacion" class="panel" role="tabpanel">
+      <h2>Tabla de correlación (Régimen A)</h2>
+      <p class="section-lead">Coeficientes direccionales típicos 1–4 semanas · unwind de prima · mapa de sesgo (−1…+1).</p>
+
+      <div class="corr-viz" aria-label="Barras de correlación">
+        <div class="corr-row">
+          <span class="pair">Oil ↔ US30</span>
+          <div class="bar-track"><div class="bar-fill inv" style="--mag:0.5"></div></div>
+          <span class="hint corr-inv">−0.40…−0.60 · inversa</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">Oil ↔ BTC</span>
+          <div class="bar-track"><div class="bar-fill inv" style="--mag:0.35"></div></div>
+          <span class="hint corr-inv">−0.20…−0.50 · débil</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">Oil ↔ XAU</span>
+          <div class="bar-track"><div class="bar-fill pos" style="--mag:0.45"></div></div>
+          <span class="hint corr-pos">+0.30…+0.60 · positiva</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">US30 ↔ BTC</span>
+          <div class="bar-track"><div class="bar-fill pos" style="--mag:0.65"></div></div>
+          <span class="hint corr-neu">+0.50…+0.80 · risk-on</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">US30 ↔ XAU</span>
+          <div class="bar-track"><div class="bar-fill inv" style="--mag:0.35"></div></div>
+          <span class="hint corr-inv">−0.20…−0.50 · inversa</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">BTC ↔ XAU</span>
+          <div class="bar-track"><div class="bar-fill mix"></div></div>
+          <span class="hint corr-mix">−0.10…+0.30 · inestable</span>
+        </div>
+      </div>
+
+      <details class="fold">
+        <summary>Detalle tabular de pares</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead>
+                <tr><th>Par</th><th>r típico</th><th>Signo</th><th>Al iniciar bear oil</th></tr>
+              </thead>
+              <tbody>
+                <tr class="tone-a"><td>Oil ↔ US30</td><td class="corr-inv">−0.40 a −0.60</td><td>Inversa</td><td>Oil ↓ → sesgo alcista US30</td></tr>
+                <tr class="tone-a"><td>Oil ↔ BTC</td><td class="corr-inv">−0.20 a −0.50</td><td>Inversa débil</td><td>Oil ↓ → sesgo alcista BTC</td></tr>
+                <tr class="tone-b"><td>Oil ↔ XAUUSD</td><td class="corr-pos">+0.30 a +0.60</td><td>Positiva</td><td>Oil ↓ → oro suele bajar</td></tr>
+                <tr class="tone-info"><td>US30 ↔ BTC</td><td class="corr-neu">+0.50 a +0.80</td><td>Positiva</td><td>Risk-on conjunto</td></tr>
+                <tr class="tone-warn"><td>US30 ↔ XAUUSD</td><td class="corr-inv">−0.20 a −0.50</td><td>Inversa</td><td>Índices ↑ → oro pierde flujo</td></tr>
+                <tr><td>BTC ↔ XAUUSD</td><td class="corr-mix">−0.10 a +0.30</td><td>Inestable</td><td>Divergencia: BTC↑ oro↓</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <h3>Matriz de reacción</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Si ves…</th><th>Régimen</th><th>US30</th><th>BTC</th><th>XAUUSD</th></tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a"><td>Oil ↓ · yields ↓ · equities ↑</td><td>A</td><td>Long bias</td><td>Long bias</td><td>Short / evitar</td></tr>
+            <tr class="tone-a"><td>Oil ↓ · gold ↓ · BTC ↑</td><td>A fuerte</td><td>Long bias</td><td>Long bias</td><td>Short bias</td></tr>
+            <tr class="tone-b"><td>Oil ↓ · equities ↓ · VIX ↑</td><td>B</td><td>Short / caution</td><td>Short / caution</td><td>Long / hold</td></tr>
+            <tr class="tone-b"><td>Oil ↓ · gold ↑ · BTC ↓</td><td>B</td><td>Debilidad</td><td>Debilidad</td><td>Fuerza relativa</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ACTIVOS -->
+    <section id="activos" class="panel" role="tabpanel">
+      <h2>Lectura por activo (Régimen A)</h2>
+      <p class="section-lead">Transmisión, matices y operativa Flash Signals.</p>
+
+      <div class="grid-3">
+        <div class="card a">
+          <div class="card-title">US30 <span class="badge up">Sesgo ↑</span></div>
+          <p><strong>Transmisión:</strong> energía ↓ → márgenes ↑ → alivio inflación.</p>
+          <p style="margin-top:8px"><strong>Matiz:</strong> energy del Dow puede restar mientras el índice sube.</p>
+          <p style="margin-top:8px"><strong>Flash:</strong> confluencia alcista — exigir H1 + CTR H1. No entrada sola por oil.</p>
+        </div>
+        <div class="card a">
+          <div class="card-title">BTC <span class="badge up">Sesgo ↑</span></div>
+          <p><strong>Transmisión:</strong> liquidez / rate path; beta Nasdaq, no oro.</p>
+          <p style="margin-top:8px"><strong>Matiz:</strong> en A puede subir mientras XAU baja.</p>
+          <p style="margin-top:8px"><strong>Flash:</strong> sin risk-on en US30/NDX, no forzar long solo por oil↓.</p>
+        </div>
+        <div class="card b">
+          <div class="card-title">XAUUSD <span class="badge down">Sesgo ↓</span></div>
+          <p><strong>Transmisión:</strong> con oil en prima, oro = hedge inflación/geo.</p>
+          <p style="margin-top:8px"><strong>Matiz:</strong> oil↓+gold↓ = unwind; oil↓+gold↑ = Régimen B.</p>
+          <p style="margin-top:8px"><strong>Ops:</strong> en A es el más vulnerable; en B es el hedge.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRADING PRO -->
+    <section id="pro" class="panel" role="tabpanel">
+      <h2>Trading profesional avanzado</h2>
+      <p class="section-lead">Playbook desk — disciplina prop, no señal aislada.</p>
+
+      <div class="callout info">
+        <strong>Orden fijo de decisión</strong>
+        1 Régimen A/B → 2 Estructura oil → 3 Liderazgo US30/BTC → 4 Invalidación (yields/DXY/XAU) → 5 Setup micro → 6 Size correlacionado.
+        <em>Prohibido saltar al setup sin clasificar régimen.</em>
+      </div>
+
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div><strong>Régimen</strong><span>5 checks A vs B</span></div></div>
+        <div class="step"><div class="step-num">2</div><div><strong>Estructura oil</strong><span>Inicio bear real vs pullback alcista</span></div></div>
+        <div class="step"><div class="step-num">3</div><div><strong>Liderazgo cruzado</strong><span>¿US30/BTC confirman o divergen?</span></div></div>
+        <div class="step"><div class="step-num">4</div><div><strong>Invalidación macro</strong><span>Yields, DXY, XAU</span></div></div>
+        <div class="step"><div class="step-num">5</div><div><strong>Setup micro</strong><span>Entrada en el activo elegido</span></div></div>
+        <div class="step"><div class="step-num">6</div><div><strong>Riesgo</strong><span>Sizing correlacionado</span></div></div>
+      </div>
+
+      <details class="fold" open>
+        <summary>Playbooks A1 / A2 / A3 / B1</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead>
+                <tr><th>Setup</th><th>Régimen</th><th>Trigger</th><th>Kill switch</th></tr>
+              </thead>
+              <tbody>
+                <tr class="tone-a"><td><strong>A1</strong> Relief US30</td><td>A (≥3/5)</td><td>Oil bear + pullback H1 + CTR H1</td><td>Oil rebound &gt;50% + US10Y aprieta</td></tr>
+                <tr class="tone-a"><td><strong>A2</strong> Liquidity BTC</td><td>A + risk-on</td><td>Corr BTC–NDX +; BTC ≠ XAU</td><td>US30 pierde bias o VIX spike</td></tr>
+                <tr class="tone-warn"><td><strong>A3</strong> Fade XAU</td><td>A confirmado</td><td>Oil↓ + XAU↓ / rechazo supply</td><td>Gold↑ con oil↓ → reclasificar B</td></tr>
+                <tr class="tone-b"><td><strong>B1</strong> Defensive</td><td>B</td><td>Oil↓ + equities↓ + VIX↑</td><td>No forzar longs risk-on</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <h3>Riesgo correlacionado</h3>
+      <div class="stats" style="margin-top:0">
+        <div class="stat teal"><div class="val">1.0×</div><div class="lbl">Solo US30 o BTC</div></div>
+        <div class="stat fire"><div class="val">≤1.25×</div><div class="lbl">US30+BTC combinado</div></div>
+        <div class="stat err"><div class="val">≤1.0×</div><div class="lbl">Trifecta + short XAU</div></div>
+        <div class="stat ok"><div class="val">0.6×</div><div class="lbl">f_corr dos risk assets</div></div>
+      </div>
+      <div class="callout warn" style="margin-top:14px">
+        <strong>Fórmula</strong>
+        <code style="font-family:var(--mono);font-size:0.82rem;color:var(--gold)">size_efectivo = size_plan × f_regimen × f_corr</code><br />
+        f_regimen: 1.0 A claro · 0.5 mixto · 0.0 B (si setup long risk) · f_corr: 1.0 uno · 0.6 dos
+      </div>
+
+      <details class="fold">
+        <summary>Confirmación técnica oil (inicio bear)</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Condición</th><th>Mínimo</th><th>Ideal</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Estructura</strong></td><td>LH + ruptura higher-low H1/H4</td><td>+ cierre sesión bajo pivot</td></tr>
+                <tr><td><strong>Momentum</strong></td><td>RSI/MACD pierde zona 50</td><td>Volumen relativo ↑ en ruptura</td></tr>
+                <tr><td><strong>Ubicación</strong></td><td>Rejection zona premium/supply</td><td>Extensión vs media 20/50</td></tr>
+                <tr><td><strong>Contexto</strong></td><td>Headline A o B coherente</td><td>EIA / OPEC / PMI</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>Invalidaciones</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Evento</th><th>Acción</th></tr></thead>
+              <tbody>
+                <tr><td>Oil recupera pivot + cierra arriba</td><td>Cancelar bias bear oil; revisar A1/A2</td></tr>
+                <tr><td>Gold↑ + oil↓ + equities↓</td><td>Reclasificar B; flat longs risk</td></tr>
+                <tr><td>VIX spike + US30 pierde estructura</td><td>Kill A1/A2</td></tr>
+                <tr><td>BTC↓ mientras US30↑</td><td>No promediar BTC a ciegas</td></tr>
+                <tr><td>Headline re-premium oil</td><td>Pausar short XAU y longs relief</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>Integración Flash Signals</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Elemento</th><th>Uso</th></tr></thead>
+              <tbody>
+                <tr><td>Modo Trader</td><td>US30/BTC solo si régimen A + score ≥7</td></tr>
+                <tr><td>Historial</td><td>Tags <span class="tag-code">REGIME_A_OIL_UNWIND</span> / <span class="tag-code">REGIME_B_DEMAND</span></td></tr>
+                <tr><td>Señal vs macro</td><td>Long + régimen B → conflicto; skip o size 0.5</td></tr>
+                <tr><td>XAU</td><td>Filtro de régimen, no señal inventada</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <div class="callout danger">
+        <strong>Errores de desk</strong>
+        Oil↓ ≠ siempre bull equities · No full size US30+BTC el mismo relief · No short gold en B ·
+        No long BTC si correlaciona con oro · No cambiar régimen mid-trade sin invalidación ·
+        No A3 gold en Asia sin confirmación NY.
+      </div>
+
+      <h3>Plantilla bitácora</h3>
+      <pre class="tpl">Fecha:
+Régimen (A/B) + score /10:
+Oil: estructura / nivel ruptura / narrativa:
+US30 bias + setup (E1/E2) + CTR H1:
+BTC bias + corr vs NDX/XAU:
+XAU filtro (confirma A o B):
+Yields / DXY:
+Entrada / stop / targets:
+Size × f_regimen × f_corr:
+Kill switch:
+Resultado + lección:</pre>
+    </section>
+
+    <!-- SCORECARD -->
+    <section id="score" class="panel" role="tabpanel">
+      <h2>Scorecard pre-trade</h2>
+      <p class="section-lead">Marca cada check. Mínimo <strong style="color:var(--text)">7/10</strong> para operar. Persistencia local en este navegador <span class="js-only-hint">(requiere scripts en el preview)</span>.</p>
+
+      <div class="score-meta">
+        <span>Score: <strong id="score-num">0</strong> / 10</span>
+        <span id="score-verdict" class="fail">NO TRADE</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" id="score-bar"></div></div>
+
+      <ul class="score-list" id="score-list">
+        <li class="score-item" data-i="0"><input type="checkbox" /><span class="n">01</span><span>¿Clasifiqué A o B por escrito?</span></li>
+        <li class="score-item" data-i="1"><input type="checkbox" /><span class="n">02</span><span>¿Oil tiene estructura de inicio bear (no solo 1 vela)?</span></li>
+        <li class="score-item" data-i="2"><input type="checkbox" /><span class="n">03</span><span>¿Yields / DXY coherentes con el régimen?</span></li>
+        <li class="score-item" data-i="3"><input type="checkbox" /><span class="n">04</span><span>¿XAU confirma (A: flojo / B: fuerte)?</span></li>
+        <li class="score-item" data-i="4"><input type="checkbox" /><span class="n">05</span><span>¿US30 o NDX confirman el lado risk?</span></li>
+        <li class="score-item" data-i="5"><input type="checkbox" /><span class="n">06</span><span>¿Setup técnico propio del activo (no solo macro)?</span></li>
+        <li class="score-item" data-i="6"><input type="checkbox" /><span class="n">07</span><span>¿Stop y R:R definidos antes de entrar?</span></li>
+        <li class="score-item" data-i="7"><input type="checkbox" /><span class="n">08</span><span>¿Size ajustado por correlación?</span></li>
+        <li class="score-item" data-i="8"><input type="checkbox" /><span class="n">09</span><span>¿Fuera de ventana tóxica post-dato sin wait?</span></li>
+        <li class="score-item" data-i="9"><input type="checkbox" /><span class="n">10</span><span>¿Kill switch escrito?</span></li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>&lt;7 → no trade</strong>
+        Anota score y régimen en bitácora / historial Flash Signals.
+      </div>
+    </section>
+
+    <!-- CHECKLIST -->
+    <section id="checklist" class="panel" role="tabpanel">
+      <h2>Checklist pre-campana</h2>
+      <p class="section-lead">Repaso rápido antes de la sesión.</p>
+
+      <div class="checklist" id="bell-list">
+        <label><input type="checkbox" /> Narrativa oil: oferta/geopolítica vs PMI/demanda</label>
+        <label><input type="checkbox" /> Yields 2y/10y acompañan alivio (A) o pánico (B)</label>
+        <label><input type="checkbox" /> Oro confirma unwind (baja) o diverge (sube)</label>
+        <label><input type="checkbox" /> Energy no engaña la lectura del US30</label>
+        <label><input type="checkbox" /> BTC = risk (NDX) o = oro hoy</label>
+        <label><input type="checkbox" /> Size correlacionado si hay 2 legs</label>
+        <label><input type="checkbox" /> Scorecard ≥7</label>
+      </div>
+
+      <div class="callout ok" style="margin-top:20px">
+        <strong>Síntesis</strong>
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--ok)">A (unwind):</strong>
+        Oil−US30 / Oil−BTC inversas · Oil−XAU positiva → long US30/BTC, short/evitar XAU, size correlacionado.<br /><br />
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:#ff8a8a">B (demanda):</strong>
+        invertir risk · XAU como protección · no forzar relief.<br /><br />
+        El edge no es adivinar <em>r</em>: es clasificar régimen, exigir estructura y no pagar doble beta.
+      </div>
+
+      <p class="footer-meta">
+        Flash Signals · fire &amp; shadow · Artefacto 2026-09-23 · Fuente MD:
+        <code>2026-09-23-oil-premium-bearish-btc-us30-xau.md</code> ·
+        Sin JS: TOC por anclas y todas las secciones visibles. Con JS: tabs + scorecard persistente.
+      </p>
+    </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll(".tab[data-tab]");
+      const panels = document.querySelectorAll(".panel");
+      const KEY_TAB = "oil-artifact-tab";
+      const KEY_SCORE = "oil-artifact-score";
+      const KEY_BELL = "oil-artifact-bell";
+
+      function showTab(id, pushHash) {
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+        panels.forEach((p) => p.classList.toggle("active", p.id === id));
+        try { localStorage.setItem(KEY_TAB, id); } catch (_) {}
+        if (pushHash && history.replaceState) {
+          history.replaceState(null, "", "#" + id);
+        }
+      }
+
+      tabs.forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.preventDefault();
+          showTab(t.dataset.tab, true);
+        });
+      });
+
+      const fromHash = (location.hash || "").replace("#", "");
+      let start = fromHash;
+      try { start = start || localStorage.getItem(KEY_TAB); } catch (_) {}
+      if (start && document.getElementById(start)) showTab(start, false);
+
+      // Scorecard
+      const items = [...document.querySelectorAll(".score-item")];
+      let state = [];
+      try { state = JSON.parse(localStorage.getItem(KEY_SCORE) || "[]"); } catch (_) { state = []; }
+      if (!Array.isArray(state) || state.length !== 10) state = Array(10).fill(false);
+
+      function renderScore() {
+        let n = 0;
+        items.forEach((el, i) => {
+          const on = !!state[i];
+          el.classList.toggle("checked", on);
+          const inp = el.querySelector("input");
+          if (inp) inp.checked = on;
+          if (on) n++;
+        });
+        const num = document.getElementById("score-num");
+        if (num) num.textContent = String(n);
+        const bar = document.getElementById("score-bar");
+        if (bar) {
+          bar.style.width = n * 10 + "%";
+          bar.style.background = n >= 7 ? "var(--ok)" : n >= 4 ? "var(--warn)" : "var(--err)";
+        }
+        const v = document.getElementById("score-verdict");
+        if (v) {
+          if (n >= 7) {
+            v.textContent = "LISTO PARA OPERAR";
+            v.className = "pass";
+          } else {
+            v.textContent = "NO TRADE";
+            v.className = "fail";
+          }
+        }
+        try { localStorage.setItem(KEY_SCORE, JSON.stringify(state)); } catch (_) {}
+      }
+
+      items.forEach((el, i) => {
+        el.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT") {
+            state[i] = !state[i];
+          } else {
+            state[i] = !!el.querySelector("input").checked;
+          }
+          renderScore();
+        });
+      });
+      renderScore();
+
+      // Bell checklist
+      const bells = [...document.querySelectorAll("#bell-list input")];
+      let bell = [];
+      try { bell = JSON.parse(localStorage.getItem(KEY_BELL) || "[]"); } catch (_) { bell = []; }
+      if (!Array.isArray(bell) || bell.length !== bells.length) bell = Array(bells.length).fill(false);
+      bells.forEach((inp, i) => {
+        inp.checked = !!bell[i];
+        inp.addEventListener("change", () => {
+          bell[i] = inp.checked;
+          try { localStorage.setItem(KEY_BELL, JSON.stringify(bell)); } catch (_) {}
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

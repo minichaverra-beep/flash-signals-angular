@@ -32,6 +32,7 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 
 - Tabs: **Modo Trader** (técnico) · **Modo Inversor** (simple) · **Cómo usar**
 - Ruta **`/historial`**: historial de corridas (caja local SQLite)
+- Ruta **`/wiki`** (alias `/artefactos`): wiki de artefactos Cursor AI en `docs/Artifacts`
 - Cards colapsables compartidas en `src/app/shared/signal-report-viewer`
 
 ## Historial (hive box)
@@ -41,6 +42,13 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 - Tras cada job de `POST /api/signals/run` (done/error) se persiste un snapshot real.
 - Endpoints: `GET/DELETE /api/history`, `GET/DELETE /api/history/:id`.
 
+## Wiki / artefactos
+
+- Carpeta: `docs/Artifacts/` (README de ejemplo versionado).
+- Escaneo fresco: `GET /api/artifacts` y `POST /api/artifacts/scan`.
+- Lectura segura: `GET /api/artifacts/item?path=` y `GET /api/artifacts/raw?path=` (solo bajo Artifacts; sin `..`).
+- UI: sidebar + preview (MD sanitizado, HTML iframe sandbox, imágenes, PDF).
+
 ## Endpoints clave
 
 - `GET /api/health` — incluye `signalsRunnable` / `platform`
@@ -48,6 +56,7 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 - `GET /api/signals/status`, `latest`, `chart`
 - `GET /api/zentinel`
 - `GET|DELETE /api/history` (+ `/:id`)
+- `GET /api/artifacts`, `POST /api/artifacts/scan`, `GET /api/artifacts/item|raw?path=`
 
 ## Docker (ser honesto)
 

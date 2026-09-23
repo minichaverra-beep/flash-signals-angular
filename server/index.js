@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const historyStore = require('./db/history-store');
+const artifacts = require('./artifacts');
 
 const PORT = Number(process.env.PORT || 3847);
 /** Solo loopback: API local, no exponer a la LAN. */
@@ -35,8 +36,9 @@ for (const origin of String(process.env.CORS_ORIGINS || '')
 
 /** En Linux (Docker) no hay powershell.exe fiable para el pipeline Windows. */
 const SIGNALS_RUNNABLE = process.platform === 'win32';
-const MARKETS = new Set(['btc', 'us30']);
+const MARKETS = new Set(['btc', 'us30', 'xauusd']);
 const TIERS = new Set(['context', 'light', 'high', 'history']);
+const MARKET_ERROR = 'market debe ser btc|us30|xauusd';
 
 /** Entry solo numérico (evita inyección vía args de PowerShell). */
 function sanitizeEntry(raw) {
@@ -72,7 +74,22 @@ const REPORTS = {
     history: 'us30_m5_high_signal.md',
     chart: 'us30_m5_chart_annotated.png',
   },
+  xauusd: {
+    context: 'xauusd_m5_context.md',
+    light: 'xauusd_m5_signal.md',
+    high: 'xauusd_m5_high_signal.md',
+    history: 'xauusd_m5_high_signal.md',
+    // Controller XAU aún no genera *_chart_annotated; usa el chart crudo.
+    chart: 'xauusd_m5_chart.png',
+  },
 };
+
+/** Clave YAML Zentinel por market (sección en config/zentinel_presets.yaml). */
+function zentinelYamlKey(market) {
+  if (market === 'us30') return 'US30';
+  if (market === 'xauusd') return 'XAUUSD';
+  return 'BTC';
+}
 
 /** @type {{ status: string, startedAt?: string, finishedAt?: string, market?: string, tier?: string, command?: string, exitCode?: number|null, logs: string[], error?: string|null, reportPath?: string|null, summary?: object|null, flags?: object, entry?: string|null, historyId?: number|null }} */
 let currentJob = {
@@ -159,9 +176,13 @@ app.use(
   })
 );
 app.use(express.json({ limit: '1mb' }));
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  // Wiki embebe HTML/PDF en iframe same-origin vía /api/artifacts/raw (proxy :4400→:3847).
+  // DENY aquí rompe el preview (icono roto / área gris) aunque "Abrir raw" funcione.
+  if (!req.path.startsWith('/api/artifacts/raw')) {
+    res.setHeader('X-Frame-Options', 'DENY');
+  }
   next();
 });
 
@@ -170,7 +191,7 @@ function livePath(...parts) {
 }
 
 function scriptFor(market, tier) {
-  const m = market === 'us30' ? 'us30' : 'btc';
+  const m = MARKETS.has(market) ? market : 'btc';
   const map = {
     context: `analyze-${m}-context.ps1`,
     light: `analyze-${m}-light.ps1`,
@@ -471,7 +492,7 @@ function readVolumeThresholds(market) {
   const yamlPath = path.join(TRADING_ROOT, 'config', 'zentinel_presets.yaml');
   if (!fs.existsSync(yamlPath)) return null;
   const raw = fs.readFileSync(yamlPath, 'utf8');
-  const key = market === 'us30' ? 'US30' : 'BTC';
+  const key = zentinelYamlKey(market);
   const sec = raw.match(new RegExp(`\\n\\s*${key}:([\\s\\S]*?)(?:\\n\\s{2}[A-Z]{2,}|$)`));
   const chunk = sec ? sec[1] : raw;
   const fvg = chunk.match(/fvg_volume:([\s\S]*?)(?:\n\s{4}\w|\n\s{2}\w|$)/);
@@ -644,7 +665,7 @@ function parseSummary(md, market, tier) {
 }
 
 function readLatest(market, tierHint) {
-  const key = market === 'us30' ? 'us30' : 'btc';
+  const key = REPORTS[market] ? market : 'btc';
   const files = REPORTS[key];
   const preferred =
     (tierHint && files[tierHint]) || files.high || files.context;
@@ -682,7 +703,7 @@ function readZentinel(market) {
     return { available: false, error: 'No existe config/zentinel_presets.yaml' };
   }
   const raw = fs.readFileSync(yamlPath, 'utf8');
-  const key = market === 'us30' ? 'US30' : 'BTC';
+  const key = zentinelYamlKey(market);
   // Extracción ligera sin dependencia yaml
   const sectionRe = new RegExp(`\\n\\s*${key}:([\\s\\S]*?)(?:\\n\\s{2}[A-Z]|\\n[a-z]|$)`);
   const sec = raw.match(sectionRe);
@@ -726,7 +747,7 @@ app.get('/api/signals/latest', (req, res) => {
   const market = normalizeMarket(req.query.market);
   const tier = normalizeTier(req.query.tier) || 'high';
   if (!market) {
-    return res.status(400).json({ error: 'market debe ser btc|us30' });
+    return res.status(400).json({ error: MARKET_ERROR });
   }
   const latest = readLatest(market, tier);
   if (!latest) {
@@ -740,7 +761,7 @@ app.get('/api/signals/latest', (req, res) => {
 app.get('/api/signals/chart', (req, res) => {
   const market = normalizeMarket(req.query.market);
   if (!market) {
-    return res.status(400).json({ error: 'market debe ser btc|us30' });
+    return res.status(400).json({ error: MARKET_ERROR });
   }
   const chartName = REPORTS[market].chart;
   // path.resolve + join soporta espacios en "Cursor Trading"
@@ -762,7 +783,7 @@ app.get('/api/signals/chart', (req, res) => {
 app.get('/api/zentinel', (req, res) => {
   const market = normalizeMarket(req.query.market);
   if (!market) {
-    return res.status(400).json({ error: 'market debe ser btc|us30' });
+    return res.status(400).json({ error: MARKET_ERROR });
   }
   res.json(readZentinel(market));
 });
@@ -778,7 +799,7 @@ app.get('/api/history', async (req, res) => {
     const market =
       marketRaw && MARKETS.has(marketRaw) ? marketRaw : marketRaw ? null : undefined;
     if (marketRaw && market === null) {
-      return res.status(400).json({ error: 'market debe ser btc|us30' });
+      return res.status(400).json({ error: MARKET_ERROR });
     }
     const data = await historyStore.listHistory({
       page,
@@ -836,6 +857,53 @@ app.delete('/api/history', async (_req, res) => {
   }
 });
 
+/** Wiki de artefactos Cursor AI — solo lectura bajo docs/Artifacts. */
+function artifactsListHandler(_req, res) {
+  try {
+    const data = artifacts.scanArtifacts();
+    res.json(data);
+  } catch (err) {
+    console.error('[artifacts] scan:', err);
+    res.status(500).json({ error: 'No se pudo escanear docs/Artifacts' });
+  }
+}
+
+app.get('/api/artifacts', artifactsListHandler);
+app.post('/api/artifacts/scan', artifactsListHandler);
+
+app.get('/api/artifacts/item', (req, res) => {
+  const rel = req.query.path;
+  const result = artifacts.readArtifactMeta(rel);
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error });
+  }
+  const { ok: _ok, ...payload } = result;
+  res.json(payload);
+});
+
+app.get('/api/artifacts/raw', (req, res) => {
+  const resolved = artifacts.resolveSafe(req.query.path);
+  if (!resolved.ok) {
+    return res.status(resolved.status).json({ error: resolved.error });
+  }
+  if (!fs.existsSync(resolved.full) || !fs.statSync(resolved.full).isFile()) {
+    return res.status(404).json({ error: 'Artefacto no encontrado' });
+  }
+  const ext = path.extname(resolved.full).toLowerCase();
+  const mime = artifacts.MIME[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Permitir embeber solo desde same-origin (Angular wiki iframe / PDF preview).
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  if (ext === '.html' || ext === '.htm') {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; frame-ancestors 'self'"
+    );
+  }
+  res.sendFile(resolved.full);
+});
+
 app.post('/api/signals/run', (req, res) => {
   if (currentJob.status === 'running') {
     return res.status(409).json({
@@ -849,7 +917,7 @@ app.post('/api/signals/run', (req, res) => {
   const tier = normalizeTier(body.tier);
 
   if (!market) {
-    return res.status(400).json({ error: 'market debe ser btc|us30' });
+    return res.status(400).json({ error: MARKET_ERROR });
   }
   if (!tier) {
     return res.status(400).json({

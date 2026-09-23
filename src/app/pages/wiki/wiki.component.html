@@ -1,0 +1,183 @@
+<div class="page">
+  <header class="hero">
+    <div class="brand">
+      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <div>
+        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <h1>Wiki</h1>
+        <p class="sub">Artefactos Cursor AI en <code>docs/Artifacts</code></p>
+      </div>
+    </div>
+    <nav class="top-nav" aria-label="Navegación principal">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
+      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+    </nav>
+  </header>
+
+  <div class="toolbar sticky">
+    <label class="search">
+      <span class="sr-only">Filtrar</span>
+      <input
+        type="search"
+        [(ngModel)]="filter"
+        placeholder="Filtrar por nombre o ruta…"
+        autocomplete="off"
+      />
+    </label>
+    <div class="toolbar-actions">
+      <button type="button" class="ghost" (click)="scan()" [disabled]="loading">
+        {{ loading ? 'Escaneando…' : 'Actualizar / Escanear' }}
+      </button>
+    </div>
+  </div>
+
+  <p class="msg err" *ngIf="error">{{ error }}</p>
+
+  <div class="wiki-layout" *ngIf="!error || items.length">
+    <aside class="sidebar panel">
+      <div class="sidebar-head">
+        <h2>Artefactos</h2>
+        <p class="muted tiny">{{ filtered.length }} / {{ items.length }}</p>
+      </div>
+
+      <p class="muted loading-pulse" *ngIf="loading && !items.length">Escaneando…</p>
+
+      <ul class="artifact-list" *ngIf="filtered.length">
+        <li *ngFor="let item of filtered">
+          <button
+            type="button"
+            class="artifact-btn"
+            [class.active]="selected?.path === item.path"
+            (click)="open(item)"
+          >
+            <span class="pill kind">{{ kindLabel(item.kind) }}</span>
+            <span class="meta">
+              <strong>{{ item.name }}</strong>
+              <span class="muted tiny">{{ item.path }} · {{ formatSize(item.size) }}</span>
+            </span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="empty-side" *ngIf="!loading && !items.length">
+        <p class="muted">Carpeta vacía o sin archivos útiles.</p>
+      </div>
+    </aside>
+
+    <section class="reader panel">
+      <div class="empty" *ngIf="!loading && !items.length">
+        <h2>Sin artefactos aún</h2>
+        <p class="muted">
+          Guarda archivos en <code>docs/Artifacts</code> (Markdown, HTML, imágenes, PDF…)
+          y pulsa <strong>Actualizar / Escanear</strong>. Hay un
+          <code>README.md</code> de ejemplo que explica el flujo.
+        </p>
+      </div>
+
+      <ng-container *ngIf="items.length">
+        <div class="reader-head" *ngIf="selected">
+          <div>
+            <p class="eyebrow">{{ kindLabel(selected.kind) }} · {{ selected.ext || 'sin ext' }}</p>
+            <h2>{{ selected.name }}</h2>
+            <p class="muted tiny">
+              {{ selected.path }} · {{ formatSize(selected.size) }} ·
+              {{ formatMtime(selected.mtime) }}
+            </p>
+          </div>
+          <div class="reader-actions">
+            <button
+              type="button"
+              class="ghost"
+              *ngIf="canExpand && !expanded"
+              (click)="enterExpand()"
+              title="Pantalla completa (Esc para salir)"
+            >
+              Expandir
+            </button>
+            <a
+              class="ghost link-btn"
+              *ngIf="detail?.rawUrl as url"
+              [href]="url"
+              target="_blank"
+              rel="noopener"
+            >Abrir raw</a>
+          </div>
+        </div>
+
+        <p class="muted" *ngIf="detailLoading">Cargando…</p>
+
+        <div
+          class="preview-shell"
+          [class.expanded]="expanded"
+          *ngIf="
+            !detailLoading &&
+            (renderedHtml || iframeUrl || imageUrl || pdfUrl || textContent != null)
+          "
+        >
+          <div class="expand-bar" *ngIf="expanded">
+            <div class="expand-bar-meta">
+              <p class="eyebrow">{{ kindLabel(selected!.kind) }} · lectura</p>
+              <h2>{{ selected!.name }}</h2>
+            </div>
+            <button
+              type="button"
+              class="ghost expand-close"
+              (click)="exitExpand()"
+              title="Salir (Esc)"
+            >
+              Cerrar
+            </button>
+          </div>
+
+          <div class="preview-body">
+            <article
+              class="preview md-body"
+              *ngIf="renderedHtml"
+              [innerHTML]="renderedHtml"
+            ></article>
+
+            <iframe
+              *ngIf="iframeUrl"
+              class="html-frame"
+              [src]="iframeUrl"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              referrerpolicy="no-referrer"
+              title="Vista HTML del artefacto"
+            ></iframe>
+
+            <div class="img-wrap" *ngIf="imageUrl">
+              <img [src]="imageUrl" [alt]="selected?.name || 'imagen'" />
+            </div>
+
+            <div class="pdf-wrap" *ngIf="pdfUrl">
+              <p class="muted" *ngIf="!expanded">
+                Vista previa PDF:
+                <a [href]="pdfHref" target="_blank" rel="noopener">abrir en pestaña nueva</a>
+              </p>
+              <iframe class="pdf-frame" [src]="pdfUrl" title="PDF"></iframe>
+            </div>
+
+            <pre class="raw-text" *ngIf="textContent != null">{{ textContent }}</pre>
+          </div>
+        </div>
+
+        <p
+          class="muted"
+          *ngIf="
+            !detailLoading &&
+            detail &&
+            !renderedHtml &&
+            !iframeUrl &&
+            !imageUrl &&
+            !pdfUrl &&
+            textContent == null
+          "
+        >
+          No hay preview para este tipo. Usa
+          <a [href]="detail.rawUrl" target="_blank" rel="noopener">Abrir raw</a>.
+        </p>
+      </ng-container>
+    </section>
+  </div>
+</div>

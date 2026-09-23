@@ -10,7 +10,10 @@ import {
   SignalsApiService,
   Tier,
 } from '../../services/signals-api.service';
-import { SignalReportViewerComponent } from '../../shared/signal-report-viewer.component';
+import {
+  ReportViewMode,
+  SignalReportViewerComponent,
+} from '../../shared/signal-report-viewer.component';
 import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
 
 export type ViewMode = 'trader' | 'inversor' | 'guia';
@@ -50,6 +53,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly markets: { id: Market; label: string }[] = [
     { id: 'btc', label: 'BTC' },
     { id: 'us30', label: 'US30' },
+    { id: 'xauusd', label: 'XAUUSD' },
   ];
 
   readonly tiers: { id: Tier; label: string; hint: string }[] = [
@@ -80,8 +84,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.tier !== 'high';
   }
 
-  get summary(): SignalSummary | null {
+  /** Un solo summary para el viewer (latest gana sobre job para no duplicar). */
+  get reportSummary(): SignalSummary | null {
     return this.latest?.summary ?? this.job?.summary ?? null;
+  }
+
+  get reportMode(): ReportViewMode {
+    return this.viewMode === 'inversor' ? 'inversor' : 'trader';
   }
 
   refreshHealth(): void {

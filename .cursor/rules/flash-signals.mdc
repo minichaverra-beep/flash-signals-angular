@@ -28,6 +28,7 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 | Modo Inversor | Vista simplificada: decisión, plan, riesgo, scores en lenguaje claro |
 | Cómo usar | Guía rápida (visible sin haber corrido señal) |
 | `/historial` | Historial local (SQLite hive box): lista + drawer detalle Trader/Inversor |
+| `/wiki` | Wiki de artefactos Cursor AI (`docs/Artifacts`): sidebar + preview |
 
 - Cards colapsables (`<details>`) vía `app-signal-report-viewer` compartido.
 - Gráfico PNG **solo** vía `GET /api/signals/chart?market=btc|us30` (no inventar imágenes).
@@ -42,12 +43,19 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 - Endpoints: `GET /api/history`, `GET /api/history/:id`, `DELETE /api/history`, `DELETE /api/history/:id`.
 - Validar ids numéricos; API sigue en localhost.
 
+## Wiki / `docs/Artifacts`
+
+- Dejar aquí artefactos de Cursor (`.md`, `.html`, `.png`, `.pdf`, …). Versionar contenido útil; ignorar solo temporales.
+- API: `GET /api/artifacts` (scan fresco), `POST /api/artifacts/scan`, `GET /api/artifacts/item?path=`, `GET /api/artifacts/raw?path=`.
+- Path traversal bloqueado; solo archivos bajo `docs/Artifacts`.
+
 ## API (no ampliar superficie sin necesidad)
 
 - `GET /api/health` — estado + `CURSOR_TRADING_ROOT` + `signalsRunnable`
 - `POST /api/signals/run` — una corrida a la vez (409 si running)
 - `GET /api/signals/status|latest|chart` + `GET /api/zentinel`
 - `GET|DELETE /api/history` (+ `/:id`) — historial hive box
+- `GET /api/artifacts` (+ `scan` / `item` / `raw`) — wiki de artefactos
 - Sanitizar `entry` (solo numérico). No exponer la API a la LAN por defecto.
 - CORS: localhost (4400/8080) + `CORS_ORIGINS`.
 

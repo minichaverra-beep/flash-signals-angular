@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-export type Market = 'btc' | 'us30';
+export type Market = 'btc' | 'us30' | 'xauusd';
 export type Tier = 'context' | 'light' | 'high' | 'history';
 
 export interface RunRequest {
@@ -179,6 +179,20 @@ export class SignalsApiService {
   historyClear(): Observable<{ ok: boolean; deleted: number }> {
     return this.http.delete<{ ok: boolean; deleted: number }>(`${this.base}/history`);
   }
+
+  artifactsList(): Observable<ArtifactsListResponse> {
+    return this.http.get<ArtifactsListResponse>(`${this.base}/artifacts`);
+  }
+
+  artifactsScan(): Observable<ArtifactsListResponse> {
+    return this.http.post<ArtifactsListResponse>(`${this.base}/artifacts/scan`, {});
+  }
+
+  artifactGet(relPath: string): Observable<ArtifactDetail> {
+    return this.http.get<ArtifactDetail>(`${this.base}/artifacts/item`, {
+      params: { path: relPath },
+    });
+  }
 }
 
 export interface HistoryListItem {
@@ -211,4 +225,37 @@ export interface HistoryDetail extends HistoryListItem {
   preview?: string | null;
   command?: string | null;
   exitCode?: number | null;
+}
+
+export type ArtifactKind =
+  | 'markdown'
+  | 'html'
+  | 'image'
+  | 'pdf'
+  | 'text'
+  | 'other';
+
+export interface ArtifactItem {
+  name: string;
+  path: string;
+  ext: string;
+  size: number;
+  mtime: string;
+  kind: ArtifactKind | string;
+}
+
+export interface ArtifactsListResponse {
+  root: string;
+  exists: boolean;
+  count: number;
+  truncated?: boolean;
+  scannedAt: string;
+  items: ArtifactItem[];
+}
+
+export interface ArtifactDetail extends ArtifactItem {
+  mime?: string;
+  rawUrl: string;
+  content: string | null;
+  note?: string;
 }

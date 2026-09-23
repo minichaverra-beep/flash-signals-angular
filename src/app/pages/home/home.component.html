@@ -11,6 +11,7 @@
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
       <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
 
@@ -164,14 +165,6 @@
   <section class="panel result" *ngIf="viewMode !== 'guia' && job as j">
     <h2>Estado: {{ j.status }}</h2>
     <p class="mono" *ngIf="j.command && viewMode === 'trader'">{{ j.command }}</p>
-
-    <app-signal-report-viewer
-      *ngIf="j.summary"
-      [summary]="j.summary"
-      [mode]="viewMode === 'inversor' ? 'inversor' : 'trader'"
-      [market]="market"
-    />
-
     <p *ngIf="j.reportPath && viewMode === 'trader'" class="path">Reporte: <code>{{ j.reportPath }}</code></p>
     <details class="report-card collapsible" *ngIf="j.logs?.length && viewMode === 'trader'">
       <summary>Logs ({{ j.logs.length }})</summary>
@@ -181,18 +174,23 @@
     </details>
   </section>
 
-  <section class="panel result" *ngIf="viewMode !== 'guia' && latest as L">
-    <h2>Último reporte ({{ L.reportName }})</h2>
-    <p class="muted">Modificado: {{ L.mtime }}</p>
-    <p class="path" *ngIf="viewMode === 'trader'"><code>{{ L.reportPath }}</code></p>
+  <!-- Un solo viewer: evita duplicar KPIs/plan/scores entre job + latest -->
+  <section class="panel result" *ngIf="viewMode !== 'guia' && reportSummary as s">
+    <ng-container *ngIf="latest as L; else jobReportHead">
+      <h2>Último reporte ({{ L.reportName }})</h2>
+      <p class="muted">Modificado: {{ L.mtime }}</p>
+      <p class="path" *ngIf="viewMode === 'trader'"><code>{{ L.reportPath }}</code></p>
+    </ng-container>
+    <ng-template #jobReportHead>
+      <h2>Resultado de la corrida</h2>
+    </ng-template>
 
     <app-signal-report-viewer
-      *ngIf="L.summary"
-      [summary]="L.summary"
-      [mode]="viewMode === 'inversor' ? 'inversor' : 'trader'"
-      [preview]="viewMode === 'trader' ? L.preview : null"
-      [chartUrl]="L.chartUrl ?? null"
-      [chartPath]="L.chartPath ?? null"
+      [summary]="s"
+      [mode]="reportMode"
+      [preview]="reportMode === 'trader' ? (latest?.preview ?? null) : null"
+      [chartUrl]="latest?.chartUrl ?? null"
+      [chartPath]="latest?.chartPath ?? null"
       [market]="market"
     />
   </section>

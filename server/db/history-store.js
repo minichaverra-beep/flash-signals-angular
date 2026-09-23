@@ -267,7 +267,7 @@ async function listHistory(opts = {}) {
   const pageSize = Math.min(100, Math.max(1, Number(opts.pageSize) || 20));
   const offset = (page - 1) * pageSize;
   const market =
-    opts.market && ['btc', 'us30'].includes(String(opts.market).toLowerCase())
+    opts.market && ['btc', 'us30', 'xauusd'].includes(String(opts.market).toLowerCase())
       ? String(opts.market).toLowerCase()
       : null;
 

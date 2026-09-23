@@ -183,6 +183,7 @@ Resumen para agentes:
 | **Modo Inversor** | Vista simplificada: decisión, plan, riesgo y scores en lenguaje claro |
 | **Cómo usar** | Guía rápida (visible sin haber corrido una señal) |
 | **Historial** (`/historial`) | Lista de corridas guardadas en la **caja local** SQLite |
+| **Wiki** (`/wiki`) | Artefactos Cursor AI en `docs/Artifacts` (MD/HTML/IMG/PDF) |
 
 ## Historial local (hive box / embedded store)
 
@@ -205,6 +206,18 @@ Endpoints:
 | `DELETE` | `/api/history/:id` | Borrar una entrada |
 | `DELETE` | `/api/history` | Limpiar todo (la UI pide confirmación) |
 
+## Wiki de artefactos (`docs/Artifacts`)
+
+Carpeta para dejar artefactos de **Cursor AI** (notas, HTML, PNG, PDF…). La UI **Wiki** (`/wiki`, alias `/artefactos`) los lista y previsualiza.
+
+| Pieza | Detalle |
+|-------|---------|
+| Carpeta | `docs/Artifacts/` (crear si falta; hay `README.md` de ejemplo) |
+| Escaneo | Fresco en cada `GET /api/artifacts` + botón «Actualizar / Escanear» |
+| Seguridad | Solo paths bajo Artifacts; `..` bloqueado; API en localhost |
+
+Cómo añadir: copia el archivo a `docs/Artifacts` (o subcarpeta) → abre `/wiki` → **Actualizar / Escanear**.
+
 ## Features UI
 
 - **Cards colapsables** (`<details>`) para veredicto, plan, setup, scores, checklists, gráfico, etc. (compartidas vía `app-signal-report-viewer`)
@@ -214,6 +227,7 @@ Endpoints:
 - Formulario: mercado BTC/US30, tiers Context / Light / High / History, flags (Bullish/Bearish, Break/Reverse, ML, Neural, Ilustrate, Advanced, Entry en High)
 - Recarga del último reporte live sin volver a ejecutar
 - **Historial**: filtro BTC/US30, fechas relativas+absolutas, badges de veredicto, drawer de detalle con Modo Trader/Inversor
+- **Wiki** (`/wiki`): sidebar de artefactos + preview (Markdown sanitizado, HTML en iframe sandbox, imágenes, PDF)
 
 ## Endpoints API principales
 
@@ -228,6 +242,10 @@ Endpoints:
 | `GET` | `/api/history` | Historial local (SQLite) |
 | `GET` | `/api/history/:id` | Detalle de una entrada |
 | `DELETE` | `/api/history` / `/api/history/:id` | Limpiar / borrar |
+| `GET` | `/api/artifacts` | Lista fresca de artefactos en `docs/Artifacts` |
+| `POST` | `/api/artifacts/scan` | Re-escaneo explícito (mismo resultado) |
+| `GET` | `/api/artifacts/item?path=` | Meta + contenido (texto) o `rawUrl` |
+| `GET` | `/api/artifacts/raw?path=` | Sirve el archivo (path seguro bajo Artifacts) |
 
 ### Ejemplo `POST /api/signals/run`
 
@@ -264,10 +282,13 @@ Tiers: `context` | `light` | `high` | `history`.
 flash-signals-angular/
   src/app/pages/home/         # UI señales (tabs Trader / Inversor / Guía)
   src/app/pages/historial/    # Historial local (/historial)
+  src/app/pages/wiki/         # Wiki de artefactos (/wiki)
   src/app/shared/             # Report viewer compartido
   src/app/services/           # Cliente HTTP → /api
   src/assets/logo.png         # Logo (versionado)
+  docs/Artifacts/             # Artefactos Cursor AI (versionar útiles; ver README)
   server/index.js             # Express API (:3847)
+  server/artifacts.js         # Escaneo seguro docs/Artifacts
   server/db/                  # Hive box: schema + history-store (SQLite)
   data/                       # signals-history.sqlite (gitignored)
   proxy.conf.json             # /api → :3847

@@ -11,6 +11,7 @@
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
       <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
 
@@ -140,12 +141,30 @@
     <p class="muted" *ngIf="detailLoading">Cargando detalle…</p>
 
     <ng-container *ngIf="!detailLoading && detail as d">
-      <div class="mode-tabs" role="tablist">
-        <button type="button" [class.active]="detailMode === 'trader'" (click)="detailMode = 'trader'">Modo Trader</button>
-        <button type="button" [class.active]="detailMode === 'inversor'" (click)="detailMode = 'inversor'">Modo Inversor</button>
+      <div class="mode-tabs" role="tablist" aria-label="Modo de vista del detalle">
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="detailMode === 'trader'"
+          [class.active]="detailMode === 'trader'"
+          (click)="detailMode = 'trader'"
+        >Modo Trader</button>
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="detailMode === 'inversor'"
+          [class.active]="detailMode === 'inversor'"
+          (click)="detailMode = 'inversor'"
+        >Modo Inversor</button>
       </div>
+      <p class="mode-hint muted" *ngIf="detailMode === 'trader'">
+        Vista técnica: veredicto, plan, setup, scores, checklists y gráfico.
+      </p>
+      <p class="mode-hint muted" *ngIf="detailMode === 'inversor'">
+        Vista simplificada: decisión, plan, riesgo y scores en lenguaje claro.
+      </p>
 
-      <p class="path" *ngIf="d.reportPath"><code>{{ d.reportPath }}</code></p>
+      <p class="path" *ngIf="d.reportPath && detailMode === 'trader'"><code>{{ d.reportPath }}</code></p>
       <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
 
       <app-signal-report-viewer
@@ -153,8 +172,8 @@
         [summary]="d.summary"
         [mode]="detailMode"
         [preview]="detailMode === 'trader' ? d.preview ?? null : null"
-        [chartUrl]="chartUrlFor(d)"
-        [chartPath]="d.chartPath ?? null"
+        [chartUrl]="detailMode === 'trader' ? chartUrlFor(d) : null"
+        [chartPath]="detailMode === 'trader' ? (d.chartPath ?? null) : null"
         [market]="d.market"
       />
 
