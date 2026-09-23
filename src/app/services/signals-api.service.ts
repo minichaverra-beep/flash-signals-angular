@@ -193,6 +193,52 @@ export class SignalsApiService {
       params: { path: relPath },
     });
   }
+
+  artifactPatchMeta(body: ArtifactMetaPatch): Observable<ArtifactMetaPatchResponse> {
+    return this.http.patch<ArtifactMetaPatchResponse>(
+      `${this.base}/artifacts/meta`,
+      body
+    );
+  }
+
+  wikiCategoriesList(): Observable<{ items: WikiCategory[] }> {
+    return this.http.get<{ items: WikiCategory[] }>(`${this.base}/wiki/categories`);
+  }
+
+  wikiCategoryCreate(body: {
+    name: string;
+    sortOrder?: number;
+    color?: string | null;
+  }): Observable<{ ok: boolean; category: WikiCategory }> {
+    return this.http.post<{ ok: boolean; category: WikiCategory }>(
+      `${this.base}/wiki/categories`,
+      body
+    );
+  }
+
+  wikiCategoryPatch(
+    id: number,
+    body: { name?: string; sortOrder?: number; color?: string | null }
+  ): Observable<{ ok: boolean; category: WikiCategory }> {
+    return this.http.patch<{ ok: boolean; category: WikiCategory }>(
+      `${this.base}/wiki/categories/${id}`,
+      body
+    );
+  }
+
+  wikiCategoryDelete(
+    id: number,
+    opts: { reassignTo?: number | null; force?: boolean } = {}
+  ): Observable<{ ok: boolean; deleted: number }> {
+    const params: Record<string, string> = {};
+    if (opts.reassignTo === null) params['reassignTo'] = 'null';
+    else if (opts.reassignTo != null) params['reassignTo'] = String(opts.reassignTo);
+    if (opts.force) params['force'] = 'true';
+    return this.http.delete<{ ok: boolean; deleted: number }>(
+      `${this.base}/wiki/categories/${id}`,
+      { params }
+    );
+  }
 }
 
 export interface HistoryListItem {
@@ -242,6 +288,19 @@ export interface ArtifactItem {
   size: number;
   mtime: string;
   kind: ArtifactKind | string;
+  /** Nombre de display (meta local); por defecto = name del archivo. */
+  displayName?: string;
+  categoryId?: number | null;
+  metaUpdatedAt?: string | null;
+}
+
+export interface WikiCategory {
+  id: number;
+  name: string;
+  sortOrder: number;
+  color?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ArtifactsListResponse {
@@ -251,6 +310,7 @@ export interface ArtifactsListResponse {
   truncated?: boolean;
   scannedAt: string;
   items: ArtifactItem[];
+  categories?: WikiCategory[];
 }
 
 export interface ArtifactDetail extends ArtifactItem {
@@ -258,4 +318,25 @@ export interface ArtifactDetail extends ArtifactItem {
   rawUrl: string;
   content: string | null;
   note?: string;
+}
+
+export interface ArtifactMetaPatch {
+  path: string;
+  displayName?: string;
+  categoryId?: number | null;
+  /** Si true, intenta renombrar el archivo en disco (mismo directorio). */
+  renameFile?: boolean;
+}
+
+export interface ArtifactMetaPatchResponse {
+  ok: boolean;
+  path: string;
+  pathChanged: boolean;
+  oldPath: string | null;
+  meta: {
+    path: string;
+    displayName: string;
+    categoryId: number | null;
+    updatedAt: string;
+  };
 }

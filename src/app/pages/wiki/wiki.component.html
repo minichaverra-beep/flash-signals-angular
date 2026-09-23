@@ -5,7 +5,7 @@
       <div>
         <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
         <h1>Wiki</h1>
-        <p class="sub">Artefactos Cursor AI en <code>docs/Artifacts</code></p>
+        <p class="sub">Artefactos Cursor AI en <code>docs/Artifacts</code> · meta local SQLite</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
@@ -21,11 +21,19 @@
       <input
         type="search"
         [(ngModel)]="filter"
-        placeholder="Filtrar por nombre o ruta…"
+        placeholder="Filtrar por título, nombre o ruta…"
         autocomplete="off"
       />
     </label>
     <div class="toolbar-actions">
+      <button
+        type="button"
+        class="ghost"
+        (click)="showCatManager = !showCatManager"
+        [class.active-toggle]="showCatManager"
+      >
+        {{ showCatManager ? 'Ocultar categorías' : 'Gestionar categorías' }}
+      </button>
       <button type="button" class="ghost" (click)="scan()" [disabled]="loading">
         {{ loading ? 'Escaneando…' : 'Actualizar / Escanear' }}
       </button>
@@ -34,31 +42,183 @@
 
   <p class="msg err" *ngIf="error">{{ error }}</p>
 
+  <div class="cat-manager panel" *ngIf="showCatManager">
+    <h2>Categorías</h2>
+    <p class="muted tiny">Se guardan en <code>data/wiki-meta.sqlite</code> (solo esta máquina).</p>
+    <form class="cat-create" (ngSubmit)="createCategory(false)">
+      <input
+        type="text"
+        [(ngModel)]="newCatName"
+        name="newCatName"
+        placeholder="Nueva categoría…"
+        maxlength="120"
+        autocomplete="off"
+      />
+      <input
+        type="text"
+        [(ngModel)]="newCatColor"
+        name="newCatColor"
+        placeholder="Color (opcional, #hex)"
+        maxlength="32"
+        class="color-input"
+        autocomplete="off"
+      />
+      <button type="submit" class="ghost" [disabled]="catBusy || !newCatName.trim()">
+        Nueva categoría
+      </button>
+    </form>
+    <ul class="cat-list" *ngIf="categories.length">
+      <li *ngFor="let cat of categories">
+        <span
+          class="cat-swatch"
+          [style.background]="cat.color || 'transparent'"
+          [class.no-color]="!cat.color"
+        ></span>
+        <ng-container *ngIf="renameCatId !== cat.id; else renameTpl">
+          <strong>{{ cat.name }}</strong>
+          <span class="muted tiny">#{{ cat.id }}</span>
+          <button type="button" class="ghost tiny-btn" (click)="startRenameCategory(cat)">
+            Renombrar
+          </button>
+          <button type="button" class="ghost tiny-btn danger" (click)="deleteCategory(cat)">
+            Borrar
+          </button>
+        </ng-container>
+        <ng-template #renameTpl>
+          <input
+            type="text"
+            [(ngModel)]="renameCatValue"
+            [name]="'rename-' + cat.id"
+            maxlength="120"
+          />
+          <button type="button" class="ghost tiny-btn" (click)="saveRenameCategory()" [disabled]="catBusy">
+            Guardar
+          </button>
+          <button
+            type="button"
+            class="ghost tiny-btn"
+            (click)="renameCatId = null"
+          >
+            Cancelar
+          </button>
+        </ng-template>
+      </li>
+    </ul>
+    <p class="muted" *ngIf="!categories.length">Aún no hay categorías. Crea una arriba.</p>
+  </div>
+
   <div class="wiki-layout" *ngIf="!error || items.length">
     <aside class="sidebar panel">
       <div class="sidebar-head">
-        <h2>Artefactos</h2>
-        <p class="muted tiny">{{ filtered.length }} / {{ items.length }}</p>
+        <div class="sidebar-head-text">
+          <h2>Artefactos</h2>
+          <p class="muted tiny">{{ filtered.length }} / {{ items.length }}</p>
+        </div>
+        <button
+          type="button"
+          class="ghost icon-btn"
+          title="Nueva categoría"
+          aria-label="Nueva categoría"
+          (click)="openQuickCreate({ assignAfter: false }, $event)"
+        >
+          +
+        </button>
+      </div>
+
+      <div class="quick-create" *ngIf="quickCreateOpen && !catPickerOpen" (click)="$event.stopPropagation()">
+        <label class="sr-only" for="quickCatSide">Nueva categoría</label>
+        <input
+          id="quickCatSide"
+          type="text"
+          [(ngModel)]="quickCreateName"
+          name="quickCreateSide"
+          placeholder="Nueva categoría…"
+          maxlength="120"
+          autocomplete="off"
+          (keydown.enter)="createCategory(true)"
+        />
+        <div class="quick-create-actions">
+          <button
+            type="button"
+            class="ghost tiny-btn accent"
+            (click)="createCategory(true)"
+            [disabled]="catBusy || !quickCreateName.trim()"
+          >
+            Crear
+          </button>
+          <button type="button" class="ghost tiny-btn" (click)="closeQuickCreate()">
+            Cancelar
+          </button>
+        </div>
       </div>
 
       <p class="muted loading-pulse" *ngIf="loading && !items.length">Escaneando…</p>
 
-      <ul class="artifact-list" *ngIf="filtered.length">
-        <li *ngFor="let item of filtered; trackBy: trackByPath">
-          <button
-            type="button"
-            class="artifact-btn"
-            [class.active]="selected?.path === item.path"
-            (click)="open(item)"
-          >
-            <span class="pill kind">{{ kindLabel(item.kind) }}</span>
-            <span class="meta">
-              <strong>{{ item.name }}</strong>
-              <span class="muted tiny">{{ item.path }} · {{ formatSize(item.size) }}</span>
-            </span>
-          </button>
-        </li>
-      </ul>
+      <div class="groups" *ngIf="filtered.length">
+        <section
+          class="group"
+          *ngFor="let g of grouped; trackBy: trackByGroup"
+        >
+          <h3 class="group-title">
+            <span
+              class="cat-swatch sm"
+              *ngIf="g.color"
+              [style.background]="g.color"
+            ></span>
+            {{ g.name }}
+            <span class="muted tiny">{{ g.items.length }}</span>
+          </h3>
+          <ul class="artifact-list">
+            <li
+              class="artifact-row"
+              *ngFor="let item of g.items; trackBy: trackByPath"
+            >
+              <button
+                type="button"
+                class="artifact-btn"
+                [class.active]="selected?.path === item.path"
+                (click)="open(item)"
+              >
+                <span class="pill kind">{{ kindLabel(item.kind) }}</span>
+                <span class="meta">
+                  <strong>{{ displayTitle(item) }}</strong>
+                  <span class="muted tiny">{{ item.path }} · {{ formatSize(item.size) }}</span>
+                </span>
+              </button>
+              <div class="artifact-more" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  class="ghost icon-btn more-btn"
+                  title="Acciones"
+                  aria-label="Acciones del artefacto"
+                  [attr.aria-expanded]="sidebarMenuPath === item.path"
+                  (click)="toggleSidebarMenu(item, $event)"
+                >
+                  ⋯
+                </button>
+                <div class="ctx-menu" *ngIf="sidebarMenuPath === item.path" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    (click)="openCatPicker(item, $event)"
+                  >
+                    {{ categoryActionLabel(item) }}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    *ngIf="item.categoryId != null"
+                    (click)="removeFromCategory(item.path); $event.stopPropagation()"
+                    [disabled]="savingMeta"
+                  >
+                    Quitar de categoría
+                  </button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </div>
 
       <div class="empty-side" *ngIf="!loading && !items.length">
         <p class="muted">Carpeta vacía o sin archivos útiles.</p>
@@ -77,13 +237,164 @@
 
       <ng-container *ngIf="items.length">
         <div class="reader-head" *ngIf="selected">
-          <div>
+          <div class="reader-title-block">
             <p class="eyebrow">{{ kindLabel(selected.kind) }} · {{ selected.ext || 'sin ext' }}</p>
-            <h2>{{ selected.name }}</h2>
+
+            <div class="title-row" *ngIf="!editingTitle">
+              <h2>{{ displayTitle(selected) }}</h2>
+              <button
+                type="button"
+                class="ghost tiny-btn"
+                (click)="startEditTitle()"
+                title="Editar nombre de display"
+              >
+                Renombrar
+              </button>
+            </div>
+
+            <div class="title-edit" *ngIf="editingTitle">
+              <input
+                type="text"
+                [(ngModel)]="editTitleValue"
+                name="editTitle"
+                maxlength="240"
+                placeholder="Nombre sin extensión…"
+                (keydown.enter)="saveTitle()"
+              />
+              <label class="check-rename">
+                <input type="checkbox" [(ngModel)]="renameOnDisk" name="renameOnDisk" />
+                También renombrar archivo en disco (conserva la extensión)
+              </label>
+              <div class="title-edit-actions">
+                <button
+                  type="button"
+                  class="ghost"
+                  (click)="saveTitle()"
+                  [disabled]="savingMeta"
+                >
+                  Guardar
+                </button>
+                <button type="button" class="ghost" (click)="cancelEditTitle()" [disabled]="savingMeta">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+
             <p class="muted tiny">
-              {{ selected.path }} · {{ formatSize(selected.size) }} ·
-              {{ formatMtime(selected.mtime) }}
+              Archivo: {{ selected.name }} · {{ selected.path }} ·
+              {{ formatSize(selected.size) }} · {{ formatMtime(selected.mtime) }}
             </p>
+
+            <div class="cat-actions">
+              <div class="cat-current">
+                <span class="cat-label">Categoría</span>
+                <span class="cat-badge" [class.uncat]="selected.categoryId == null">
+                  <span
+                    class="cat-swatch sm"
+                    *ngIf="selected.categoryId != null"
+                    [style.background]="categoryColor(selected.categoryId)"
+                  ></span>
+                  {{ categoryName(selected.categoryId) }}
+                </span>
+              </div>
+              <div class="cat-action-btns">
+                <button
+                  type="button"
+                  class="ghost accent"
+                  (click)="openCatPicker(selected)"
+                  [disabled]="savingMeta"
+                >
+                  {{ categoryActionLabel(selected) }}
+                </button>
+                <button
+                  type="button"
+                  class="ghost icon-btn"
+                  title="Nueva categoría"
+                  aria-label="Nueva categoría"
+                  (click)="openQuickCreate({ assignAfter: true, openPicker: true }, $event)"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  class="ghost tiny-btn"
+                  *ngIf="selected.categoryId != null"
+                  (click)="removeFromCategory(selected.path)"
+                  [disabled]="savingMeta"
+                >
+                  Quitar de categoría
+                </button>
+              </div>
+            </div>
+
+            <div
+              class="cat-picker panel-inset"
+              *ngIf="catPickerOpen && catPickerPath === selected.path"
+            >
+              <div class="cat-picker-head">
+                <strong>{{ categoryActionLabel(selected) }}</strong>
+                <button type="button" class="ghost tiny-btn" (click)="closeCatPicker()">
+                  Cerrar
+                </button>
+              </div>
+              <p class="muted tiny">Elige una categoría o crea una nueva.</p>
+              <div class="cat-chip-list">
+                <button
+                  type="button"
+                  class="cat-chip"
+                  [class.active]="selected.categoryId == null"
+                  (click)="moveToCategory(null)"
+                  [disabled]="savingMeta"
+                >
+                  Sin categoría
+                </button>
+                <button
+                  type="button"
+                  class="cat-chip"
+                  *ngFor="let cat of categories"
+                  [class.active]="selected.categoryId === cat.id"
+                  (click)="moveToCategory(cat.id)"
+                  [disabled]="savingMeta"
+                >
+                  <span
+                    class="cat-swatch sm"
+                    [style.background]="cat.color || 'transparent'"
+                    [class.no-color]="!cat.color"
+                  ></span>
+                  {{ cat.name }}
+                </button>
+              </div>
+              <div class="quick-create inline" *ngIf="quickCreateOpen" (click)="$event.stopPropagation()">
+                <input
+                  type="text"
+                  [(ngModel)]="quickCreateName"
+                  name="quickCreatePanel"
+                  placeholder="Nueva categoría…"
+                  maxlength="120"
+                  autocomplete="off"
+                  (keydown.enter)="createCategory(true)"
+                />
+                <button
+                  type="button"
+                  class="ghost tiny-btn accent"
+                  (click)="createCategory(true)"
+                  [disabled]="catBusy || !quickCreateName.trim()"
+                >
+                  Crear y asignar
+                </button>
+                <button type="button" class="ghost tiny-btn" (click)="closeQuickCreate()">
+                  Cancelar
+                </button>
+              </div>
+              <button
+                type="button"
+                class="ghost tiny-btn add-inline"
+                *ngIf="!quickCreateOpen"
+                (click)="openQuickCreate({ assignAfter: true, openPicker: false }, $event)"
+              >
+                + Nueva categoría
+              </button>
+            </div>
           </div>
           <div class="reader-actions">
             <button
@@ -118,7 +429,7 @@
           <div class="expand-bar" *ngIf="expanded && selected as sel">
             <div class="expand-bar-meta">
               <p class="eyebrow">{{ kindLabel(sel.kind) }} · lectura</p>
-              <h2>{{ sel.name }}</h2>
+              <h2>{{ displayTitle(sel) }}</h2>
             </div>
             <button
               type="button"
@@ -147,7 +458,7 @@
             ></iframe>
 
             <div class="img-wrap" *ngIf="imageUrl">
-              <img [src]="imageUrl" [alt]="selected?.name || 'imagen'" />
+              <img [src]="imageUrl" [alt]="displayTitle(selected) || 'imagen'" />
             </div>
 
             <div class="pdf-wrap" *ngIf="pdfUrl">

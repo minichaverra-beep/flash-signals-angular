@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const historyStore = require('./db/history-store');
+const wikiStore = require('./db/wiki-store');
 const artifacts = require('./artifacts');
 
 const PORT = Number(process.env.PORT || 3847);
@@ -857,10 +858,10 @@ app.delete('/api/history', async (_req, res) => {
   }
 });
 
-/** Wiki de artefactos Cursor AI — solo lectura bajo docs/Artifacts. */
-function artifactsListHandler(_req, res) {
+/** Wiki de artefactos Cursor AI — disco + meta local (SQLite). */
+async function artifactsListHandler(_req, res) {
   try {
-    const data = artifacts.scanArtifacts();
+    const data = await artifacts.scanArtifacts();
     res.json(data);
   } catch (err) {
     console.error('[artifacts] scan:', err);
@@ -871,14 +872,150 @@ function artifactsListHandler(_req, res) {
 app.get('/api/artifacts', artifactsListHandler);
 app.post('/api/artifacts/scan', artifactsListHandler);
 
-app.get('/api/artifacts/item', (req, res) => {
-  const rel = req.query.path;
-  const result = artifacts.readArtifactMeta(rel);
-  if (!result.ok) {
-    return res.status(result.status).json({ error: result.error });
+app.get('/api/artifacts/item', async (req, res) => {
+  try {
+    const result = await artifacts.readArtifactMeta(req.query.path);
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    const { ok: _ok, ...payload } = result;
+    res.json(payload);
+  } catch (err) {
+    console.error('[artifacts] item:', err);
+    res.status(500).json({ error: 'No se pudo leer el artefacto' });
   }
-  const { ok: _ok, ...payload } = result;
-  res.json(payload);
+});
+
+/** Meta local: display_name, categoría; renameFile opcional (mismo dir). */
+app.get('/api/artifacts/meta', async (req, res) => {
+  try {
+    if (req.query.path) {
+      const meta = await wikiStore.getMeta(req.query.path);
+      if (!meta) {
+        return res.status(404).json({ error: 'Sin meta para ese path' });
+      }
+      return res.json(meta);
+    }
+    const items = await wikiStore.listMeta();
+    res.json({ items });
+  } catch (err) {
+    console.error('[artifacts] meta get:', err);
+    res.status(500).json({ error: 'No se pudo leer meta' });
+  }
+});
+
+app.patch('/api/artifacts/meta', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await artifacts.patchArtifactMeta(body);
+    if (!result.ok) {
+      return res.status(result.status || 400).json({
+        error: result.error,
+        artifactCount: result.artifactCount,
+      });
+    }
+    res.json({
+      ok: true,
+      path: result.path,
+      pathChanged: !!result.pathChanged,
+      oldPath: result.oldPath || null,
+      meta: result.meta,
+    });
+  } catch (err) {
+    console.error('[artifacts] meta patch:', err);
+    res.status(500).json({ error: 'No se pudo guardar meta' });
+  }
+});
+
+app.get('/api/wiki/categories', async (_req, res) => {
+  try {
+    const items = await wikiStore.listCategories();
+    res.json({ items });
+  } catch (err) {
+    console.error('[wiki] categories list:', err);
+    res.status(500).json({ error: 'No se pudieron listar categorías' });
+  }
+});
+
+app.post('/api/wiki/categories', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await wikiStore.createCategory({
+      name: body.name,
+      sortOrder: body.sortOrder ?? body.sort_order,
+      color: body.color,
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    res.status(201).json({ ok: true, category: result.category });
+  } catch (err) {
+    console.error('[wiki] categories create:', err);
+    res.status(500).json({ error: 'No se pudo crear la categoría' });
+  }
+});
+
+app.patch('/api/wiki/categories/:id', async (req, res) => {
+  try {
+    const id = parseHistoryId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    const body = req.body || {};
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(body, 'name')) patch.name = body.name;
+    if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
+      patch.sortOrder = body.sortOrder;
+    } else if (Object.prototype.hasOwnProperty.call(body, 'sort_order')) {
+      patch.sortOrder = body.sort_order;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'color')) patch.color = body.color;
+    const result = await wikiStore.updateCategory(id, patch);
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+    res.json({ ok: true, category: result.category });
+  } catch (err) {
+    console.error('[wiki] categories patch:', err);
+    res.status(500).json({ error: 'No se pudo actualizar la categoría' });
+  }
+});
+
+app.delete('/api/wiki/categories/:id', async (req, res) => {
+  try {
+    const id = parseHistoryId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    let reassignTo = undefined;
+    if (Object.prototype.hasOwnProperty.call(req.query, 'reassignTo')) {
+      const raw = req.query.reassignTo;
+      if (raw === '' || raw === 'null' || raw == null) {
+        reassignTo = null;
+      } else {
+        const n = parseHistoryId(raw);
+        if (!n) {
+          return res.status(400).json({ error: 'reassignTo inválido' });
+        }
+        reassignTo = n;
+      }
+    }
+    const force =
+      req.query.force === '1' ||
+      req.query.force === 'true' ||
+      req.body?.force === true;
+    const result = await wikiStore.deleteCategory(id, { reassignTo, force });
+    if (!result.ok) {
+      return res.status(result.status).json({
+        error: result.error,
+        artifactCount: result.artifactCount,
+      });
+    }
+    res.json({ ok: true, deleted: result.deleted });
+  } catch (err) {
+    console.error('[wiki] categories delete:', err);
+    res.status(500).json({ error: 'No se pudo borrar la categoría' });
+  }
 });
 
 app.get('/api/artifacts/raw', (req, res) => {
@@ -1055,17 +1192,17 @@ app.post('/api/signals/run', (req, res) => {
   });
 });
 
-void historyStore
-  .init()
+void Promise.all([historyStore.init(), wikiStore.init()])
   .then(() => {
     app.listen(PORT, BIND_HOST, () => {
       console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
       console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
       console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
       console.log(`Historial (hive box): ${historyStore.DB_PATH}`);
+      console.log(`Wiki meta: ${wikiStore.DB_PATH}`);
     });
   })
   .catch((err) => {
-    console.error('[history] No se pudo abrir la caja local:', err);
+    console.error('[init] No se pudo abrir SQLite local:', err);
     process.exit(1);
   });
