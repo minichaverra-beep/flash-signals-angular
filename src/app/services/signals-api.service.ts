@@ -152,4 +152,63 @@ export class SignalsApiService {
       params: { market },
     });
   }
+
+  historyList(opts: {
+    page?: number;
+    pageSize?: number;
+    market?: Market | '';
+  } = {}): Observable<HistoryListResponse> {
+    const params: Record<string, string> = {
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 20),
+    };
+    if (opts.market) params['market'] = opts.market;
+    return this.http.get<HistoryListResponse>(`${this.base}/history`, { params });
+  }
+
+  historyGet(id: number): Observable<HistoryDetail> {
+    return this.http.get<HistoryDetail>(`${this.base}/history/${id}`);
+  }
+
+  historyDelete(id: number): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(
+      `${this.base}/history/${id}`
+    );
+  }
+
+  historyClear(): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(`${this.base}/history`);
+  }
+}
+
+export interface HistoryListItem {
+  id: number;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  market: string;
+  tier: string;
+  status: string;
+  verdict?: string | null;
+  scoreCombined?: number | null;
+  entry?: string | null;
+  error?: string | null;
+  flags?: Record<string, boolean>;
+}
+
+export interface HistoryListResponse {
+  items: HistoryListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface HistoryDetail extends HistoryListItem {
+  summary?: SignalSummary | null;
+  reportPath?: string | null;
+  chartPath?: string | null;
+  preview?: string | null;
+  command?: string | null;
+  exitCode?: number | null;
 }

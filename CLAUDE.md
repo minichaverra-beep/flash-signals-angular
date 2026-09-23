@@ -22,22 +22,32 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 
 ## Stack técnico
 
-- Angular 19 (`src/app/pages/home`, `src/app/services/signals-api.service.ts`)
-- Express 5 CommonJS en `server/` (deps en `server/package.json`)
+- Angular 19 (`src/app/pages/home`, `src/app/services/signals-api.service.ts`) — `ng serve` en **:4400**
+- Express 5 CommonJS en `server/` (deps en `server/package.json`) — API en **:3847**
 - Scripts host: `run-api.ps1`, `run-local-web.ps1`
-- Docker: `Dockerfile.web`, `Dockerfile.api`, `docker-compose.yml`, `run-docker.ps1`, `run-docker-arm.ps1`
+- Cursor/VS Code: `.vscode/launch.json` compound **API + Web** (F5, hot reload)
+- Docker: `Dockerfile.web`, `Dockerfile.api`, `docker-compose.yml`, `run-docker.ps1`, `run-docker-arm.ps1` (UI nginx **:8080**)
 
 ## UI
 
 - Tabs: **Modo Trader** (técnico) · **Modo Inversor** (simple) · **Cómo usar**
-- Cards colapsables; formulario de mercado/tier/flags
+- Ruta **`/historial`**: historial de corridas (caja local SQLite)
+- Cards colapsables compartidas en `src/app/shared/signal-report-viewer`
+
+## Historial (hive box)
+
+- SQLite embebido en `data/signals-history.sqlite` (gitignore). Schema en `server/db/`.
+- Motor: `better-sqlite3` (fallback `sql.js`). No es Apache Hive ni DB remota.
+- Tras cada job de `POST /api/signals/run` (done/error) se persiste un snapshot real.
+- Endpoints: `GET/DELETE /api/history`, `GET/DELETE /api/history/:id`.
 
 ## Endpoints clave
 
 - `GET /api/health` — incluye `signalsRunnable` / `platform`
-- `POST /api/signals/run` — una job a la vez
+- `POST /api/signals/run` — una job a la vez; persiste en hive box al completar
 - `GET /api/signals/status`, `latest`, `chart`
 - `GET /api/zentinel`
+- `GET|DELETE /api/history` (+ `/:id`)
 
 ## Docker (ser honesto)
 

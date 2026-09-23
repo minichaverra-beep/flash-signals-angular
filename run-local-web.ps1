@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Arranca la UI Angular de Flash Signals (puerto 4200).
+  Arranca la UI Angular de Flash Signals (puerto 4400).
 .DESCRIPTION
   Cambia al directorio del proyecto, asegura dependencias si hace falta,
   y ejecuta `npm start` (ng serve + proxy hacia la API).
@@ -43,7 +43,7 @@ if (Test-Path -LiteralPath $proxy) {
 }
 
 Write-Host ""
-Write-Host "Arrancando UI: npm start  (http://localhost:4200)" -ForegroundColor Green
+Write-Host "Arrancando UI: npm start  (http://localhost:4400)" -ForegroundColor Green
 Write-Host "Asegúrate de tener la API en http://localhost:3847 (.\run-api.ps1)."
 Write-Host "Ctrl+C para detener."
 Write-Host ""

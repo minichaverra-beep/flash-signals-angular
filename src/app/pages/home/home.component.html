@@ -8,9 +8,12 @@
         <p class="sub">Creado por: Danilo Chaverra</p>
       </div>
     </div>
+    <nav class="top-nav" aria-label="Navegación principal">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
+      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+    </nav>
   </header>
 
-  <!-- Tabs junto al header: visibles siempre (sin necesidad de haber corrido señal) -->
   <section class="panel mode-panel">
     <div class="mode-tabs" role="tablist" aria-label="Modo de vista">
       <button
@@ -46,7 +49,6 @@
     </p>
   </section>
 
-  <!-- Guía: visible sin haber corrido señal -->
   <section class="panel guide" *ngIf="viewMode === 'guia'">
     <h2>Cómo usar Flash Signals</h2>
     <ol class="guide-list">
@@ -61,6 +63,10 @@
       <li>
         <strong>Trader vs Inversor.</strong>
         Trader muestra KPIs técnicos, scores y checklists. Inversor resume la decisión en lenguaje simple.
+      </li>
+      <li>
+        <strong>Historial local.</strong>
+        Cada corrida se guarda en la caja SQLite embebida. Ábrela desde el enlace Historial del header.
       </li>
       <li>
         <strong>No inventa señales.</strong>
@@ -159,14 +165,12 @@
     <h2>Estado: {{ j.status }}</h2>
     <p class="mono" *ngIf="j.command && viewMode === 'trader'">{{ j.command }}</p>
 
-    <ng-container *ngIf="j.summary as s">
-      <ng-container *ngIf="viewMode === 'trader'">
-        <ng-container *ngTemplateOutlet="traderCards; context: { $implicit: s, preview: null, chartUrl: null, chartPath: null }"></ng-container>
-      </ng-container>
-      <ng-container *ngIf="viewMode === 'inversor'">
-        <ng-container *ngTemplateOutlet="inversorSummary; context: { $implicit: s }"></ng-container>
-      </ng-container>
-    </ng-container>
+    <app-signal-report-viewer
+      *ngIf="j.summary"
+      [summary]="j.summary"
+      [mode]="viewMode === 'inversor' ? 'inversor' : 'trader'"
+      [market]="market"
+    />
 
     <p *ngIf="j.reportPath && viewMode === 'trader'" class="path">Reporte: <code>{{ j.reportPath }}</code></p>
     <details class="report-card collapsible" *ngIf="j.logs?.length && viewMode === 'trader'">
@@ -182,17 +186,15 @@
     <p class="muted">Modificado: {{ L.mtime }}</p>
     <p class="path" *ngIf="viewMode === 'trader'"><code>{{ L.reportPath }}</code></p>
 
-    <ng-container *ngIf="L.summary as s">
-      <ng-container *ngIf="viewMode === 'inversor'">
-        <ng-container *ngTemplateOutlet="inversorSummary; context: { $implicit: s }"></ng-container>
-      </ng-container>
-
-      <ng-container *ngIf="viewMode === 'trader'">
-        <ng-container
-          *ngTemplateOutlet="traderCards; context: { $implicit: s, preview: L.preview, chartUrl: L.chartUrl, chartPath: L.chartPath }"
-        ></ng-container>
-      </ng-container>
-    </ng-container>
+    <app-signal-report-viewer
+      *ngIf="L.summary"
+      [summary]="L.summary"
+      [mode]="viewMode === 'inversor' ? 'inversor' : 'trader'"
+      [preview]="viewMode === 'trader' ? L.preview : null"
+      [chartUrl]="L.chartUrl ?? null"
+      [chartPath]="L.chartPath ?? null"
+      [market]="market"
+    />
   </section>
 
   <footer class="foot">
@@ -202,347 +204,3 @@
     </p>
   </footer>
 </div>
-
-<!-- ===== Modo Trader: cards técnicas colapsables (default abiertas) ===== -->
-<ng-template #traderCards let-s let-preview="preview" let-chartUrl="chartUrl" let-chartPath="chartPath">
-  <!-- 1. Veredicto -->
-  <ng-container *ngIf="verdictRows(s) as vRows">
-    <details class="report-card collapsible" open *ngIf="vRows.length">
-      <summary>Veredicto</summary>
-      <div class="collapsible-body">
-        <div class="table-wrap">
-          <table class="matrix kpi-table">
-            <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
-            <tbody>
-              <tr *ngFor="let row of vRows" class="verdict-row">
-                <th>{{ row.campo }}</th>
-                <td
-                  [class.warn]="verdictTone(row.valor) === 'warn'"
-                  [class.ok-text]="verdictTone(row.valor) === 'ok'"
-                >{{ row.valor }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </details>
-  </ng-container>
-
-  <!-- 2. Mercado y plan -->
-  <details class="report-card collapsible" open *ngIf="hasMarketPlan(s)">
-    <summary>Mercado y plan</summary>
-    <div class="collapsible-body">
-      <ng-container *ngIf="marketRows(s) as mRows">
-        <div class="table-wrap" *ngIf="mRows.length">
-          <table class="matrix kpi-table">
-            <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
-            <tbody>
-              <tr *ngFor="let row of mRows">
-                <th>{{ row.campo }}</th>
-                <td>{{ row.valor }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </ng-container>
-
-      <div class="table-wrap" *ngIf="s.planDetails as pd" [class.stack-gap]="marketRows(s).length">
-        <table class="matrix plan-grid" *ngIf="pd.entry || pd.sl || pd.tp || pd.rr || pd.risk">
-          <thead>
-            <tr>
-              <th>Entry</th>
-              <th>SL</th>
-              <th>TP</th>
-              <th>R:R</th>
-              <th>Riesgo</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>{{ pd.entry || '—' }}</td>
-              <td>{{ pd.sl || '—' }}</td>
-              <td>{{ pd.tp || '—' }}</td>
-              <td>{{ pd.rr || '—' }}</td>
-              <td>{{ pd.risk || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="table-wrap meta-plan" *ngIf="s.planDetails as pd">
-        <table class="matrix" *ngIf="pd.trigger || pd.invalidation || pd.confirmation">
-          <tbody>
-            <tr *ngIf="pd.trigger"><th>Trigger</th><td>{{ pd.trigger }}</td></tr>
-            <tr *ngIf="pd.confirmation"><th>Confirmación</th><td>{{ pd.confirmation }}</td></tr>
-            <tr *ngIf="pd.invalidation"><th>Invalidación</th><td>{{ pd.invalidation }}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </details>
-
-  <!-- 3. Setup -->
-  <ng-container *ngIf="setupRows(s) as setupR">
-    <details class="report-card collapsible" open *ngIf="setupR.length">
-      <summary>Setup</summary>
-      <div class="collapsible-body">
-        <div class="table-wrap">
-          <table class="matrix kpi-table">
-            <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
-            <tbody>
-              <tr *ngFor="let row of setupR">
-                <th>{{ row.campo }}</th>
-                <td>{{ row.valor }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </details>
-  </ng-container>
-
-  <!-- 4. Scores / confluencia -->
-  <details class="report-card collapsible" open *ngIf="hasScoresCard(s)">
-    <summary>Scores / confluencia</summary>
-    <div class="collapsible-body">
-      <div class="table-wrap" *ngIf="scoreKpiRows(s) as scoreRows">
-        <table class="matrix kpi-table" *ngIf="scoreRows.length">
-          <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
-          <tbody>
-            <tr *ngFor="let row of scoreRows">
-              <th>{{ row.campo }}</th>
-              <td>{{ row.valor }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="charts stack-gap" *ngIf="s.chartScores?.length">
-        <div class="bar-row" *ngFor="let bar of s.chartScores">
-          <div class="bar-meta">
-            <span>{{ bar.label }}</span>
-            <strong>{{ bar.value != null ? (bar.value | number:'1.0-1') + '%' : (bar.raw || '—') }}</strong>
-          </div>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              [style.width.%]="bar.value ?? 0"
-              [attr.data-high]="(bar.value ?? 0) >= 70"
-              [attr.data-mid]="(bar.value ?? 0) >= 45 && (bar.value ?? 0) < 70"
-              [attr.data-lo]="(bar.value ?? 0) < 45"
-            ></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="table-wrap stack-gap" *ngIf="s.scorecard?.length">
-        <table class="matrix">
-          <thead>
-            <tr>
-              <th>Capa</th>
-              <th>Score</th>
-              <th>Peso</th>
-              <th>Nota</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of s.scorecard" [class.emphasis]="(row.label || '').toLowerCase().includes('combinado')">
-              <td>{{ row.label }}</td>
-              <td>{{ row.raw || (row.value != null ? row.value : '—') }}</td>
-              <td>{{ row.weight || '—' }}</td>
-              <td>{{ row.note || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </details>
-
-  <!-- 5. Checklists -->
-  <details class="report-card collapsible" open *ngIf="hasChecklistsCard(s)">
-    <summary>Checklists</summary>
-    <div class="collapsible-body">
-      <div class="extra-section" *ngIf="s.checklist2M5?.length">
-        <h4>Checklist 2M5</h4>
-        <ng-container *ngTemplateOutlet="checklistTable; context: { $implicit: s.checklist2M5 }"></ng-container>
-      </div>
-
-      <div class="extra-section" *ngIf="s.checklistE1?.length">
-        <h4>Checklist E1</h4>
-        <ng-container *ngTemplateOutlet="checklistTable; context: { $implicit: s.checklistE1 }"></ng-container>
-      </div>
-    </div>
-  </details>
-
-  <!-- 6. Gráfico PNG vía API -->
-  <details class="report-card collapsible" open *ngIf="chartHref(chartUrl, chartPath) as href">
-    <summary>Gráfico</summary>
-    <div class="collapsible-body">
-      <p class="path chart-link">
-        <a [href]="href" target="_blank" rel="noopener">Abrir gráfico PNG</a>
-        <span class="muted tiny" *ngIf="chartPath"> · <code>{{ chartPath }}</code></span>
-      </p>
-      <p class="muted tiny">Se abre en pestaña nueva vía <code>/api/signals/chart</code>.</p>
-    </div>
-  </details>
-
-  <!-- 7. Detalle adicional — default colapsada -->
-  <details
-    class="report-card collapsible"
-    *ngIf="hasDetalleAdicional(s, preview)"
-  >
-    <summary>Detalle adicional</summary>
-    <div class="collapsible-body">
-      <div class="extra-section" *ngIf="s.volume as vol">
-        <h4>Volumen</h4>
-        <div class="table-wrap">
-          <table class="matrix">
-            <tbody>
-              <tr *ngIf="vol.band"><th>Banda</th><td>{{ vol.band }}</td></tr>
-              <tr *ngIf="vol.ratio != null"><th>Ratio</th><td>{{ vol.ratio | number:'1.2-2' }}×</td></tr>
-              <tr *ngIf="vol.preset"><th>Preset</th><td>{{ vol.preset }}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="vol-chart" *ngIf="vol.thresholds as th">
-          <p class="muted tiny">Ratio vs umbrales del preset (bajo / alto / extremo)</p>
-          <div class="vol-track">
-            <div class="vol-zone band-vl" [style.width.%]="volMarkerPct(th.very_low ?? 0, s)"></div>
-            <div
-              class="vol-zone band-lo"
-              [style.left.%]="volMarkerPct(th.very_low ?? 0, s)"
-              [style.width.%]="volMarkerPct((th.low ?? 0) - (th.very_low ?? 0), s)"
-            ></div>
-            <div
-              class="vol-zone band-mid"
-              [style.left.%]="volMarkerPct(th.low ?? 0, s)"
-              [style.width.%]="volMarkerPct((th.high ?? 0) - (th.low ?? 0), s)"
-            ></div>
-            <div
-              class="vol-zone band-hi"
-              [style.left.%]="volMarkerPct(th.high ?? 0, s)"
-              [style.width.%]="volMarkerPct((th.extreme ?? 0) - (th.high ?? 0), s)"
-            ></div>
-            <div class="vol-zone band-ex" [style.left.%]="volMarkerPct(th.extreme ?? 0, s)"></div>
-            <div
-              class="vol-needle"
-              *ngIf="vol.ratio != null"
-              [style.left.%]="volMarkerPct(vol.ratio, s)"
-              [title]="'Ratio ' + vol.ratio"
-            ></div>
-          </div>
-          <div class="vol-legend">
-            <span>muy bajo ≤ {{ th.very_low }}</span>
-            <span>bajo {{ th.low }}</span>
-            <span>alto {{ th.high }}</span>
-            <span>extremo ≥ {{ th.extreme }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="extra-section" *ngIf="s.redFlags?.length">
-        <h4>Red flags</h4>
-        <ul class="flags-list">
-          <li *ngFor="let f of s.redFlags">{{ f }}</li>
-        </ul>
-      </div>
-
-      <div class="extra-section" *ngIf="preview">
-        <h4>Markdown crudo</h4>
-        <pre class="raw-md-pre">{{ preview }}</pre>
-      </div>
-    </div>
-  </details>
-</ng-template>
-
-<!-- ===== Modo Inversor: pocas cards simples ===== -->
-<ng-template #inversorSummary let-s>
-  <div class="investor">
-    <details class="report-card collapsible investor-verdict" open [attr.data-tone]="verdictTone(s.verdict)">
-      <summary>Decisión</summary>
-      <div class="collapsible-body">
-        <div class="investor-card" [attr.data-tone]="verdictTone(s.verdict)">
-          <p class="eyebrow">Qué hacer</p>
-          <h3 class="investor-title">{{ investorVerdictTitle(s) }}</h3>
-          <p>{{ investorVerdictExplain(s) }}</p>
-          <p class="investor-action">{{ investorActionHint(s) }}</p>
-        </div>
-      </div>
-    </details>
-
-    <details class="report-card collapsible" open>
-      <summary>Plan en palabras</summary>
-      <div class="collapsible-body">
-        <ng-container *ngIf="investorPlanRows(s) as planRows">
-          <div class="table-wrap" *ngIf="planRows.length; else noPlan">
-            <table class="matrix">
-              <thead>
-                <tr><th>Campo</th><th>Valor</th></tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let row of planRows">
-                  <th>{{ row.campo }}</th>
-                  <td>{{ row.valor }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </ng-container>
-        <ng-template #noPlan>
-          <p class="muted">Aún no hay un plan Entry / Stop / Objetivo en este reporte.</p>
-        </ng-template>
-      </div>
-    </details>
-
-    <details class="report-card collapsible" open>
-      <summary>Riesgo</summary>
-      <div class="collapsible-body">
-        <p class="investor-risk" *ngFor="let p of investorRiskParagraphs(s)">{{ p }}</p>
-      </div>
-    </details>
-
-    <details class="report-card collapsible" open *ngIf="investorScoreRows(s).length">
-      <summary>Scores / confluencias</summary>
-      <div class="collapsible-body">
-        <div class="table-wrap">
-          <table class="matrix investor-scores">
-            <thead>
-              <tr>
-                <th>Campo</th>
-                <th>Valor</th>
-                <th>Qué significa</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let row of investorScoreRows(s)">
-                <th>{{ row.campo }}</th>
-                <td>{{ row.valor }}</td>
-                <td class="muted">{{ row.significado }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="investor-tip" *ngIf="investorScoresWaitTip(s) as tip">{{ tip }}</p>
-      </div>
-    </details>
-
-    <p class="investor-note">
-      No necesitas saber de indicadores avanzados; esto resume la decisión del sistema.
-    </p>
-  </div>
-</ng-template>
-
-<ng-template #checklistTable let-items>
-  <div class="table-wrap">
-    <table class="matrix checklist">
-      <thead><tr><th>Estado</th><th>Regla</th><th>Nota</th></tr></thead>
-      <tbody>
-        <tr *ngFor="let item of items" [class.ok]="item.ok === true" [class.bad]="item.ok === false">
-          <td class="status">{{ item.ok === true ? '✓' : item.ok === false ? '✗' : '·' }}</td>
-          <td>{{ item.label }}</td>
-          <td>{{ item.note || '—' }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</ng-template>

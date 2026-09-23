@@ -1,5 +1,5 @@
 # API Express — Flash Signals
-# Imagen Linux/Node: health, latest, chart y proxy OK.
+# Imagen Linux/Node: health, latest, chart, historial SQLite y proxy OK.
 # Señales reales (spawn de .ps1 → Python) requieren API en host Windows:
 #   .\run-api.ps1
 FROM node:20-bookworm-slim
@@ -10,11 +10,15 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY server/index.js ./
+COPY server/db ./db
 
 ENV NODE_ENV=production
 ENV PORT=3847
 ENV BIND_HOST=0.0.0.0
 ENV CURSOR_TRADING_ROOT=/trading
+ENV HISTORY_DATA_DIR=/app/data
+
+RUN mkdir -p /app/data
 
 EXPOSE 3847
 

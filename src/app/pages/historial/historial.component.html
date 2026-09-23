@@ -1,0 +1,166 @@
+<div class="page">
+  <header class="hero">
+    <div class="brand">
+      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <div>
+        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <h1>Historial</h1>
+        <p class="sub">Caja local (SQLite embebido) — solo corridas reales del pipeline</p>
+      </div>
+    </div>
+    <nav class="top-nav" aria-label="Navegación principal">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
+      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+    </nav>
+  </header>
+
+  <div class="toolbar sticky">
+    <div class="seg filters" role="group" aria-label="Filtro mercado">
+      <button
+        type="button"
+        *ngFor="let m of markets"
+        [class.active]="marketFilter === m.id"
+        (click)="setMarket(m.id)"
+      >{{ m.label }}</button>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" class="ghost" (click)="load()" [disabled]="loading">
+        {{ loading ? 'Cargando…' : 'Actualizar' }}
+      </button>
+      <button
+        type="button"
+        class="danger"
+        (click)="clearAll()"
+        [disabled]="clearing || !total"
+      >
+        {{ clearing ? 'Limpiando…' : 'Limpiar historial' }}
+      </button>
+    </div>
+  </div>
+
+  <p class="msg err" *ngIf="error">{{ error }}</p>
+
+  <section class="panel" *ngIf="loading && !items.length">
+    <p class="muted loading-pulse">Cargando historial…</p>
+  </section>
+
+  <section class="panel empty" *ngIf="!loading && !items.length && !error">
+    <h2>Sin entradas aún</h2>
+    <p class="muted">
+      Ejecuta una señal desde <a routerLink="/">Señales</a>. Al terminar el job,
+      el snapshot se guarda aquí automáticamente (hive box local).
+    </p>
+  </section>
+
+  <section class="panel table-panel" *ngIf="items.length">
+    <div class="meta-row">
+      <p class="muted">{{ total }} entrada{{ total === 1 ? '' : 's' }} · página {{ page }} / {{ totalPages }}</p>
+    </div>
+
+    <div class="table-wrap desktop">
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Mercado</th>
+            <th>Tier</th>
+            <th>Veredicto</th>
+            <th>Score</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of items">
+            <td>
+              <div class="when">
+                <strong>{{ relativeTime(item.createdAt) }}</strong>
+                <span class="muted tiny">{{ absoluteTime(item.createdAt) }}</span>
+              </div>
+            </td>
+            <td><span class="pill market">{{ item.market | uppercase }}</span></td>
+            <td>{{ item.tier }}</td>
+            <td>
+              <span
+                class="badge"
+                [attr.data-tone]="tone(item.verdict)"
+              >{{ item.verdict || '—' }}</span>
+            </td>
+            <td>{{ item.scoreCombined != null ? (item.scoreCombined | number:'1.0-1') + '%' : '—' }}</td>
+            <td>
+              <span class="status" [class.ok]="item.status === 'done'" [class.bad]="item.status === 'error'">
+                {{ item.status }}
+              </span>
+            </td>
+            <td class="actions-cell">
+              <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
+              <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cards mobile">
+      <article class="hist-card" *ngFor="let item of items">
+        <header>
+          <span class="pill market">{{ item.market | uppercase }}</span>
+          <span class="badge" [attr.data-tone]="tone(item.verdict)">{{ item.verdict || '—' }}</span>
+        </header>
+        <p class="when">
+          <strong>{{ relativeTime(item.createdAt) }}</strong>
+          <span class="muted tiny">{{ absoluteTime(item.createdAt) }}</span>
+        </p>
+        <p class="muted tiny">{{ item.tier }} · score {{ item.scoreCombined != null ? item.scoreCombined + '%' : '—' }} · {{ item.status }}</p>
+        <div class="card-actions">
+          <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
+          <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
+        </div>
+      </article>
+    </div>
+
+    <div class="pager" *ngIf="totalPages > 1">
+      <button type="button" class="ghost" [disabled]="page <= 1 || loading" (click)="load(page - 1)">Anterior</button>
+      <button type="button" class="ghost" [disabled]="page >= totalPages || loading" (click)="load(page + 1)">Siguiente</button>
+    </div>
+  </section>
+
+  <!-- Drawer detalle -->
+  <div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeDetail()"></div>
+  <aside class="drawer" *ngIf="drawerOpen" role="dialog" aria-label="Detalle de historial">
+    <div class="drawer-head">
+      <div>
+        <p class="eyebrow">Detalle #{{ detail?.id || '…' }}</p>
+        <h2 *ngIf="detail">{{ detail.market | uppercase }} · {{ detail.tier }}</h2>
+        <p class="muted tiny" *ngIf="detail">{{ absoluteTime(detail.createdAt) }} · {{ relativeTime(detail.createdAt) }}</p>
+      </div>
+      <button type="button" class="ghost" (click)="closeDetail()">Cerrar</button>
+    </div>
+
+    <p class="muted" *ngIf="detailLoading">Cargando detalle…</p>
+
+    <ng-container *ngIf="!detailLoading && detail as d">
+      <div class="mode-tabs" role="tablist">
+        <button type="button" [class.active]="detailMode === 'trader'" (click)="detailMode = 'trader'">Modo Trader</button>
+        <button type="button" [class.active]="detailMode === 'inversor'" (click)="detailMode = 'inversor'">Modo Inversor</button>
+      </div>
+
+      <p class="path" *ngIf="d.reportPath"><code>{{ d.reportPath }}</code></p>
+      <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
+
+      <app-signal-report-viewer
+        *ngIf="d.summary"
+        [summary]="d.summary"
+        [mode]="detailMode"
+        [preview]="detailMode === 'trader' ? d.preview ?? null : null"
+        [chartUrl]="chartUrlFor(d)"
+        [chartPath]="d.chartPath ?? null"
+        [market]="d.market"
+      />
+
+      <p class="muted" *ngIf="!d.summary">
+        Esta entrada no tiene summary estructurado (p.ej. job en error sin reporte).
+      </p>
+    </ng-container>
+  </aside>
+</div>

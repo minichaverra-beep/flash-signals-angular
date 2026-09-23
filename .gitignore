@@ -27,9 +27,11 @@ yarn-error.log*
 *.key
 credentials.json
 
-# IDE (quita .vscode/ de esta lista si quieres compartir settings del equipo)
+# IDE (versionar launch/tasks; el resto de .vscode queda local)
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 *.swp
 *.swo
 
@@ -48,3 +50,8 @@ pids*.txt
 
 # Docker buildx / local overrides (mantener compose y Dockerfiles versionados)
 .docker-cache/
+
+# Hive box / historial embebido (SQLite local)
+data/*.sqlite
+data/*.sqlite-*
+data/*.db

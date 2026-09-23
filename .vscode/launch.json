@@ -1,0 +1,52 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Web: Angular hot reload (:4400)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:4400/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "serve:angular",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:/*": "${webRoot}/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      }
+    },
+    {
+      "name": "API: Express (:3847)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/index.js",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "restart": true,
+      "env": {
+        "PORT": "3847"
+      }
+    },
+    {
+      "name": "Web: solo ng serve (terminal)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm start",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + Web",
+      "configurations": [
+        "API: Express (:3847)",
+        "Web: Angular hot reload (:4400)"
+      ],
+      "stopAll": true,
+      "presentation": {
+        "order": 1,
+        "group": "Flash Signals"
+      }
+    }
+  ]
+}

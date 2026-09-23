@@ -5,10 +5,13 @@
   "description": "UI Angular + API local para señales BTC/US30 (Cursor Trading, sin Cursor AI)",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --proxy-config proxy.conf.json",
+    "start": "ng serve --port 4400 --proxy-config proxy.conf.json",
     "build": "ng build",
     "api": "node server/index.js",
-    "start:all": "npx --yes concurrently -k -n api,ui -c cyan,magenta \"npm run api\" \"npm start\""
+    "start:all": "npx --yes concurrently -k -n api,ui -c cyan,magenta \"npm run api\" \"npm start\"",
+    "test:server": "npm --prefix server test",
+    "test:helpers": "node --experimental-strip-types --test src/app/shared/signal-report.helpers.spec.ts src/app/services/signals-api.history.spec.ts",
+    "test": "npm run test:server && npm run test:helpers"
   },
   "dependencies": {
     "@angular/animations": "^19.2.25",

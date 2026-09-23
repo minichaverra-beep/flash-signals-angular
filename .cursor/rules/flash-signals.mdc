@@ -15,30 +15,41 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 
 ## Stack
 
-- Frontend: Angular 19 (`src/app/…`), tabs **Modo Trader** / **Modo Inversor** / **Cómo usar**.
+- Frontend: Angular 19 (`src/app/…`), tabs **Modo Trader** / **Modo Inversor** / **Cómo usar**. Dev server **:4400**.
 - Backend: Express CommonJS (`server/`), puerto **3847**, bind default **127.0.0.1** (localhost only).
 - Proxy dev: `proxy.conf.json` → `/api` a `:3847`.
-- Docker: UI (nginx) sin Node en el host; señales reales → API en host Windows (`run-api.ps1` + `run-docker.ps1 -HostApi`).
+- Docker: UI (nginx **:8080**) sin Node en el host; señales reales → API en host Windows (`run-api.ps1` + `run-docker.ps1 -HostApi`). CORS de la API permite 4400 (ng serve) y 8080 (nginx Docker).
 
 ## Arquitectura UI
 
-| Tab | Contenido |
-|-----|-----------|
+| Tab / ruta | Contenido |
+|------------|-----------|
 | Modo Trader | Vista técnica: veredicto, plan, setup, scores, checklists, volumen, gráfico |
 | Modo Inversor | Vista simplificada: decisión, plan, riesgo, scores en lenguaje claro |
 | Cómo usar | Guía rápida (visible sin haber corrido señal) |
+| `/historial` | Historial local (SQLite hive box): lista + drawer detalle Trader/Inversor |
 
-- Cards colapsables (`<details>`).
+- Cards colapsables (`<details>`) vía `app-signal-report-viewer` compartido.
 - Gráfico PNG **solo** vía `GET /api/signals/chart?market=btc|us30` (no inventar imágenes).
 - Formulario: mercado, tiers `context|light|high|history`, flags (Bullish/Bearish, Break/Reverse, ML, Neural, Ilustrate, Advanced, Entry en High).
+
+## Historial local (hive box / embedded store)
+
+- **No** Apache Hive ni Postgres/MySQL/cloud: SQLite embebido en `data/signals-history.sqlite`.
+- Schema versionado: `server/db/schema.sql` + `server/db/migrations/`.
+- `better-sqlite3` con fallback `sql.js` si el nativo falla en Windows.
+- Persistencia automática al completar un job de `POST /api/signals/run` (solo datos reales del pipeline).
+- Endpoints: `GET /api/history`, `GET /api/history/:id`, `DELETE /api/history`, `DELETE /api/history/:id`.
+- Validar ids numéricos; API sigue en localhost.
 
 ## API (no ampliar superficie sin necesidad)
 
 - `GET /api/health` — estado + `CURSOR_TRADING_ROOT` + `signalsRunnable`
 - `POST /api/signals/run` — una corrida a la vez (409 si running)
 - `GET /api/signals/status|latest|chart` + `GET /api/zentinel`
+- `GET|DELETE /api/history` (+ `/:id`) — historial hive box
 - Sanitizar `entry` (solo numérico). No exponer la API a la LAN por defecto.
-- CORS: localhost (4200/8080) + `CORS_ORIGINS`.
+- CORS: localhost (4400/8080) + `CORS_ORIGINS`.
 
 ## Seguridad y secretos
 

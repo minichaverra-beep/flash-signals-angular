@@ -70,16 +70,18 @@ cd "D:\Danilo\Trading\flash-signals-angular"
 # Terminal 1 — API Express → http://localhost:3847
 .\run-api.ps1
 
-# Terminal 2 — Angular → http://localhost:4200
+# Terminal 2 — Angular → http://localhost:4400
 .\run-local-web.ps1
 ```
 
 Los scripts cambian al directorio del proyecto, instalan deps si faltan, y `run-api.ps1` define `CURSOR_TRADING_ROOT` si no está seteado.
 
+También puedes usar **F5** en Cursor/VS Code con la compound `API + Web` (`.vscode/launch.json`).
+
 | Servicio | Puerto | URL |
 |----------|--------|-----|
 | API | **3847** | http://localhost:3847 |
-| Web (Angular + proxy `/api`) | **4200** | http://localhost:4200 |
+| Web (Angular + proxy `/api`) | **4400** | http://localhost:4400 |
 
 Prueba rápida:
 
@@ -175,31 +177,57 @@ Resumen para agentes:
 
 ## Tabs de la UI
 
-| Tab | Qué muestra |
-|-----|-------------|
-| **Modo Trader** | Vista técnica: veredicto, plan, setup, scores, checklists, volumen y gráfico |
+| Tab / ruta | Qué muestra |
+|------------|-------------|
+| **Modo Trader** | Vista técnica: veredicto, plan, setup, scores, checklists, gráfico |
 | **Modo Inversor** | Vista simplificada: decisión, plan, riesgo y scores en lenguaje claro |
 | **Cómo usar** | Guía rápida (visible sin haber corrido una señal) |
+| **Historial** (`/historial`) | Lista de corridas guardadas en la **caja local** SQLite |
+
+## Historial local (hive box / embedded store)
+
+No usa Apache Hive ni Postgres/MySQL/cloud. La API guarda un **snapshot** de cada job completado en SQLite embebido:
+
+| Pieza | Ubicación |
+|-------|-----------|
+| Archivo DB | `data/signals-history.sqlite` (gitignored) |
+| Schema / migraciones | `server/db/schema.sql`, `server/db/migrations/` |
+| Motor | `better-sqlite3` (fallback `sql.js` si falla el nativo en Windows) |
+
+Solo se persiste lo que produjo el pipeline real (market, tier, flags, timestamps, veredicto, summary, paths md/png, status/error).
+
+Endpoints:
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/history?page=1&pageSize=20&market=btc` | Lista paginada (newest first) |
+| `GET` | `/api/history/:id` | Detalle + summary |
+| `DELETE` | `/api/history/:id` | Borrar una entrada |
+| `DELETE` | `/api/history` | Limpiar todo (la UI pide confirmación) |
 
 ## Features UI
 
-- **Cards colapsables** (`<details>`) para veredicto, plan, setup, scores, checklists, gráfico, etc.
+- **Cards colapsables** (`<details>`) para veredicto, plan, setup, scores, checklists, gráfico, etc. (compartidas vía `app-signal-report-viewer`)
 - **Gráfico PNG** vía `GET /api/signals/chart?market=btc|us30` (abre en pestaña nueva desde la card «Gráfico»)
 - **Crédito** en el header: *Creado por: Danilo Chaverra*
 - **Branding** *Flash Signals · fire & shadow* + logo (`assets/logo.png`, también favicon)
 - Formulario: mercado BTC/US30, tiers Context / Light / High / History, flags (Bullish/Bearish, Break/Reverse, ML, Neural, Ilustrate, Advanced, Entry en High)
 - Recarga del último reporte live sin volver a ejecutar
+- **Historial**: filtro BTC/US30, fechas relativas+absolutas, badges de veredicto, drawer de detalle con Modo Trader/Inversor
 
 ## Endpoints API principales
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | `GET` | `/api/health` | Estado, `CURSOR_TRADING_ROOT`, job, `signalsRunnable` / plataforma |
-| `POST` | `/api/signals/run` | Lanza el `.ps1` correspondiente (una corrida a la vez; 503 si API no-Windows) |
+| `POST` | `/api/signals/run` | Lanza el `.ps1` correspondiente (una corrida a la vez; 503 si API no-Windows); al completar, persiste en hive box |
 | `GET` | `/api/signals/status` | Job actual (logs / done / error) |
 | `GET` | `/api/signals/latest?market=btc&tier=high` | Último `.md` parseado en `live/` |
 | `GET` | `/api/signals/chart?market=btc` | PNG anotado (`btc_m5_chart_annotated.png` / US30) |
 | `GET` | `/api/zentinel?market=btc` | Resumen de presets Zentinel locales |
+| `GET` | `/api/history` | Historial local (SQLite) |
+| `GET` | `/api/history/:id` | Detalle de una entrada |
+| `DELETE` | `/api/history` / `/api/history/:id` | Limpiar / borrar |
 
 ### Ejemplo `POST /api/signals/run`
 
@@ -234,22 +262,27 @@ Tiers: `context` | `light` | `high` | `history`.
 
 ```
 flash-signals-angular/
-  src/app/pages/home/   # UI (tabs Trader / Inversor / Guía)
-  src/app/services/     # Cliente HTTP → /api
-  src/assets/logo.png   # Logo (versionado)
-  server/index.js       # Express API (:3847)
-  proxy.conf.json       # /api → :3847
-  run-api.ps1           # Arranca API (host)
-  run-local-web.ps1     # Arranca Angular (:4200)
-  run-docker.ps1        # UI(+API) vía Docker
-  run-docker-arm.ps1    # Docker ARM64
-  Dockerfile.web        # Build Angular + nginx
-  Dockerfile.api        # Runtime Express
+  src/app/pages/home/         # UI señales (tabs Trader / Inversor / Guía)
+  src/app/pages/historial/    # Historial local (/historial)
+  src/app/shared/             # Report viewer compartido
+  src/app/services/           # Cliente HTTP → /api
+  src/assets/logo.png         # Logo (versionado)
+  server/index.js             # Express API (:3847)
+  server/db/                  # Hive box: schema + history-store (SQLite)
+  data/                       # signals-history.sqlite (gitignored)
+  proxy.conf.json             # /api → :3847
+  run-api.ps1                 # Arranca API (host)
+  run-local-web.ps1           # Arranca Angular (:4400)
+  .vscode/                    # launch.json + tasks.json (F5 / hot reload)
+  run-docker.ps1              # UI(+API) vía Docker
+  run-docker-arm.ps1          # Docker ARM64
+  Dockerfile.web              # Build Angular + nginx
+  Dockerfile.api              # Runtime Express
   docker-compose*.yml
   docker/nginx*.conf
-  .cursor/rules/        # Reglas Cursor
-  CLAUDE.md             # Contexto Claude
-  .run-logs/            # Logs locales de arranque (gitignored)
+  .cursor/rules/              # Reglas Cursor
+  CLAUDE.md                   # Contexto Claude
+  .run-logs/                  # Logs locales de arranque (gitignored)
   README.md
 ```
 

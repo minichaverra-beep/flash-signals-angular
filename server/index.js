@@ -7,6 +7,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const historyStore = require('./db/history-store');
 
 const PORT = Number(process.env.PORT || 3847);
 /** Solo loopback: API local, no exponer a la LAN. */
@@ -16,8 +17,8 @@ const TRADING_ROOT =
   path.normalize('D:\\Danilo\\Trading\\Cursor Trading');
 
 const ALLOWED_ORIGINS = new Set([
-  'http://localhost:4200',
-  'http://127.0.0.1:4200',
+  'http://localhost:4400',
+  'http://127.0.0.1:4400',
   'http://localhost:8080',
   'http://127.0.0.1:8080',
   'http://localhost',
@@ -73,7 +74,7 @@ const REPORTS = {
   },
 };
 
-/** @type {{ status: string, startedAt?: string, finishedAt?: string, market?: string, tier?: string, command?: string, exitCode?: number|null, logs: string[], error?: string|null, reportPath?: string|null, summary?: object|null }} */
+/** @type {{ status: string, startedAt?: string, finishedAt?: string, market?: string, tier?: string, command?: string, exitCode?: number|null, logs: string[], error?: string|null, reportPath?: string|null, summary?: object|null, flags?: object, entry?: string|null, historyId?: number|null }} */
 let currentJob = {
   status: 'idle',
   logs: [],
@@ -81,7 +82,68 @@ let currentJob = {
   error: null,
   reportPath: null,
   summary: null,
+  flags: null,
+  entry: null,
+  historyId: null,
 };
+
+/** Valida id numérico entero positivo (path param). */
+function parseHistoryId(raw) {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || String(raw).trim() !== String(n)) {
+    return null;
+  }
+  return n;
+}
+
+function flagsFromBody(body) {
+  return {
+    bullish: !!body.bullish,
+    bearish: !!body.bearish,
+    breakSetup: !!body.breakSetup,
+    reverse: !!body.reverse,
+    ml: !!body.ml,
+    neural: !!body.neural,
+    ilustrate: !!body.ilustrate,
+    advanced: !!body.advanced,
+    noChart: body.noChart !== false,
+    noOpen: body.noOpen !== false,
+  };
+}
+
+async function persistJobSnapshot(job, extras = {}) {
+  if (job.historyPersisted) return;
+  job.historyPersisted = true;
+  try {
+    const latest =
+      job.status === 'done' && job.market
+        ? readLatest(job.market, job.tier)
+        : null;
+    const result = await historyStore.insertSnapshot({
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      market: job.market,
+      tier: job.tier,
+      status: job.status,
+      flags: job.flags || {},
+      entry: job.entry ?? null,
+      verdict: job.summary?.verdict || latest?.summary?.verdict || null,
+      summary: job.summary || latest?.summary || null,
+      reportPath: job.reportPath || latest?.reportPath || null,
+      chartPath: latest?.chartPath || null,
+      preview: latest?.preview || null,
+      command: job.command || null,
+      exitCode: job.exitCode,
+      error: job.error || null,
+      ...extras,
+    });
+    job.historyId = result.id;
+    job.logs.push(`[history] Guardado en hive box id=${result.id}`);
+  } catch (err) {
+    job.logs.push(`[history] No se pudo guardar: ${err.message}`);
+    console.error('[history] persist error:', err);
+  }
+}
 
 const app = express();
 app.use(
@@ -705,6 +767,75 @@ app.get('/api/zentinel', (req, res) => {
   res.json(readZentinel(market));
 });
 
+/** Historial local (SQLite hive box) — solo snapshots reales del pipeline. */
+app.get('/api/history', async (req, res) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 20;
+    const marketRaw = req.query.market
+      ? String(req.query.market).toLowerCase()
+      : null;
+    const market =
+      marketRaw && MARKETS.has(marketRaw) ? marketRaw : marketRaw ? null : undefined;
+    if (marketRaw && market === null) {
+      return res.status(400).json({ error: 'market debe ser btc|us30' });
+    }
+    const data = await historyStore.listHistory({
+      page,
+      pageSize,
+      market: market || null,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[history] list:', err);
+    res.status(500).json({ error: 'No se pudo leer el historial local' });
+  }
+});
+
+app.get('/api/history/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const item = await historyStore.getById(id);
+    if (!item) {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    res.json(item);
+  } catch (err) {
+    console.error('[history] get:', err);
+    res.status(500).json({ error: 'No se pudo leer el historial local' });
+  }
+});
+
+app.delete('/api/history/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const result = await historyStore.deleteById(id);
+    if (!result.deleted) {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    res.json({ ok: true, deleted: result.deleted });
+  } catch (err) {
+    console.error('[history] delete one:', err);
+    res.status(500).json({ error: 'No se pudo borrar la entrada' });
+  }
+});
+
+app.delete('/api/history', async (_req, res) => {
+  try {
+    const result = await historyStore.clearAll();
+    res.json({ ok: true, deleted: result.deleted });
+  } catch (err) {
+    console.error('[history] clear:', err);
+    res.status(500).json({ error: 'No se pudo limpiar el historial' });
+  }
+});
+
 app.post('/api/signals/run', (req, res) => {
   if (currentJob.status === 'running') {
     return res.status(409).json({
@@ -780,6 +911,9 @@ app.post('/api/signals/run', (req, res) => {
     error: null,
     reportPath: null,
     summary: null,
+    flags: flagsFromBody(body),
+    entry: body.entry ?? null,
+    historyId: null,
   };
 
   const child = spawn(
@@ -810,6 +944,7 @@ app.post('/api/signals/run', (req, res) => {
     currentJob.finishedAt = new Date().toISOString();
     currentJob.error = err.message;
     currentJob.logs.push(`[error] ${err.message}`);
+    void persistJobSnapshot(currentJob);
   });
 
   child.on('close', (code) => {
@@ -830,6 +965,7 @@ app.post('/api/signals/run', (req, res) => {
       currentJob.error = `El script terminó con código ${code}`;
       currentJob.logs.push(`[error] exit ${code}`);
     }
+    void persistJobSnapshot(currentJob);
   });
 
   res.status(202).json({
@@ -844,8 +980,17 @@ app.post('/api/signals/run', (req, res) => {
   });
 });
 
-app.listen(PORT, BIND_HOST, () => {
-  console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
-  console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
-  console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
-});
+void historyStore
+  .init()
+  .then(() => {
+    app.listen(PORT, BIND_HOST, () => {
+      console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
+      console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
+      console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
+      console.log(`Historial (hive box): ${historyStore.DB_PATH}`);
+    });
+  })
+  .catch((err) => {
+    console.error('[history] No se pudo abrir la caja local:', err);
+    process.exit(1);
+  });

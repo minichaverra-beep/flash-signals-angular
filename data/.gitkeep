@@ -1,0 +1,2 @@
+# Carpeta del hive box / caja local (SQLite).
+# Versionar solo este marcador; los .sqlite están en .gitignore.

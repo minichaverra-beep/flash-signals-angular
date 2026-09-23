@@ -1,0 +1,50 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "serve:angular",
+      "type": "npm",
+      "script": "start",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "source": "ts",
+        "applyTo": "allDocuments",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": "$tsc",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Local:|Angular Live Development Server is listening)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "flash-signals"
+      }
+    },
+    {
+      "label": "serve:api",
+      "type": "npm",
+      "script": "api",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "flash-signals-api",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(listening|Flash Signals|3847|API)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "flash-signals"
+      }
+    }
+  ]
+}
