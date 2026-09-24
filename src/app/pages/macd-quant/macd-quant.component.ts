@@ -41,6 +41,7 @@ export class MacdQuantComponent implements OnInit, OnDestroy {
     { id: 'btc', label: 'BTC' },
     { id: 'us30', label: 'US30' },
     { id: 'xauusd', label: 'XAUUSD' },
+    { id: 'ukoil', label: 'UKOIL / Petróleo' },
   ];
 
   readonly artifactPath = '2026-09-24-quant-macd-e1-backtest.html';
@@ -52,7 +53,8 @@ export class MacdQuantComponent implements OnInit, OnDestroy {
 
   readonly plotCmd = `cd "D:\\Danilo\\Trading\\Cursor Trading"
 python -m scripts.plot_macd_quant --days 7 --force-refresh
-python -m scripts.plot_macd_quant --symbol us30 --days 7 --force-refresh`;
+python -m scripts.plot_macd_quant --symbol us30 --days 7 --force-refresh
+python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
 
   ngOnInit(): void {
     this.loadHistory();

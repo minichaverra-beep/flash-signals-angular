@@ -9,7 +9,7 @@ const path = require('path');
 
 const SCHEMA_PATH = path.join(__dirname, 'macd-quant-schema.sql');
 
-const MARKETS = new Set(['btc', 'us30', 'xauusd']);
+const MARKETS = new Set(['btc', 'us30', 'xauusd', 'ukoil']);
 
 /** Baseline documentado (soft-filter); no se inventan métricas WR/PF. */
 const DEFAULT_PARAMS = { fast: 12, slow: 26, signal: 9 };
@@ -244,7 +244,7 @@ async function insertAnalysis(snap) {
   const now = new Date().toISOString();
   const market = normalizeMarket(snap.market);
   if (!market) {
-    throw new Error('market inválido (btc|us30|xauusd)');
+    throw new Error('market inválido (btc|us30|xauusd|ukoil)');
   }
 
   const softFilter = {

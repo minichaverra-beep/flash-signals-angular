@@ -43,9 +43,11 @@ for (const origin of String(process.env.CORS_ORIGINS || '')
 
 /** En Linux (Docker) no hay powershell.exe fiable para el pipeline Windows. */
 const SIGNALS_RUNNABLE = process.platform === 'win32';
-const MARKETS = new Set(['btc', 'us30', 'xauusd']);
+const MARKETS = new Set(['btc', 'us30', 'xauusd', 'ukoil']);
+/** Mercados con pipeline E1 (analyze-*.ps1). ukoil = solo MACD-quant por ahora. */
+const SIGNAL_MARKETS = new Set(['btc', 'us30', 'xauusd']);
 const TIERS = new Set(['context', 'light', 'high', 'history']);
-const MARKET_ERROR = 'market debe ser btc|us30|xauusd';
+const MARKET_ERROR = 'market debe ser btc|us30|xauusd|ukoil';
 
 /** Entry solo numérico (evita inyección vía args de PowerShell). */
 function sanitizeEntry(raw) {
@@ -89,12 +91,21 @@ const REPORTS = {
     // Controller XAU aún no genera *_chart_annotated; usa el chart crudo.
     chart: 'xauusd_m5_chart.png',
   },
+  // UKOIL: sin pipeline E1; chart MACD-quant H4 (proxy Yahoo BZ=F).
+  ukoil: {
+    context: 'ukoil_m5_context.md',
+    light: 'ukoil_m5_signal.md',
+    high: 'ukoil_m5_high_signal.md',
+    history: 'ukoil_m5_high_signal.md',
+    chart: 'ukoil_h4_macd_quant.png',
+  },
 };
 
 /** Clave YAML Zentinel por market (sección en config/zentinel_presets.yaml). */
 function zentinelYamlKey(market) {
   if (market === 'us30') return 'US30';
   if (market === 'xauusd') return 'XAUUSD';
+  if (market === 'ukoil') return 'UKOIL';
   return 'BTC';
 }
 
@@ -807,6 +818,12 @@ app.get('/api/signals/chart', (req, res) => {
   if (!market) {
     return res.status(400).json({ error: MARKET_ERROR });
   }
+  if (!REPORTS[market]) {
+    return res.status(404).json({
+      error: 'Sin chart E1 para este mercado',
+      market,
+    });
+  }
   const chartName = REPORTS[market].chart;
   // path.resolve + join soporta espacios en "Cursor Trading"
   const liveRoot = path.resolve(path.join(TRADING_ROOT, 'live'));
@@ -830,7 +847,7 @@ app.get('/api/signals/macd-chart', (req, res) => {
   if (!normalizeMarket(req.query.market) && req.query.market) {
     return res.status(400).json({ error: MARKET_ERROR });
   }
-  // plot_macd_quant usa btc|us30|xau; API markets usan xauusd
+  // plot_macd_quant: xauusd→xau; ukoil→ukoil; resto = market API
   const fileKey = market === 'xauusd' ? 'xau' : market;
   const chartName = `${fileKey}_h4_macd_quant.png`;
   const liveRoot = path.resolve(path.join(TRADING_ROOT, 'live'));
@@ -886,7 +903,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
     });
   }
 
-  const cliSymbol = market === 'xauusd' ? 'xau' : market;
+  const cliSymbol = market === 'xauusd' ? 'xau' : market; // ukoil = ukoil
   const days = Number(body.days);
   const daysArg = Number.isFinite(days) && days > 0 ? String(days) : '7';
   const py = process.env.PYTHON || process.env.PYTHON_EXE || 'python';
@@ -1493,6 +1510,12 @@ app.post('/api/signals/run', (req, res) => {
 
   if (!market) {
     return res.status(400).json({ error: MARKET_ERROR });
+  }
+  if (!SIGNAL_MARKETS.has(market)) {
+    return res.status(400).json({
+      error: `market=${market} solo soporta MACD-quant (sin pipeline E1). Usa /macd-quant.`,
+      hint: 'POST /api/signals/macd-quant/analyze',
+    });
   }
   if (!tier) {
     return res.status(400).json({

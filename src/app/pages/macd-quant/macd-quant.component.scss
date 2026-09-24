@@ -527,3 +527,114 @@ h1 {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  .page.macd-page {
+    padding: 1rem 0.75rem 2.25rem;
+  }
+
+  .chrome {
+    margin-bottom: 0.85rem;
+  }
+
+  .brand {
+    margin-bottom: 0.55rem;
+  }
+
+  h1 {
+    font-size: 1.45rem;
+  }
+
+  .top-nav a {
+    min-height: 2.5rem;
+    padding: 0.5rem 0.55rem;
+    font-size: 0.76rem;
+  }
+
+  .intro {
+    margin-bottom: 0.9rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: 12px;
+  }
+
+  .intro h2 {
+    font-size: 1.05rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .chips {
+    gap: 0.35rem;
+  }
+
+  .chip {
+    font-size: 0.65rem;
+    padding: 0.32rem 0.55rem;
+  }
+
+  .block {
+    margin-bottom: 0.9rem;
+    padding: 0.9rem 0.85rem;
+    border-radius: 12px;
+  }
+
+  .block-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .block-head h2 {
+    font-size: 0.95rem;
+  }
+
+  .head-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .seg {
+    display: flex;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .seg button {
+    flex: 1;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-analyze,
+  .btn-ghost.sm {
+    width: 100%;
+    justify-content: center;
+    min-height: 2.65rem;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.85rem;
+  }
+
+  .chart-link {
+    margin: 0 -0.15rem;
+    border-radius: 10px;
+  }
+
+  .macd-chart {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .history-row {
+    gap: 0.4rem 0.55rem;
+    padding: 0.65rem 0.7rem;
+    min-height: 2.75rem;
+    font-size: 0.78rem;
+  }
+
+  .hist-when {
+    flex: 1;
+    min-width: 0;
+  }
+}

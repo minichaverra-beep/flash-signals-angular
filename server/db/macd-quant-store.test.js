@@ -96,10 +96,19 @@ describe('macd-quant-store', () => {
       status: 'done',
       sourcePngPath: fakePng,
     });
+    await store.insertAnalysis({
+      market: 'ukoil',
+      status: 'done',
+      sourcePngPath: fakePng,
+    });
 
     const us30 = await store.listAnalyses({ market: 'us30' });
     assert.equal(us30.total, 1);
     assert.equal(us30.items[0].market, 'us30');
+
+    const ukoil = await store.listAnalyses({ market: 'ukoil' });
+    assert.equal(ukoil.total, 1);
+    assert.equal(ukoil.items[0].market, 'ukoil');
 
     await assert.rejects(
       () => store.insertAnalysis({ market: 'eth', status: 'done' }),

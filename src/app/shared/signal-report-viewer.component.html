@@ -6,7 +6,7 @@
         <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible" open>
           <summary>Veredicto</summary>
           <div class="collapsible-body">
-            <p class="card-hint muted">Decisión del sistema para esta corrida (operar, esperar o no entrar).</p>
+            <p class="card-hint muted hide-on-phone">Decisión del sistema para esta corrida (operar, esperar o no entrar).</p>
             <div class="table-wrap">
               <table class="matrix kpi-table">
                 <thead><tr><th>Qué mirar</th><th>Resultado</th></tr></thead>
@@ -29,7 +29,7 @@
       <details class="report-card collapsible" open>
         <summary>Precio y plan de la operación</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">Dónde está el precio y, si hay setup, los niveles de entrada, stop y objetivo.</p>
+          <p class="card-hint muted hide-on-phone">Dónde está el precio y, si hay setup, los niveles de entrada, stop y objetivo.</p>
           @if (marketRows(s); as mRows) {
             @if (mRows.length) {
               <div class="table-wrap">
@@ -101,7 +101,7 @@
         <details class="report-card collapsible" open>
           <summary>Contexto del setup</summary>
           <div class="collapsible-body">
-            <p class="card-hint muted">Dirección, estructura y tipo de idea que evaluó el pipeline.</p>
+            <p class="card-hint muted hide-on-phone">Dirección, estructura y tipo de idea que evaluó el pipeline.</p>
             <div class="table-wrap">
               <table class="matrix kpi-table">
                 <thead><tr><th>Qué mirar</th><th>Valor</th></tr></thead>
@@ -127,7 +127,7 @@
       <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
         <summary>Notas y capas de probabilidad</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">Porcentajes de reglas, ML y nota global. Las barras resumen cada capa.</p>
+          <p class="card-hint muted hide-on-phone">Porcentajes de reglas, ML y nota global. Las barras resumen cada capa.</p>
           @if (scoreKpiRows(s); as scoreRows) {
             @if (scoreRows.length) {
               <div class="table-wrap">
@@ -169,7 +169,7 @@
           }
 
           @if (s.scorecard?.length) {
-            <div class="table-wrap stack-gap">
+            <div class="table-wrap stack-gap hide-on-phone">
               <table class="matrix">
                 <thead>
                   <tr>
@@ -200,7 +200,7 @@
       <details class="report-card collapsible" open>
         <summary>Reglas revisadas</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">✓ = cumple · ✗ = no cumple. Sirve para auditar por qué salió el veredicto.</p>
+          <p class="card-hint muted hide-on-phone">✓ = cumple · ✗ = no cumple. Sirve para auditar por qué salió el veredicto.</p>
           @if (s.checklist2M5?.length) {
             <div class="extra-section">
               <h4>Estructura 2M5</h4>
@@ -248,7 +248,7 @@
       <details id="sec-grafico" data-section="sec-grafico" class="report-card collapsible" open>
         <summary>Gráfico de la señal</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">Imagen generada por el pipeline para esta corrida.</p>
+          <p class="card-hint muted hide-on-phone">Imagen generada por el pipeline para esta corrida.</p>
           <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
             <img class="rapida-chart" [src]="chartHref" alt="Gráfico de la señal" />
           </a>
@@ -260,10 +260,10 @@
     }
 
     @if (hasDetalleAdicional(s, preview)) {
-      <details class="report-card collapsible">
+      <details class="report-card collapsible hide-on-phone">
         <summary>Detalle opcional (volumen, alertas, texto)</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">Información extra; no hace falta para decidir si no buscas auditoría.</p>
+          <p class="card-hint muted hide-on-phone">Información extra; no hace falta para decidir si no buscas auditoría.</p>
           @if (s.volume; as vol) {
             <div class="extra-section">
               <h4>Volumen</h4>
@@ -360,7 +360,7 @@
       <details class="report-card collapsible" open>
         <summary>Plan de la operación</summary>
         <div class="collapsible-body">
-          <p class="card-hint muted">Niveles en palabras simples: dónde entrar, dónde protegerte y dónde tomar ganancia.</p>
+          <p class="card-hint muted hide-on-phone">Niveles en palabras simples: dónde entrar, dónde protegerte y dónde tomar ganancia.</p>
           @if (investorPlanRows(s); as planRows) {
             @if (planRows.length) {
               <div class="table-wrap">
@@ -436,7 +436,7 @@
                     }
                   </div>
                 }
-                <div class="risk-hot-tip" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
+                <div class="risk-hot-tip hide-on-phone" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
               </div>
             }
           }
@@ -448,14 +448,14 @@
           <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
             <summary>Qué tan fuerte es la idea</summary>
             <div class="collapsible-body">
-              <p class="card-hint muted">Notas de 0 a 100. No son garantía de ganancia: miden cuánto respaldo tiene la idea.</p>
+              <p class="card-hint muted hide-on-phone">Notas de 0 a 100. No son garantía de ganancia: miden cuánto respaldo tiene la idea.</p>
               <div class="table-wrap">
                 <table class="matrix investor-scores">
                   <thead>
                     <tr>
                       <th>Medida</th>
                       <th>Valor</th>
-                      <th>Qué significa</th>
+                      <th class="hide-on-phone">Qué significa</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -463,21 +463,21 @@
                       <tr>
                         <th>{{ row.campo }}</th>
                         <td>{{ row.valor }}</td>
-                        <td class="muted">{{ row.significado }}</td>
+                        <td class="muted hide-on-phone">{{ row.significado }}</td>
                       </tr>
                     }
                   </tbody>
                 </table>
               </div>
               @if (investorScoresWaitTip(s); as tip) {
-                <p class="investor-tip">{{ tip }}</p>
+                <p class="investor-tip hide-on-phone">{{ tip }}</p>
               }
             </div>
           </details>
         }
       }
 
-      <p class="investor-note">
+      <p class="investor-note hide-on-phone">
         Esta vista evita jerga técnica. Si quieres el desglose completo, usa «Vista detallada».
       </p>
     </div>
@@ -558,7 +558,7 @@
                     }
                   </div>
                 }
-                <div class="risk-hot-tip" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
+                <div class="risk-hot-tip hide-on-phone" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
               </div>
             </div>
           </details>
@@ -632,7 +632,7 @@
       }
 
       @if (s.scorecard?.length) {
-        <details class="report-card collapsible" open>
+        <details class="report-card collapsible hide-on-phone" open>
           <summary>Tabla de confluencia</summary>
           <div class="collapsible-body">
             <div class="table-wrap">

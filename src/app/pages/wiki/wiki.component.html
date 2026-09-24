@@ -3,16 +3,16 @@
     <div class="brand">
       <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
       <div>
-        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Wiki</h1>
-        <p class="sub">Artefactos Cursor AI en <code>docs/Artifacts</code> · meta local SQLite</p>
+        <p class="sub hide-on-phone">Artefactos Cursor AI en <code>docs/Artifacts</code> · meta local SQLite</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
       <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
-      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
@@ -46,7 +46,7 @@
 
   <div class="cat-manager panel" *ngIf="showCatManager">
     <h2>Categorías</h2>
-    <p class="muted tiny">Se guardan en <code>data/wiki-meta.sqlite</code> (solo esta máquina).</p>
+    <p class="muted tiny hide-on-phone">Se guardan en <code>data/wiki-meta.sqlite</code> (solo esta máquina).</p>
     <form class="cat-create" (ngSubmit)="createCategory(false)">
       <input
         type="text"
@@ -78,7 +78,7 @@
         ></span>
         <ng-container *ngIf="renameCatId !== cat.id; else renameTpl">
           <strong>{{ cat.name }}</strong>
-          <span class="muted tiny">#{{ cat.id }}</span>
+          <span class="muted tiny hide-on-phone">#{{ cat.id }}</span>
           <button type="button" class="ghost tiny-btn" (click)="startRenameCategory(cat)">
             Renombrar
           </button>
@@ -191,7 +191,7 @@
                 </span>
                 <span class="meta">
                   <strong>{{ displayTitle(item) }}</strong>
-                  <span class="muted tiny">{{ item.path }} · {{ formatSize(item.size) }}</span>
+                  <span class="muted tiny hide-on-phone">{{ item.path }} · {{ formatSize(item.size) }}</span>
                 </span>
               </button>
               <div class="artifact-more" (click)="$event.stopPropagation()">
@@ -237,17 +237,18 @@
     <section class="reader panel">
       <div class="empty" *ngIf="!loading && !items.length">
         <h2>Sin artefactos aún</h2>
-        <p class="muted">
+        <p class="muted hide-on-phone">
           Guarda archivos en <code>docs/Artifacts</code> (Markdown, HTML, imágenes, PDF…)
           y pulsa <strong>Actualizar / Escanear</strong>. Hay un
           <code>README.md</code> de ejemplo que explica el flujo.
         </p>
+        <p class="muted phone-only">Pulsa <strong>Actualizar / Escanear</strong> tras añadir archivos en <code>docs/Artifacts</code>.</p>
       </div>
 
       <ng-container *ngIf="items.length">
         <div class="reader-head" *ngIf="selected">
           <div class="reader-title-block">
-            <p class="eyebrow">{{ kindLabel(selected.kind) }} · {{ selected.ext || 'sin ext' }}</p>
+            <p class="eyebrow hide-on-phone">{{ kindLabel(selected.kind) }} · {{ selected.ext || 'sin ext' }}</p>
 
             <div class="title-row" *ngIf="!editingTitle">
               <h2>{{ displayTitle(selected) }}</h2>
@@ -270,7 +271,7 @@
                 placeholder="Nombre sin extensión…"
                 (keydown.enter)="saveTitle()"
               />
-              <label class="check-rename">
+              <label class="check-rename hide-on-phone">
                 <input type="checkbox" [(ngModel)]="renameOnDisk" name="renameOnDisk" />
                 También renombrar archivo en disco (conserva la extensión)
               </label>
@@ -289,7 +290,7 @@
               </div>
             </div>
 
-            <p class="muted tiny">
+            <p class="muted tiny hide-on-phone">
               Archivo: {{ selected.name }} · {{ selected.path }} ·
               {{ formatSize(selected.size) }} · {{ formatMtime(selected.mtime) }}
             </p>
@@ -366,7 +367,7 @@
                   Cerrar
                 </button>
               </div>
-              <p class="muted tiny">Elige una categoría o crea una nueva.</p>
+              <p class="muted tiny hide-on-phone">Elige una categoría o crea una nueva.</p>
               <div class="cat-chip-list">
                 <button
                   type="button"

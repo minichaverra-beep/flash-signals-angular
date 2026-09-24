@@ -383,6 +383,7 @@ Hist/ATR = Hist / ATR(k) &nbsp;|&nbsp; z(Hist) = (Hist − μ_W) / σ_W &nbsp;(c
 cd "D:\Danilo\Trading\Cursor Trading"<br />
 python -m scripts.plot_macd_quant --days 7<br />
 python -m scripts.plot_macd_quant --symbol us30 --days 7<br />
+python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh<br />
 python -m app.controllers.train_btc_signals --force-download<br />
 python -m scripts.integrate_mobile_ops_ml<br />
 # PROPUESTO (aún no en repo): python -m scripts.backtest_macd_e1 --asset btc --ny-only --grid

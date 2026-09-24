@@ -922,3 +922,54 @@ code {
     max-height: none;
   }
 }
+
+@media (max-width: 768px) {
+  .page {
+    padding: 1rem 0.75rem 2rem;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .search input,
+  .toolbar button {
+    min-height: 2.5rem;
+  }
+
+  .artifact-row .meta strong {
+    font-size: 0.88rem;
+  }
+
+  .reader-head {
+    gap: 0.65rem;
+  }
+
+  .reader-actions {
+    flex-wrap: wrap;
+  }
+
+  .cat-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bias-actions {
+    flex-wrap: wrap;
+  }
+
+  .preview-shell.expanded {
+    padding: 0.5rem;
+  }
+
+  .html-frame,
+  .pdf-frame {
+    min-height: 60vh;
+  }
+}

@@ -102,6 +102,68 @@
   }
 }
 
+@media (max-width: 768px) {
+  .page {
+    padding: 1rem 0.75rem 2rem;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  .panel {
+    padding: 0.95rem 0.9rem;
+    margin-bottom: 0.75rem;
+    border-radius: 12px;
+  }
+
+  .panel h2 {
+    font-size: 1.05rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .tiers button {
+    min-width: 0;
+    flex: 1 1 calc(50% - 0.35rem);
+    min-height: 2.65rem;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .seg button,
+  .actions button,
+  .mode-tabs button {
+    min-height: 2.5rem;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+
+  .section-nav-title {
+    display: none;
+  }
+
+  .section-nav button {
+    min-height: 2.35rem;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
+  }
+
+  .collapsible > summary {
+    min-height: 2.5rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  pre {
+    max-height: 180px;
+    font-size: 0.72rem;
+  }
+}
+
 h1 {
   margin: 0 0 0.5rem;
   font-family: var(--font-display);

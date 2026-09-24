@@ -33,6 +33,63 @@
   line-height: 1.4;
 }
 
+@media (max-width: 768px) {
+  .card-hint,
+  .meta-plan,
+  .path.chart-link,
+  .investor-note,
+  .investor-tip,
+  .risk-hot-tip,
+  .vol-legend {
+    display: none !important;
+  }
+
+  .rapida-chart,
+  .chart-img,
+  img.rapida-chart {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .plan-grid thead th,
+  .plan-grid tbody td {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.35rem;
+  }
+
+  .collapsible > summary,
+  .report-card.collapsible > summary {
+    min-height: 2.5rem;
+  }
+
+  /* Columnas secundarias de tablas densas */
+  table.checklist th:nth-child(3),
+  table.checklist td:nth-child(3),
+  table.matrix:not(.kpi-table):not(.plan-grid):not(.investor-scores) th:nth-child(4),
+  table.matrix:not(.kpi-table):not(.plan-grid):not(.investor-scores) td:nth-child(4) {
+    display: none;
+  }
+
+  .investor-scores th:nth-child(3),
+  .investor-scores td:nth-child(3) {
+    display: none;
+  }
+
+  .risk-hot-scale {
+    font-size: 0.68rem;
+  }
+
+  .bar-meta {
+    font-size: 0.82rem;
+  }
+}
+
 .chart-link {
   margin: 0 0 0.35rem;
 }

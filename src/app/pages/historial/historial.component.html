@@ -3,16 +3,16 @@
     <div class="brand">
       <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
       <div>
-        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Historial</h1>
-        <p class="sub">Caja local (SQLite embebido) — solo corridas reales del pipeline</p>
+        <p class="sub hide-on-phone">Caja local (SQLite embebido) — solo corridas reales del pipeline</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
       <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
-      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
@@ -50,9 +50,12 @@
 
   <section class="panel empty" *ngIf="!loading && !items.length && !error">
     <h2>Sin entradas aún</h2>
-    <p class="muted">
+    <p class="muted hide-on-phone">
       Ejecuta una señal desde <a routerLink="/">Señales</a>. Al terminar el job,
       el snapshot se guarda aquí automáticamente (hive box local).
+    </p>
+    <p class="muted phone-only">
+      Ejecuta una señal desde <a routerLink="/">Señales</a> para verla aquí.
     </p>
   </section>
 
@@ -180,7 +183,7 @@
         </header>
         <p class="when">
           <strong>{{ relativeTime(item.createdAt) }}</strong>
-          <span class="muted tiny">{{ absoluteTime(item.createdAt) }}</span>
+          <span class="muted tiny hide-on-phone">{{ absoluteTime(item.createdAt) }}</span>
         </p>
         <p class="muted tiny">{{ item.tier }} · score {{ item.scoreCombined != null ? item.scoreCombined + '%' : '—' }} · {{ item.status }}</p>
         <div class="card-annotate" (click)="$event.stopPropagation()">
@@ -211,7 +214,7 @@
             <button type="button" class="shot-thumb" (click)="openLightbox(item, $event)">
               <img [src]="thumb" alt="Captura" />
             </button>
-            <span class="muted tiny">Captura adjunta</span>
+            <span class="muted tiny hide-on-phone">Captura adjunta</span>
           </div>
           <label
             class="btn-attach"
@@ -254,7 +257,8 @@
       <div>
         <p class="eyebrow">Detalle #{{ detail?.id || '…' }}{{ detailExpanded ? ' · expandido' : '' }}</p>
         <h2 *ngIf="detail">{{ detail.market | uppercase }} · {{ detail.tier }}</h2>
-        <p class="muted tiny" *ngIf="detail">{{ absoluteTime(detail.createdAt) }} · {{ relativeTime(detail.createdAt) }}</p>
+        <p class="muted tiny hide-on-phone" *ngIf="detail">{{ absoluteTime(detail.createdAt) }} · {{ relativeTime(detail.createdAt) }}</p>
+        <p class="muted tiny phone-only" *ngIf="detail">{{ relativeTime(detail.createdAt) }}</p>
       </div>
       <div class="drawer-head-actions">
         <button
@@ -296,13 +300,13 @@
           (click)="detailMode = 'inversor'"
         >Modo Inversor</button>
       </div>
-      <p class="mode-hint muted" *ngIf="detailMode === 'rapida'">
+      <p class="mode-hint muted hide-on-phone" *ngIf="detailMode === 'rapida'">
         Solo lo esencial: veredicto, gráfico, barras de probabilidad y tablas de scores.
       </p>
-      <p class="mode-hint muted" *ngIf="detailMode === 'trader'">
+      <p class="mode-hint muted hide-on-phone" *ngIf="detailMode === 'trader'">
         Análisis completo: plan de entrada, contexto del setup, scores, reglas cumplidas y gráfico.
       </p>
-      <p class="mode-hint muted" *ngIf="detailMode === 'inversor'">
+      <p class="mode-hint muted hide-on-phone" *ngIf="detailMode === 'inversor'">
         En lenguaje simple: qué hacer, el plan, el riesgo y qué tan fuerte es la idea.
       </p>
 
@@ -351,7 +355,7 @@
         <div class="result-shot-head">
           <div>
             <p class="annotate-label">Captura del resultado</p>
-            <p class="muted tiny">PNG / JPG / WebP / GIF · máx. 5 MB · también puedes arrastrar o pegar (Ctrl+V)</p>
+            <p class="muted tiny hide-on-phone">PNG / JPG / WebP / GIF · máx. 5 MB · también puedes arrastrar o pegar (Ctrl+V)</p>
           </div>
           <div class="result-shot-actions">
             <label
@@ -393,7 +397,7 @@
           <div class="dropzone-panel" [class.disabled]="isImageBusy(d.id)">
             <span class="drop-icon" aria-hidden="true">⧉</span>
             <strong>{{ isImageBusy(d.id) ? 'Subiendo captura…' : 'Arrastra la captura aquí' }}</strong>
-            <span class="muted tiny">o usa el botón «Adjuntar archivo»</span>
+            <span class="muted tiny hide-on-phone">o usa el botón «Adjuntar archivo»</span>
             <label class="btn-attach" [class.busy]="isImageBusy(d.id)">
               {{ isImageBusy(d.id) ? 'Subiendo…' : 'Elegir archivo…' }}
               <input

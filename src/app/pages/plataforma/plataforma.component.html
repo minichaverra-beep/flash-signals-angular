@@ -3,22 +3,22 @@
     <div class="brand">
       <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
       <div>
-        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Plataforma</h1>
-        <p class="sub">Señales reales · Colombia / LATAM</p>
+        <p class="sub hide-on-phone">Señales reales · Colombia / LATAM</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
       <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
-      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
 
   <section class="splash" aria-labelledby="splash-title">
-    <div class="splash-glow" aria-hidden="true"></div>
+    <div class="splash-glow hide-on-phone" aria-hidden="true"></div>
     <div class="splash-copy">
       <p class="splash-kicker">Desde Colombia · para LATAM</p>
       <h2 id="splash-title" class="splash-brand">Flash Signals</h2>
@@ -36,7 +36,7 @@
         <li>XAUUSD</li>
       </ul>
     </div>
-    <div class="splash-stage" aria-hidden="true">
+    <div class="splash-stage hide-on-phone" aria-hidden="true">
       <div class="ring ring-a"></div>
       <div class="ring ring-b"></div>
       <div class="pulse-core">
@@ -52,7 +52,7 @@
       @for (t of tiers; track t.id) {
         <article class="tier-card">
           <h3>{{ t.title }}</h3>
-          <p>{{ t.hint }}</p>
+          <p class="hide-on-phone">{{ t.hint }}</p>
         </article>
       }
     </div>
@@ -69,7 +69,7 @@
       </ol>
       <a routerLink="/" class="btn-fire sm">Ir a Señales</a>
     </div>
-    <aside class="how-panel" aria-label="Flujo">
+    <aside class="how-panel hide-on-phone" aria-label="Flujo">
       <p class="flow-label">Pipeline</p>
       <div class="flow">
         <span>UI</span>
@@ -93,7 +93,7 @@
       @for (c of trust; track c.label) {
         <article class="trust-card">
           <h3>{{ c.label }}</h3>
-          <p>{{ c.text }}</p>
+          <p class="hide-on-phone">{{ c.text }}</p>
         </article>
       }
     </div>
@@ -103,7 +103,7 @@
     <h2 id="tools-title" class="sr-only">Herramientas locales</h2>
     <article class="tool-card">
       <h3>Historial local</h3>
-      <p>
+      <p class="hide-on-phone">
         Cada corrida real queda en SQLite embebido (hive box). Filtra por mercado, abre el
         detalle Trader / Inversor y audita P&amp;L sin nube.
       </p>
@@ -111,7 +111,7 @@
     </article>
     <article class="tool-card">
       <h3>Wiki / artefactos</h3>
-      <p>
+      <p class="hide-on-phone">
         Tutoriales, gestión de dinero y notas Cursor AI en <code>docs/Artifacts</code> —
         preview seguro, categorías y bias en meta local.
       </p>
@@ -119,7 +119,7 @@
     </article>
     <article class="tool-card">
       <h3>MACD-quant</h3>
-      <p>
+      <p class="hide-on-phone">
         Soft-filter E1 en <strong>H4</strong> (semana · nunca trigger solo): mini-chart,
         «Nuevo análisis», <code>plot_macd_quant</code> y artifact quant.
       </p>
@@ -129,7 +129,7 @@
 
   <section class="closing" aria-labelledby="closing-title">
     <h2 id="closing-title">Listo para la siguiente señal</h2>
-    <p>Flash Signals · Colombia. Pipeline real. Sin dashboards genéricos.</p>
+    <p class="hide-on-phone">Flash Signals · Colombia. Pipeline real. Sin dashboards genéricos.</p>
     <div class="splash-cta">
       <a routerLink="/" class="btn-fire">Empezar en Señales</a>
       <a routerLink="/historial" class="btn-ghost">Revisar Historial</a>

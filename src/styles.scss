@@ -193,3 +193,207 @@ select.bias-auto {
   background: color-mix(in srgb, var(--accent) 28%, var(--panel-deep));
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* Utilidades responsive: ocultar ruido solo en teléfono (desktop intacto) */
+.phone-only {
+  display: none !important;
+}
+
+.nav-short {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .hide-on-phone,
+  .desktop-only {
+    display: none !important;
+  }
+
+  .phone-only {
+    display: block !important;
+  }
+
+  .phone-only.inline {
+    display: inline !important;
+  }
+
+  .phone-only.flex {
+    display: flex !important;
+  }
+
+  /* Copia / meta secundaria site-wide (desktop intacto) */
+  .block-lead,
+  .mode-hint,
+  .card-hint,
+  .splash-lead,
+  .splash-kicker,
+  .how-note,
+  .investor-note,
+  .investor-tip,
+  .risk-hot-tip,
+  .vol-legend,
+  .foot,
+  .lock-badge,
+  .save-hint,
+  .meta-plan,
+  .path.chart-link,
+  .lead,
+  .kicker,
+  .nav-long {
+    display: none !important;
+  }
+
+  .nav-short {
+    display: inline !important;
+  }
+
+  /* Chrome compartido: brand + nav compactos */
+  .hero {
+    gap: 0.85rem;
+    margin-bottom: 0.9rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .brand {
+    gap: 0.7rem;
+    min-width: 0;
+    align-items: center;
+  }
+
+  .brand .logo,
+  .logo {
+    width: 52px;
+    height: 52px;
+  }
+
+  .brand h1,
+  .hero h1 {
+    font-size: 1.35rem;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .top-nav {
+    gap: 0.3rem;
+    width: 100%;
+  }
+
+  .top-nav a {
+    flex: 1 1 0;
+    text-align: center;
+    padding: 0.45rem 0.35rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.01em;
+    min-height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+  }
+
+  /* Densidad global de página */
+  .page {
+    padding: 0.85rem 0.7rem 1.75rem !important;
+  }
+
+  h2 {
+    font-size: 1.05rem;
+  }
+
+  h3 {
+    font-size: 0.95rem;
+  }
+
+  .panel,
+  .block {
+    padding: 0.85rem 0.8rem;
+    margin-bottom: 0.75rem;
+    border-radius: 12px;
+  }
+
+  /* Grids → columna / apilado */
+  .grid,
+  .tier-grid,
+  .trust-grid,
+  .dual,
+  .dual-info,
+  .link-grid,
+  .how,
+  .detail-annotate,
+  .flags {
+    grid-template-columns: 1fr !important;
+  }
+
+  .flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.75rem;
+  }
+
+  /* Media a ancho completo (no thumbs ni logo) */
+  .rapida-chart,
+  .macd-chart,
+  .chart-img,
+  .chart-link img,
+  .preview-body img,
+  .img-wrap img,
+  .result-shot-preview img,
+  .lightbox img {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  iframe.html-frame,
+  iframe.pdf-frame {
+    width: 100%;
+    min-height: 55vh;
+  }
+
+  pre,
+  .cmd,
+  .job-logs,
+  .raw-md-pre,
+  .raw-text {
+    font-size: 0.72rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table.matrix th,
+  table.matrix td,
+  .hist-table th,
+  .hist-table td {
+    font-size: 0.78rem;
+  }
+
+  /* Controles táctiles densos */
+  button,
+  .ghost,
+  .btn-fire,
+  .btn-ghost,
+  .seg button,
+  .mode-tabs button {
+    min-height: 2.4rem;
+  }
+
+  .toolbar {
+    gap: 0.5rem;
+  }
+
+  .muted.tiny {
+    font-size: 0.72rem;
+  }
+}

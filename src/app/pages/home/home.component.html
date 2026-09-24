@@ -3,23 +3,23 @@
     <div class="brand">
       <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
       <div>
-        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Señales BTC / US30 / XAUUSD</h1>
-        <p class="sub">Creado por: Danilo Chaverra</p>
+        <p class="sub hide-on-phone">Creado por: Danilo Chaverra</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
       <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
-      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
 
   <div class="page-body">
     <nav class="section-nav" aria-label="Secciones de la página">
-      <p class="section-nav-title">Secciones</p>
+      <p class="section-nav-title hide-on-phone">Secciones</p>
       <button
         type="button"
         *ngFor="let sec of visibleSections"
@@ -55,7 +55,7 @@
               [title]="t.hint"
             >
               <strong>{{ t.label }}</strong>
-              <span>{{ t.hint }}</span>
+              <span class="hide-on-phone">{{ t.hint }}</span>
             </button>
           </div>
         </div>
@@ -135,13 +135,13 @@
             (click)="viewMode = 'inversor'"
           >Modo Inversor</button>
         </div>
-        <p class="mode-hint muted" *ngIf="viewMode === 'rapida'">
+        <p class="mode-hint muted hide-on-phone" *ngIf="viewMode === 'rapida'">
           Solo lo esencial: veredicto, gráfico, barras de probabilidad y tablas de scores.
         </p>
-        <p class="mode-hint muted" *ngIf="viewMode === 'trader'">
+        <p class="mode-hint muted hide-on-phone" *ngIf="viewMode === 'trader'">
           Análisis completo: plan de entrada, contexto del setup, scores, reglas cumplidas y gráfico.
         </p>
-        <p class="mode-hint muted" *ngIf="viewMode === 'inversor'">
+        <p class="mode-hint muted hide-on-phone" *ngIf="viewMode === 'inversor'">
           En lenguaje simple: qué hacer, el plan, el riesgo y qué tan fuerte es la idea.
         </p>
       </section>
@@ -151,17 +151,17 @@
         <details class="report-card collapsible" *ngIf="j.logs?.length && viewMode === 'trader'">
           <summary>Registro técnico ({{ j.logs.length }} líneas)</summary>
           <div class="collapsible-body">
-            <p class="muted tiny" *ngIf="j.command">Comando: <code>{{ j.command }}</code></p>
-            <p class="path" *ngIf="j.reportPath">Archivo: <code>{{ j.reportPath }}</code></p>
+            <p class="muted tiny hide-on-phone" *ngIf="j.command">Comando: <code>{{ j.command }}</code></p>
+            <p class="path hide-on-phone" *ngIf="j.reportPath">Archivo: <code>{{ j.reportPath }}</code></p>
             <pre>{{ j.logs.join('\n') }}</pre>
           </div>
         </details>
       </section>
 
       <section id="sec-reporte" class="panel result" *ngIf="reportSummary as s" data-section="sec-reporte">
-        <ng-container *ngIf="latest as L; else jobReportHead">
+          <ng-container *ngIf="latest as L; else jobReportHead">
           <h2>Último reporte ({{ L.reportName }})</h2>
-          <p class="muted">Modificado: {{ L.mtime }}</p>
+          <p class="muted hide-on-phone">Modificado: {{ L.mtime }}</p>
         </ng-container>
         <ng-template #jobReportHead>
           <h2>Resultado de la corrida</h2>
@@ -177,7 +177,7 @@
         />
       </section>
 
-      <footer class="foot">
+      <footer class="foot hide-on-phone">
         <p>
           Tiers: Context (estructura) · Light (rápido) · High (entrada) · History (P&amp;L).
           Advanced = Categories ampliada. TradingView no se lee en vivo.

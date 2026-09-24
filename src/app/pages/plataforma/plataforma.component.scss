@@ -501,3 +501,76 @@ h1 {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+@media (max-width: 768px) {
+  .page.plataforma {
+    padding: 0.85rem 0.7rem 2rem;
+  }
+
+  .splash {
+    min-height: auto;
+    margin: 0.35rem 0 1.25rem;
+    padding: 1.25rem 1rem;
+    border-radius: 14px;
+    grid-template-columns: 1fr;
+  }
+
+  .splash-brand {
+    font-size: 2.1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .splash-cta {
+    margin-bottom: 0.85rem;
+  }
+
+  .splash-cta a,
+  .btn-fire,
+  .btn-ghost {
+    flex: 1 1 auto;
+    text-align: center;
+    justify-content: center;
+    min-height: 2.55rem;
+  }
+
+  .market-pills {
+    gap: 0.35rem;
+  }
+
+  .block {
+    margin-bottom: 1.1rem;
+    padding: 0.9rem 0.85rem;
+  }
+
+  .tier-grid,
+  .trust-grid,
+  .dual {
+    gap: 0.55rem;
+  }
+
+  .tier-card,
+  .trust-card,
+  .tool-card {
+    padding: 0.75rem 0.7rem;
+  }
+
+  .tier-card h3,
+  .trust-card h3,
+  .tool-card h3 {
+    margin-bottom: 0.35rem;
+  }
+
+  .steps {
+    padding-left: 1.15rem;
+    font-size: 0.9rem;
+  }
+
+  .closing {
+    padding: 1.1rem 0.9rem;
+    text-align: center;
+  }
+
+  .closing h2 {
+    font-size: 1.15rem;
+  }
+}

@@ -3,31 +3,31 @@
     <div class="brand">
       <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
       <div>
-        <p class="eyebrow">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>MACD-quant</h1>
-        <p class="sub">Soft-filter E1 · timeframe <strong>H4</strong> · nunca trigger solo</p>
+        <p class="sub hide-on-phone">Soft-filter E1 · timeframe <strong>H4</strong> · nunca trigger solo</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
       <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
-      <a routerLink="/historial" routerLinkActive="active">Historial</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
   </header>
 
   <section class="intro" aria-labelledby="macd-title">
-    <p class="kicker">Filtro de confluencia · Module quant · H4</p>
+    <p class="kicker hide-on-phone">Filtro de confluencia · Module quant · H4</p>
     <h2 id="macd-title">Mini-indicador MACD · régimen H4 · E1 M5</h2>
-    <p class="lead">
+    <p class="lead hide-on-phone">
       Oscilador en <strong>H4</strong> (semana de mercado) cableado como
       <strong>soft-filter</strong> en High/Advanced (máx. +1.0 pts). La entrada E1
       sigue siendo H1/CTR + zona + 2M5 — el MACD <em>nunca</em> dispara ENTRAR por sí solo.
     </p>
     <div class="chips" aria-label="Estado">
       <span class="chip teal">confluence_filter · H4</span>
-      <span class="chip warn">WR / PF · PENDING</span>
+      <span class="chip warn hide-on-phone">WR / PF · PENDING</span>
       <span class="chip fire">nunca trigger solo</span>
     </div>
   </section>
@@ -67,7 +67,7 @@
         </button>
       </div>
     </div>
-    <p class="block-lead">
+    <p class="block-lead hide-on-phone">
       @if (viewingHistory && selectedDetail) {
         Preservado el
         <strong>{{ selectedDetail.createdAt | date: 'yyyy-MM-dd HH:mm' }}</strong>
@@ -86,7 +86,7 @@
       </p>
     }
     @if (analyzing && job?.logs?.length) {
-      <pre class="job-logs" aria-live="polite">{{ job!.logs.slice(-8).join('\n') }}</pre>
+      <pre class="job-logs hide-on-phone" aria-live="polite">{{ job!.logs.slice(-8).join('\n') }}</pre>
     }
     @if (!chartBroken) {
       <a class="chart-link" [href]="chartUrl()" target="_blank" rel="noopener">
@@ -109,7 +109,7 @@
           }
         </p>
         @if (!viewingHistory) {
-          <pre class="cmd">python -m scripts.plot_macd_quant --symbol {{ market === 'xauusd' ? 'xau' : market }} --days 7</pre>
+          <pre class="cmd hide-on-phone">python -m scripts.plot_macd_quant --symbol {{ market === 'xauusd' ? 'xau' : market }} --days 7</pre>
         }
         <button type="button" class="btn-ghost sm" (click)="reloadChart()">Reintentar</button>
       </div>
@@ -128,7 +128,7 @@
         {{ historyLoading ? 'Cargando…' : 'Actualizar' }}
       </button>
     </div>
-    <p class="block-lead">
+    <p class="block-lead hide-on-phone">
       Análisis guardados en SQLite local (copia durable del PNG). Soft-filter E1 —
       WR/PF siguen <span class="pending">PENDING</span>; no se inventan métricas.
     </p>
@@ -153,7 +153,7 @@
             >
               <span class="hist-id">#{{ item.id }}</span>
               <span class="hist-when">{{ item.createdAt | date: 'yyyy-MM-dd HH:mm' }}</span>
-              <span class="hist-meta">
+              <span class="hist-meta hide-on-phone">
                 H4 · {{ item.days ?? 7 }}d · {{ formatParams(item) }}
               </span>
               <span
@@ -171,7 +171,7 @@
     }
   </section>
 
-  <section class="block dual-info" aria-labelledby="uso-title">
+  <section class="block dual-info hide-on-phone" aria-labelledby="uso-title">
     <article class="card">
       <h2 id="uso-title">Cómo regenerar el PNG</h2>
       <p>
@@ -199,7 +199,7 @@
     </article>
   </section>
 
-  <section class="block links" aria-labelledby="docs-title">
+  <section class="block links hide-on-phone" aria-labelledby="docs-title">
     <h2 id="docs-title">Documentación</h2>
     <div class="link-grid">
       <a class="link-card" [href]="artifactRawUrl" target="_blank" rel="noopener">
@@ -220,7 +220,7 @@
     </div>
   </section>
 
-  <footer class="foot">
+  <footer class="foot hide-on-phone">
     <p>Creado por Danilo Chaverra · Flash Signals · MACD-quant H4 = filtro, no señal.</p>
   </footer>
 </div>

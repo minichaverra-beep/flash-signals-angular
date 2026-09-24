@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-export type Market = 'btc' | 'us30' | 'xauusd';
+export type Market = 'btc' | 'us30' | 'xauusd' | 'ukoil';
 export type Tier = 'context' | 'light' | 'high' | 'history';
 
 export interface RunRequest {
