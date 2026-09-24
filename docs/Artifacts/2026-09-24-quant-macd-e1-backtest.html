@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quant MACD-like · E1 M5 Backtest Design · Flash Signals</title>
+  <meta name="description" content="Brief quant: mini-MACD filtro E1 M5. Inventario real de datos; backtest PENDING. Sin equity curves inventadas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: var(--shell); margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 22px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    .chip.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: rgba(255,215,0,0.1); }
+    .chip.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent); background: var(--err-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+    }
+    h3 { font-size: 0.95rem; margin: 14px 0 8px; color: #7ec8c9; }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 70ch; line-height: 1.55; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+      .pipe { grid-template-columns: 1fr !important; }
+    }
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke); border-radius: var(--radius); padding: 14px 16px;
+    }
+    .stat .val { font-family: var(--display); font-size: 1.15rem; font-weight: 600; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat.fire .val { color: var(--fire); }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+    .stat.gold .val { color: var(--gold); }
+    .stat.warn .val { color: var(--warn); }
+    .disclaimer {
+      margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+      background: var(--warn-dim); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8; font-size: 0.86rem; line-height: 1.45;
+    }
+    .card {
+      background: var(--bg-elev); border: 1px solid var(--stroke);
+      border-radius: 16px; padding: 22px 24px; margin-bottom: 16px;
+    }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.84rem;
+    }
+    th, td {
+      text-align: left; padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top;
+    }
+    th { color: var(--muted-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td code, .mono { font-family: var(--mono); font-size: 0.78rem; color: #ffd9a0; }
+    .tag {
+      display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 6px;
+    }
+    .tag.pending { background: var(--warn-dim); color: var(--warn); }
+    .tag.real { background: var(--ok-dim); color: var(--ok); }
+    .tag.filter { background: var(--info-dim); color: #7ec8c9; }
+    .pipe {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px;
+    }
+    .pipe-step {
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px;
+      padding: 12px 10px; text-align: center; font-size: 0.78rem;
+    }
+    .pipe-step strong {
+      display: block; font-family: var(--display); font-size: 0.95rem;
+      letter-spacing: 0.03em; margin-bottom: 4px; color: var(--fire);
+    }
+    .formula {
+      font-family: var(--mono); font-size: 0.8rem; background: #1a1212;
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 14px 16px;
+      color: #e8dcc8; overflow-x: auto; line-height: 1.7; margin: 10px 0 4px;
+    }
+    .hyp {
+      display: grid; grid-template-columns: 56px 1fr; gap: 10px;
+      padding: 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--stroke) 50%, transparent);
+    }
+    .hyp:last-child { border-bottom: 0; }
+    .hyp-id {
+      font-family: var(--display); color: var(--gold); font-size: 1.1rem;
+    }
+    .footer {
+      margin-top: 28px; font-size: 0.78rem; color: var(--muted-2);
+      border-top: 1px solid var(--stroke); padding-top: 16px;
+    }
+    a { color: #7ec8c9; }
+    ul.compact { margin: 8px 0 0 18px; color: var(--muted); font-size: 0.88rem; }
+    ul.compact li { margin-bottom: 4px; }
+    .chart-card {
+      background: var(--bg-elev); border: 1px solid var(--stroke);
+      border-radius: 16px; padding: 14px 16px 12px; margin-bottom: 16px;
+      box-shadow: var(--glow);
+    }
+    .chart-card h2 { margin-bottom: 6px; }
+    .chart-card .chart-note {
+      color: var(--muted-2); font-size: 0.78rem; margin-bottom: 10px; line-height: 1.4;
+    }
+    .chart-card img {
+      display: block; width: 100%; height: auto; border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+      background: #0e0e12;
+    }
+    .chart-card .chart-meta {
+      margin-top: 8px; font-size: 0.75rem; color: var(--muted-2);
+    }
+    .chart-card .chart-meta code { font-size: 0.72rem; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <figure class="chart-card" aria-label="Mini-chart MACD-quant H4">
+      <h2>Mini-chart MACD-quant · BTC H4</h2>
+      <p class="chart-note">
+        Régimen H4 · semana de mercado · nube azul (&gt;0) / púrpura (&lt;0) · señal blanca ·
+        soft-filter E1 — <strong>nunca trigger solo</strong>. Entradas E1 siguen en M5.
+        WR/PF del filtro: <span class="tag pending">PENDING</span>.
+      </p>
+      <!-- Rutas absolute /api/* para preview en Wiki (iframe :4400→:3847). -->
+      <img
+        src="/api/signals/macd-chart?market=btc"
+        alt="MACD quant BTC H4 — nube azul/púrpura, señal blanca, soft-filter"
+        loading="eager"
+      />
+      <figcaption class="chart-meta">
+        Fuente: <code>python -m scripts.plot_macd_quant --days 7</code> →
+        <code>live/btc_h4_macd_quant.png</code>
+        · live API: <a href="/api/signals/macd-chart?market=btc"><code>/api/signals/macd-chart?market=btc</code></a>
+        · UI: <code>/macd-quant</code> → «Nuevo análisis»
+      </figcaption>
+    </figure>
+
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">Quant · E1 M5</span>
+        <span class="chip teal">Filter-only · Zentinel contract</span>
+        <span class="chip warn">Backtest MACD · PENDING</span>
+        <span class="chip gold">Inventario 2026-09-24</span>
+      </div>
+      <h1>Mini-indicador MACD-like · Continuaciones E1</h1>
+      <p class="hero-sub">
+        Diseño deep-quant anclado a fuentes reales del stack Cursor Trading.
+        No es señal de entrada sola. No es E2 turtle soup. Sin equity curves inventadas.
+      </p>
+      <div class="stats">
+        <div class="stat fire">
+          <div class="val">53</div>
+          <div class="lbl">BTC ops matched</div>
+        </div>
+        <div class="stat ok">
+          <div class="val">62.3%</div>
+          <div class="lbl">WR matched (33W/20L)</div>
+        </div>
+        <div class="stat teal">
+          <div class="val">51 840</div>
+          <div class="lbl">Barras BTC M5</div>
+        </div>
+        <div class="stat warn">
+          <div class="val">PENDING</div>
+          <div class="lbl">Métricas MACD</div>
+        </div>
+      </div>
+      <div class="disclaimer">
+        <strong>Honestidad de datos:</strong> <code>ARTIFACTS.md</code> narraba ~98 ops / BTC matched 51 · WR 64.7%.
+        En disco (2026-09-24): <code>trades.csv</code> dedupe <strong>100</strong>,
+        <code>btc_ops_matched.csv</code> <strong>53 · WR 62.3%</strong>. Este HTML usa solo CSV/parquet abiertos.
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>1 · Propósito / no-objetivos</h2>
+      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">
+        Calibrar histograma MACD-like a E1 M5 NY (BTC/US30) como <span class="tag filter">filtro</span>
+        + features ML. Entrada sigue siendo H1/CTR + zona + 2M5.
+      </p>
+      <ul class="compact">
+        <li><strong>Sí:</strong> features joblib, soft confluencia, walk-forward NY, label 48 barras 1:2.</li>
+        <li><strong>No:</strong> trigger solo · sustituir 8 reglas · E2 · PF/equity sin run.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>2 · Hipótesis falsables</h2>
+      <div class="hyp">
+        <div class="hyp-id">H1</div>
+        <div><strong>Hist alineado post-2M5</strong> mejora precision vs baseline. <span class="tag pending">PENDING</span></div>
+      </div>
+      <div class="hyp">
+        <div class="hyp-id">H2</div>
+        <div><strong>Divergencia precio–MACD</strong> = fakeout/skip, no continuación. <span class="tag pending">PENDING</span></div>
+      </div>
+      <div class="hyp">
+        <div class="hyp-id">H3</div>
+        <div><strong>12/26/9 subóptimo</strong> → grid walk-forward fast/slow/signal. <span class="tag pending">PENDING</span></div>
+      </div>
+      <div class="hyp">
+        <div class="hyp-id">H4</div>
+        <div><strong>z(Hist)</strong> discrimina mejor que cruce crudo. <span class="tag pending">PENDING</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3 · Fórmulas (núcleo)</h2>
+      <div class="formula">
+MACD = EMA(fast) − EMA(slow)<br />
+Signal = EMA(signal, MACD)<br />
+Hist = MACD − Signal<br />
+Hist/ATR = Hist / ATR(k) &nbsp;|&nbsp; z(Hist) = (Hist − μ_W) / σ_W &nbsp;(causal)
+      </div>
+      <p style="color:var(--muted-2);font-size:0.8rem;margin-top:8px;">
+        Variantes a testear: SMA · TEMA · zero-lag. Baseline a falsar: <code>12 / 26 / 9</code>.
+        Features ML candidatas: slope, accel, bars_since_cross, dist_zero, h1_align, div_bull/bear.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>4 · Pipeline (diagrama)</h2>
+      <div class="pipe">
+        <div class="pipe-step"><strong>M5+H1</strong>OHLC parquet</div>
+        <div class="pipe-step"><strong>Ops</strong>matched OCR</div>
+        <div class="pipe-step"><strong>Feat</strong>E1×37 + MACD*</div>
+        <div class="pipe-step"><strong>Label</strong>48b · TP 1:2</div>
+        <div class="pipe-step"><strong>WF NY</strong>F1 OOS</div>
+      </div>
+      <h3>Métricas a reportar (solo tras run)</h3>
+      <p style="color:var(--muted);font-size:0.88rem;">Precision · Recall · F1 · WR buckets · PF solo con R fijo simulado — no P&amp;L OCR (null en capturas).</p>
+    </section>
+
+    <section class="card">
+      <h2>5 · Inventario real</h2>
+      <table>
+        <thead>
+          <tr><th>Fuente</th><th>Conteo</th><th>Nota</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>btcusdt_m5.parquet</code></td>
+            <td><span class="tag real">51 840</span></td>
+            <td>2026-03-21 → 09-17 UTC</td>
+          </tr>
+          <tr>
+            <td><code>btcusdt_h1.parquet</code></td>
+            <td><span class="tag real">4 320</span></td>
+            <td>Mismo tramo</td>
+          </tr>
+          <tr>
+            <td><code>us30_m5 / h1</code></td>
+            <td><span class="tag real">5 000 / 720</span></td>
+            <td>Lookback corto (yfinance)</td>
+          </tr>
+          <tr>
+            <td><code>trades.csv</code> (OCR)</td>
+            <td><span class="tag real">100</span></td>
+            <td>meta: 102 imgs · 2 dup · BTC 80+11 review</td>
+          </tr>
+          <tr>
+            <td><code>btc_ops_matched.csv</code></td>
+            <td><span class="tag real">53 · WR 62.3%</span></td>
+            <td>33 win / 20 loss · real_sl_tp 36 · fixed_rr 17</td>
+          </tr>
+          <tr>
+            <td><code>us30_ops_matched.csv</code></td>
+            <td><span class="tag pending">VACÍO</span></td>
+            <td>Regenerar tras ampliar M5</td>
+          </tr>
+          <tr>
+            <td><code>xauusd_ops_matched.csv</code></td>
+            <td><span class="tag pending">0 filas</span></td>
+            <td>H1 labels: 2 LOSS diagnósticos</td>
+          </tr>
+          <tr>
+            <td><code>mobile_vision_labels.csv</code></td>
+            <td><span class="tag real">55</span></td>
+            <td>WIN 33 / LOSS 22</td>
+          </tr>
+          <tr>
+            <td><code>desktop_labels.csv</code></td>
+            <td><span class="tag pending">0 filas</span></td>
+            <td>Solo header</td>
+          </tr>
+          <tr>
+            <td><code>btc_signal_features.json</code></td>
+            <td><span class="tag real">37 feats · n=532</span></td>
+            <td>F1 after ops 0.5397 · ops_matched 53 · <strong>sin MACD</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>6 · Contrato Zentinel + fusión</h2>
+      <p style="color:var(--muted);font-size:0.9rem;">
+        Mismo contrato que FVG+Vol: <strong>confluence_filter, never trigger</strong>.
+        Pesos High: Rules 28% · Ext 12% · CRT 12% · Neural 25% · ML 18%.
+      </p>
+      <ul class="compact">
+        <li><strong>Fase 1:</strong> MACD → features dentro de ML 18% + soft points en confluencia.</li>
+        <li><strong>Fase 2:</strong> soft ≤5% solo si OOS ΔF1 ≥ +0.03 (renormalizar Ext/CRT; no tocar Rules).</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>7 · Grid anclado + comandos</h2>
+      <p style="color:var(--muted);font-size:0.88rem;margin-bottom:10px;">
+        fast ∈ {5,6,8,10,12} · slow ∈ {13,17,21,26,34} · signal ∈ {5,7,9} ·
+        z/ATR W ∈ {48,78,84,96} (84 = periodo vol Zentinel BTC).
+      </p>
+      <div class="formula">
+cd "D:\Danilo\Trading\Cursor Trading"<br />
+python -m scripts.plot_macd_quant --days 7<br />
+python -m scripts.plot_macd_quant --symbol us30 --days 7<br />
+python -m app.controllers.train_btc_signals --force-download<br />
+python -m scripts.integrate_mobile_ops_ml<br />
+# PROPUESTO (aún no en repo): python -m scripts.backtest_macd_e1 --asset btc --ny-only --grid
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>8 · Checklist aceptación</h2>
+      <ul class="compact">
+        <li>Script backtest MACD existe y lee solo fuentes citadas</li>
+        <li>H1–H4 con N + F1 o REJECTED explícito</li>
+        <li>Sin equity curve sin trade list</li>
+        <li>Filter-only cableado; no ENTRAR por MACD solo</li>
+        <li>US30 out-of-scope hasta matched ≠ vacío</li>
+      </ul>
+    </section>
+
+    <p class="footer">
+      MD: <code>D:\Danilo\Trading\Cursor Trading\docs\strategy\TRADING_QUANT_MACD_E1_BACKTEST.md</code><br />
+      Estilo alineado a Artifacts Flash Signals · inventario verificado 2026-09-24 · no commit automático.
+    </p>
+  </div>
+</body>
+</html>

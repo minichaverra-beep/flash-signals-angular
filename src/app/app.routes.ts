@@ -3,10 +3,12 @@ import { HomeComponent } from './pages/home/home.component';
 import { HistorialComponent } from './pages/historial/historial.component';
 import { WikiComponent } from './pages/wiki/wiki.component';
 import { PlataformaComponent } from './pages/plataforma/plataforma.component';
+import { MacdQuantComponent } from './pages/macd-quant/macd-quant.component';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
   { path: 'plataforma', component: PlataformaComponent },
+  { path: 'macd-quant', component: MacdQuantComponent },
   { path: 'colombia', redirectTo: 'plataforma' },
   { path: 'mercado', redirectTo: 'plataforma' },
   { path: 'historial', component: HistorialComponent },

@@ -96,6 +96,7 @@ export interface SignalSummary {
 
 export interface JobStatus {
   status: 'idle' | 'running' | 'done' | 'error' | string;
+  kind?: string;
   startedAt?: string;
   finishedAt?: string;
   market?: string;
@@ -106,6 +107,12 @@ export interface JobStatus {
   error?: string | null;
   reportPath?: string | null;
   summary?: SignalSummary | null;
+  chartName?: string;
+  /** id en hive box de señales (pipeline high/light/…) */
+  historyId?: number | null;
+  /** id en historial MACD-quant */
+  macdQuantId?: number | null;
+  days?: number;
 }
 
 export interface LatestResponse {
@@ -134,6 +141,44 @@ export class SignalsApiService {
       `${this.base}/signals/run`,
       body
     );
+  }
+
+  /** Escaneo H4 de la semana + regenera PNG MACD-quant (soft-filter). */
+  macdQuantAnalyze(
+    market: Market,
+    days = 7
+  ): Observable<{ message: string; job: Partial<JobStatus> }> {
+    return this.http.post<{ message: string; job: Partial<JobStatus> }>(
+      `${this.base}/signals/macd-quant/analyze`,
+      { market, days }
+    );
+  }
+
+  macdQuantHistory(opts: {
+    page?: number;
+    pageSize?: number;
+    market?: Market | '';
+  } = {}): Observable<MacdQuantHistoryListResponse> {
+    const params: Record<string, string> = {
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 20),
+    };
+    if (opts.market) params['market'] = opts.market;
+    return this.http.get<MacdQuantHistoryListResponse>(
+      `${this.base}/signals/macd-quant/history`,
+      { params }
+    );
+  }
+
+  macdQuantHistoryGet(id: number): Observable<MacdQuantHistoryDetail> {
+    return this.http.get<MacdQuantHistoryDetail>(
+      `${this.base}/signals/macd-quant/history/${id}`
+    );
+  }
+
+  macdQuantHistoryChartUrl(id: number, bust?: number | string): string {
+    const q = bust != null ? `?t=${encodeURIComponent(String(bust))}` : '';
+    return `${this.base}/signals/macd-quant/history/${id}/chart${q}`;
   }
 
   status(): Observable<JobStatus> {
@@ -323,6 +368,44 @@ export interface HistoryDetail extends HistoryListItem {
   preview?: string | null;
   command?: string | null;
   exitCode?: number | null;
+}
+
+/** Entrada de historial MACD-quant (soft-filter H4). */
+export interface MacdQuantHistoryListItem {
+  id: number;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  market: string;
+  timeframe: string;
+  days?: number | null;
+  status: string;
+  softFilter?: {
+    role?: string;
+    neverTriggerAlone?: boolean;
+    disclaimer?: string;
+    macdQuant?: boolean;
+    days?: number | string;
+  };
+  params?: { fast?: number; slow?: number; signal?: number };
+  hasPng?: boolean;
+  error?: string | null;
+}
+
+export interface MacdQuantHistoryListResponse {
+  items: MacdQuantHistoryListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface MacdQuantHistoryDetail extends MacdQuantHistoryListItem {
+  sourcePngPath?: string | null;
+  pngName?: string | null;
+  command?: string | null;
+  exitCode?: number | null;
+  logsTail?: string | null;
 }
 
 export type ArtifactKind =

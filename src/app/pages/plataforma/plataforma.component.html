@@ -11,6 +11,7 @@
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
       <a routerLink="/plataforma" routerLinkActive="active">Plataforma</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
       <a routerLink="/historial" routerLinkActive="active">Historial</a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
     </nav>
@@ -115,6 +116,14 @@
         preview seguro, categorías y bias en meta local.
       </p>
       <a routerLink="/wiki" class="btn-ghost sm">Abrir Wiki</a>
+    </article>
+    <article class="tool-card">
+      <h3>MACD-quant</h3>
+      <p>
+        Soft-filter E1 en <strong>H4</strong> (semana · nunca trigger solo): mini-chart,
+        «Nuevo análisis», <code>plot_macd_quant</code> y artifact quant.
+      </p>
+      <a routerLink="/macd-quant" class="btn-ghost sm">Abrir MACD</a>
     </article>
   </section>
 

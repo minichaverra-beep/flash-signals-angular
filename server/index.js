@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
+const macdQuantStore = require('./db/macd-quant-store');
 const artifacts = require('./artifacts');
 
 const PORT = Number(process.env.PORT || 3847);
@@ -459,7 +460,8 @@ function parseScorecard(md) {
         const frac = raw.match(/(\d+)\s*\/\s*(\d+)/);
         if (frac) value = Math.round((Number(frac[1]) / Number(frac[2])) * 1000) / 10;
       }
-      if (value == null && /fail|n\/d|omit/i.test(raw)) value = 0;
+      // CRT "fail" → 0%. Neural "n/d" / omitido must stay null (was wrongly shown as 0% bar).
+      if (value == null && /^fail$/i.test(raw.trim())) value = 0;
       return { label, value, raw, weight, note };
     })
     .filter((r) => r.label && !/^capa$/i.test(r.label))
@@ -645,7 +647,10 @@ function parseSummary(md, market, tier) {
   if (scorecard.length) {
     for (const s of scorecard) {
       if (/combinado/i.test(s.label)) continue;
-      if (s.value != null) pushScore(s.label.replace(/\s*\(.*?\)\s*/g, '').slice(0, 28), s.value);
+      // Skip omitted layers (n/d) — do not paint a fake 0% Neural bar
+      if (s.value == null) continue;
+      if (/n\/d/i.test(s.raw || '') || /omitido/i.test(s.note || '')) continue;
+      pushScore(s.label.replace(/\s*\(.*?\)\s*/g, '').slice(0, 28), s.value);
     }
     if (combinedFromCard?.value != null) pushScore('Combinado', combinedFromCard.value);
   } else {
@@ -817,6 +822,274 @@ app.get('/api/signals/chart', (req, res) => {
   }
   res.setHeader('Content-Type', 'image/png');
   res.sendFile(chartFull);
+});
+
+/** Mini-chart MACD-quant H4 (soft-filter) desde live/<sym>_h4_macd_quant.png */
+app.get('/api/signals/macd-chart', (req, res) => {
+  const market = normalizeMarket(req.query.market) || 'btc';
+  if (!normalizeMarket(req.query.market) && req.query.market) {
+    return res.status(400).json({ error: MARKET_ERROR });
+  }
+  // plot_macd_quant usa btc|us30|xau; API markets usan xauusd
+  const fileKey = market === 'xauusd' ? 'xau' : market;
+  const chartName = `${fileKey}_h4_macd_quant.png`;
+  const liveRoot = path.resolve(path.join(TRADING_ROOT, 'live'));
+  const chartFull = path.resolve(livePath(chartName));
+  const underLive =
+    chartFull === liveRoot ||
+    chartFull.toLowerCase().startsWith(liveRoot.toLowerCase() + path.sep);
+  if (!underLive) {
+    return res.status(400).json({ error: 'path inválido' });
+  }
+  if (!fs.existsSync(chartFull)) {
+    return res.status(404).json({
+      error:
+        'PNG MACD H4 no encontrado. Genera con: python -m scripts.plot_macd_quant --days 7 --force-refresh  o usa «Nuevo análisis»',
+      chart: chartName,
+    });
+  }
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(chartFull);
+});
+
+/**
+ * Nuevo análisis MACD-quant: escaneo H4 de la semana (UTC now) + regenera PNG.
+ * Spawna `python -m scripts.plot_macd_quant --symbol … --days 7 --force-refresh`.
+ */
+app.post('/api/signals/macd-quant/analyze', (req, res) => {
+  if (currentJob.status === 'running') {
+    return res.status(409).json({
+      error: 'Ya hay un job en ejecución. Espera a que termine.',
+      job: currentJob,
+    });
+  }
+
+  const body = { ...(req.body || {}) };
+  const market = normalizeMarket(body.market) || 'btc';
+  if (!normalizeMarket(body.market) && body.market) {
+    return res.status(400).json({ error: MARKET_ERROR });
+  }
+
+  if (!fs.existsSync(TRADING_ROOT)) {
+    return res.status(500).json({
+      error: 'CURSOR_TRADING_ROOT no existe o no es accesible',
+    });
+  }
+
+  if (!SIGNALS_RUNNABLE) {
+    return res.status(503).json({
+      error:
+        'Nuevo análisis requiere API en host Windows (run-api.ps1). El contenedor Linux solo cubre UI/health.',
+      hint: 'En el host Windows: .\\run-api.ps1',
+      platform: process.platform,
+    });
+  }
+
+  const cliSymbol = market === 'xauusd' ? 'xau' : market;
+  const days = Number(body.days);
+  const daysArg = Number.isFinite(days) && days > 0 ? String(days) : '7';
+  const py = process.env.PYTHON || process.env.PYTHON_EXE || 'python';
+  // --force-refresh: semana anclada a UTC now (no cola de parquet stale)
+  const args = [
+    '-m',
+    'scripts.plot_macd_quant',
+    '--symbol',
+    cliSymbol,
+    '--days',
+    daysArg,
+    '--force-refresh',
+  ];
+  const command = `${py} ${args.join(' ')}`;
+
+  currentJob = {
+    status: 'running',
+    kind: 'macd-quant',
+    startedAt: new Date().toISOString(),
+    finishedAt: undefined,
+    market,
+    tier: 'macd-quant',
+    command,
+    exitCode: null,
+    logs: [
+      `>> ${command}`,
+      `[info] Escaneo H4 · semana (~${daysArg}d) terminando UTC now · force-refresh · soft-filter E1 (nunca trigger)`,
+    ],
+    error: null,
+    reportPath: null,
+    summary: null,
+    flags: { macdQuant: true, days: daysArg, forceRefresh: true },
+    entry: null,
+    historyId: null,
+    macdQuantId: null,
+    chartName: `${cliSymbol}_h4_macd_quant.png`,
+    days: Number(daysArg),
+  };
+
+  const child = spawn(py, args, {
+    cwd: TRADING_ROOT,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    windowsHide: true,
+    shell: false,
+  });
+
+  const pushLog = (chunk, stream) => {
+    const text = chunk.toString('utf8');
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      currentJob.logs.push(`[${stream}] ${line}`);
+      if (currentJob.logs.length > 500) currentJob.logs.shift();
+    }
+  };
+
+  child.stdout.on('data', (d) => pushLog(d, 'out'));
+  child.stderr.on('data', (d) => pushLog(d, 'err'));
+
+  child.on('error', (err) => {
+    currentJob.status = 'error';
+    currentJob.finishedAt = new Date().toISOString();
+    currentJob.error = err.message;
+    currentJob.logs.push(`[error] ${err.message}`);
+  });
+
+  child.on('close', (code) => {
+    currentJob.exitCode = code;
+    currentJob.finishedAt = new Date().toISOString();
+    const chartFull = livePath(currentJob.chartName);
+    void (async () => {
+      const ok = code === 0 && fs.existsSync(chartFull);
+      if (ok) {
+        currentJob.reportPath = chartFull;
+        currentJob.logs.push(`[ok] PNG H4: ${currentJob.chartName}`);
+      } else {
+        currentJob.error =
+          code === 0
+            ? `PNG no generado: ${currentJob.chartName}`
+            : `plot_macd_quant salió con código ${code}`;
+        currentJob.logs.push(`[error] ${currentJob.error}`);
+      }
+      const finalStatus = ok ? 'done' : 'error';
+      // Sigue en running hasta guardar → el poll recibe macdQuantId con done/error.
+      await persistMacdQuantAnalysis(
+        currentJob,
+        ok ? chartFull : null,
+        finalStatus
+      );
+      currentJob.status = finalStatus;
+    })();
+  });
+
+  res.status(202).json({
+    message: 'Nuevo análisis MACD H4 en ejecución (semana de mercado)…',
+    job: {
+      status: currentJob.status,
+      kind: currentJob.kind,
+      market: currentJob.market,
+      startedAt: currentJob.startedAt,
+      command: currentJob.command,
+    },
+  });
+});
+
+/**
+ * Auto-guarda análisis MACD-quant en SQLite + copia durable del PNG.
+ * @param {typeof currentJob} job
+ * @param {string|null} chartFull
+ * @param {string} [statusOverride]
+ */
+async function persistMacdQuantAnalysis(job, chartFull, statusOverride) {
+  if (job.macdQuantPersisted) return;
+  job.macdQuantPersisted = true;
+  try {
+    const logs = Array.isArray(job.logs) ? job.logs : [];
+    const result = await macdQuantStore.insertAnalysis({
+      market: job.market,
+      timeframe: 'H4',
+      days: job.days != null ? Number(job.days) : Number(job.flags?.days) || 7,
+      status: statusOverride || job.status,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+      sourcePngPath: chartFull || null,
+      command: job.command,
+      exitCode: job.exitCode,
+      error: job.error || null,
+      softFilter: {
+        macdQuant: true,
+        days: job.days != null ? job.days : job.flags?.days,
+        neverTriggerAlone: true,
+      },
+      params: macdQuantStore.DEFAULT_PARAMS,
+      logsTail: logs.slice(-40).join('\n'),
+    });
+    job.macdQuantId = result.id;
+    job.logs.push(
+      result.pngName
+        ? `[macd-quant] Guardado id=${result.id} · PNG durable: ${result.pngName}`
+        : `[macd-quant] Guardado id=${result.id} (sin PNG)`
+    );
+  } catch (err) {
+    job.logs.push(`[macd-quant] No se pudo guardar: ${err.message}`);
+    console.error('[macd-quant] persist error:', err);
+  }
+}
+
+/** Lista análisis MACD-quant preservados (filtro opcional por market). */
+app.get('/api/signals/macd-quant/history', async (req, res) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 20;
+    const marketRaw = req.query.market
+      ? String(req.query.market).toLowerCase()
+      : null;
+    if (marketRaw && !MARKETS.has(marketRaw)) {
+      return res.status(400).json({ error: MARKET_ERROR });
+    }
+    const data = await macdQuantStore.listAnalyses({
+      page,
+      pageSize,
+      market: marketRaw || null,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('[macd-quant] list:', err);
+    res.status(500).json({ error: 'No se pudo leer el historial MACD-quant' });
+  }
+});
+
+app.get('/api/signals/macd-quant/history/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const item = await macdQuantStore.getById(id);
+    if (!item) {
+      return res.status(404).json({ error: 'Análisis no encontrado' });
+    }
+    res.json(item);
+  } catch (err) {
+    console.error('[macd-quant] get:', err);
+    res.status(500).json({ error: 'No se pudo leer el análisis' });
+  }
+});
+
+app.get('/api/signals/macd-quant/history/:id/chart', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const file = await macdQuantStore.getChartFile(id);
+    if (!file) {
+      return res.status(404).json({ error: 'PNG del análisis no encontrado' });
+    }
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.sendFile(file.absPath);
+  } catch (err) {
+    console.error('[macd-quant] chart:', err);
+    res.status(500).json({ error: 'No se pudo servir el PNG' });
+  }
 });
 
 app.get('/api/zentinel', (req, res) => {
@@ -1350,7 +1623,11 @@ app.post('/api/signals/run', (req, res) => {
   });
 });
 
-void Promise.all([historyStore.init(), wikiStore.init()])
+void Promise.all([
+  historyStore.init(),
+  wikiStore.init(),
+  macdQuantStore.init(),
+])
   .then(() => {
     app.listen(PORT, BIND_HOST, () => {
       console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
@@ -1358,6 +1635,8 @@ void Promise.all([historyStore.init(), wikiStore.init()])
       console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
       console.log(`Historial (hive box): ${historyStore.DB_PATH}`);
       console.log(`Wiki meta: ${wikiStore.DB_PATH}`);
+      console.log(`MACD-quant historial: ${macdQuantStore.DB_PATH}`);
+      console.log(`MACD-quant PNG: ${macdQuantStore.CHARTS_DIR}`);
     });
   })
   .catch((err) => {
