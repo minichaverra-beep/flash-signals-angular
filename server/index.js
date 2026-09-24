@@ -848,6 +848,43 @@ app.delete('/api/history/:id', async (req, res) => {
   }
 });
 
+/** Anotaciones trader: comment + resultado (ganada|perdida). */
+app.patch('/api/history/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'comment')) {
+    patch.comment = body.comment;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'resultado')) {
+    patch.resultado = body.resultado;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'result') && patch.resultado === undefined) {
+    patch.resultado = body.result;
+  }
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({
+      error: 'Envía comment y/o resultado (ganada|perdida|vacío)',
+    });
+  }
+  try {
+    const result = await historyStore.updateAnnotation(id, patch);
+    if (!result.ok && result.error === 'not_found') {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo actualizar' });
+    }
+    res.json({ ok: true, item: result.item });
+  } catch (err) {
+    console.error('[history] patch:', err);
+    res.status(500).json({ error: 'No se pudo guardar el comentario/resultado' });
+  }
+});
+
 app.delete('/api/history', async (_req, res) => {
   try {
     const result = await historyStore.clearAll();

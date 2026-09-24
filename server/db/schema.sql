@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS signal_history (
   preview TEXT,
   command TEXT,
   exit_code INTEGER,
-  error TEXT
+  error TEXT,
+  -- Anotaciones del trader (editables desde /historial)
+  comment TEXT,
+  resultado TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_signal_history_created

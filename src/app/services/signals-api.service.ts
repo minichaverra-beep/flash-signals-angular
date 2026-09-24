@@ -180,6 +180,16 @@ export class SignalsApiService {
     return this.http.delete<{ ok: boolean; deleted: number }>(`${this.base}/history`);
   }
 
+  historyPatch(
+    id: number,
+    body: { comment?: string | null; resultado?: HistoryResultado | null }
+  ): Observable<{ ok: boolean; item: HistoryDetail }> {
+    return this.http.patch<{ ok: boolean; item: HistoryDetail }>(
+      `${this.base}/history/${id}`,
+      body
+    );
+  }
+
   artifactsList(): Observable<ArtifactsListResponse> {
     return this.http.get<ArtifactsListResponse>(`${this.base}/artifacts`);
   }
@@ -241,6 +251,8 @@ export class SignalsApiService {
   }
 }
 
+export type HistoryResultado = 'ganada' | 'perdida';
+
 export interface HistoryListItem {
   id: number;
   createdAt: string;
@@ -256,6 +268,10 @@ export interface HistoryListItem {
   entry?: string | null;
   error?: string | null;
   flags?: Record<string, boolean>;
+  /** Comentario del trader (editable, hive box local). */
+  comment?: string | null;
+  /** Resultado de la operación: ganada | perdida. */
+  resultado?: HistoryResultado | null;
 }
 
 export interface HistoryListResponse {

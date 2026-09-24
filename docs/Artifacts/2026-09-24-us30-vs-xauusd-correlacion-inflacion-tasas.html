@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>US30 vs XAUUSD · Correlación · Inflación · Tasas · Flash Signals</title>
+  <meta name="description" content="Comparativo US30↔XAUUSD, regímenes R1–R4, matriz inflación×tasas, fórmulas de correlación y scorecard Flash Signals." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --accent: var(--teal);
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--red) 16%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+
+    .shell { max-width: var(--shell); margin: 0 auto; padding: 28px 22px 72px; }
+
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 22px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--red));
+    }
+
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    .chip.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: rgba(255,215,0,0.1); }
+
+    h1 {
+      font-family: var(--display); font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 68ch; line-height: 1.55; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+    }
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke); border-radius: var(--radius); padding: 14px 16px;
+    }
+    .stat .val { font-family: var(--display); font-size: 1.15rem; font-weight: 600; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat.fire .val { color: var(--fire); }
+    .stat.err .val { color: #ff8a8a; }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+    .stat.gold .val { color: var(--gold); }
+
+    .disclaimer {
+      margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+      background: var(--warn-dim); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8; font-size: 0.86rem; line-height: 1.45;
+    }
+
+    .tabs-wrap {
+      position: sticky; top: 0; z-index: 30;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px); border-bottom: 1px solid var(--stroke);
+      margin: 0 -22px 22px; padding: 12px 22px;
+    }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; max-width: var(--shell); margin: 0 auto; }
+    .tab {
+      appearance: none; border: 1px solid var(--stroke); background: var(--bg-elev);
+      color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.02em; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+    .tab:hover { color: var(--text); border-color: var(--stroke-strong); }
+    .tab.active, .tab:focus-visible {
+      background: linear-gradient(135deg, #ff8c00 0%, #cd1818 100%);
+      border-color: transparent; color: #fff; box-shadow: var(--glow); outline: none;
+    }
+
+    .no-js .panel { display: block !important; margin-bottom: 36px; padding-top: 8px; border-top: 1px solid var(--stroke); }
+    .no-js .panel:first-of-type { border-top: none; padding-top: 0; }
+    .has-js .panel { display: none; animation: fade 0.2s ease; }
+    .has-js .panel.active { display: block; }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    h2 {
+      font-family: var(--display); font-size: 1.4rem; letter-spacing: 0.03em;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    h3 {
+      font-family: var(--display); font-size: 1.05rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin: 26px 0 12px; color: var(--fire);
+    }
+    .section-lead { color: var(--muted); font-size: 0.92rem; margin-bottom: 18px; max-width: 72ch; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @media (max-width: 900px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .grid-4 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .card {
+      background: var(--bg-card); border: 1px solid var(--stroke);
+      border-radius: var(--radius); padding: 18px 18px 16px;
+    }
+    .card.a { border-top: 3px solid var(--ok); }
+    .card.b { border-top: 3px solid var(--err); }
+    .card.accent { border-top: 3px solid var(--teal); }
+    .card.amber-top { border-top: 3px solid var(--fire); }
+    .card.gold-top { border-top: 3px solid var(--gold); }
+    .card-title {
+      font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    }
+    .card p, .card li { font-size: 0.9rem; color: var(--muted); line-height: 1.55; }
+    .card ul { padding-left: 1.15rem; margin-top: 8px; }
+    .card li { margin-bottom: 6px; }
+    .card strong { color: var(--text); }
+
+    .badge {
+      font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+    }
+    .badge.up { background: var(--ok-dim); color: var(--ok); }
+    .badge.down { background: var(--err-dim); color: #ff8a8a; }
+    .badge.neu { background: rgba(196, 168, 255, 0.14); color: var(--violet); }
+    .badge.fire { background: var(--fire-dim); color: var(--fire); }
+    .badge.gold { background: rgba(255,215,0,0.12); color: var(--gold); }
+
+    .table-wrap {
+      overflow-x: auto; border: 1px solid var(--stroke); border-radius: var(--radius);
+      margin: 12px 0 22px; background: var(--bg-elev); -webkit-overflow-scrolling: touch;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+    th {
+      text-align: left; padding: 12px 14px; background: var(--bg-soft); color: var(--gold);
+      font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--stroke); white-space: nowrap; position: sticky; top: 0;
+    }
+    td {
+      padding: 12px 14px; border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top; color: var(--muted); line-height: 1.45;
+    }
+    td strong { color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: color-mix(in srgb, var(--fire) 6%, transparent); }
+
+    .tone-a td:first-child, .tone-b td:first-child, .tone-info td:first-child, .tone-warn td:first-child {
+      border-left: 3px solid transparent; padding-left: 12px;
+    }
+    .tone-a td:first-child { border-left-color: var(--ok); }
+    .tone-b td:first-child { border-left-color: var(--err); }
+    .tone-info td:first-child { border-left-color: var(--teal); }
+    .tone-warn td:first-child { border-left-color: var(--fire); }
+
+    .corr-inv { color: var(--ok); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-pos { color: #ff8a8a; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-mix { color: var(--warn); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-neu { color: #7ec8c9; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+
+    .corr-viz { display: grid; gap: 10px; margin: 8px 0 22px; }
+    .corr-row {
+      display: grid; grid-template-columns: minmax(120px, 150px) 1fr auto;
+      gap: 12px; align-items: center; background: var(--bg-card);
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 10px 14px; font-size: 0.84rem;
+    }
+    @media (max-width: 640px) { .corr-row { grid-template-columns: 1fr; gap: 6px; } }
+    .corr-row .pair { font-weight: 700; color: var(--text); }
+    .corr-row .hint { color: var(--muted-2); font-size: 0.78rem; text-align: right; }
+    .bar-track {
+      height: 10px; border-radius: 999px; background: var(--bg-soft);
+      border: 1px solid var(--stroke); overflow: hidden; position: relative;
+    }
+    .bar-track::before {
+      content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+      background: color-mix(in srgb, var(--gold) 40%, transparent);
+    }
+    .bar-fill { height: 100%; width: calc(var(--mag, 0.4) * 50%); border-radius: 999px; }
+    .bar-fill.inv { margin-left: calc(50% - (var(--mag, 0.4) * 50%)); background: linear-gradient(90deg, var(--ok), #7dffc0); }
+    .bar-fill.pos { margin-left: 50%; background: linear-gradient(90deg, #ff8a8a, var(--fire)); }
+    .bar-fill.mix { margin-left: calc(50% - 8%); width: 28%; background: linear-gradient(90deg, var(--warn), var(--fire)); }
+
+    .callout {
+      padding: 14px 16px; border-radius: 10px; margin: 16px 0;
+      font-size: 0.9rem; border: 1px solid var(--stroke); line-height: 1.5; color: var(--muted);
+    }
+    .callout.info { background: var(--info-dim); border-color: color-mix(in srgb, var(--teal) 45%, transparent); }
+    .callout.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .callout.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .callout.danger { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+    .callout strong {
+      display: block; margin-bottom: 6px; color: var(--text);
+      font-family: var(--display); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.9rem;
+    }
+
+    details.fold {
+      background: var(--bg-card); border: 1px solid var(--stroke);
+      border-radius: var(--radius); margin: 12px 0; overflow: hidden;
+    }
+    details.fold > summary {
+      list-style: none; cursor: pointer; padding: 14px 16px; font-weight: 700; font-size: 0.92rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; user-select: none;
+    }
+    details.fold > summary::-webkit-details-marker { display: none; }
+    details.fold > summary::after { content: "+"; font-family: var(--mono); color: var(--fire); font-size: 1.1rem; }
+    details.fold[open] > summary::after { content: "−"; }
+    details.fold > summary:hover { background: color-mix(in srgb, var(--fire) 8%, transparent); }
+    details.fold .fold-body { padding: 0 16px 16px; border-top: 1px solid var(--stroke); padding-top: 14px; }
+
+    .steps { display: grid; gap: 8px; margin: 14px 0; }
+    .step {
+      display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start;
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px; padding: 12px 14px;
+    }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #ff8c00, #cd1818); color: #fff;
+      font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--glow);
+    }
+    .step strong { display: block; font-size: 0.9rem; color: var(--text); }
+    .step span { font-size: 0.82rem; color: var(--muted); }
+
+    .matrix-cell {
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 14px; min-height: 110px;
+    }
+    .matrix-cell .mx-label {
+      font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--gold); margin-bottom: 8px;
+    }
+    .matrix-cell p { font-size: 0.84rem; color: var(--muted); margin: 0; }
+    .matrix-cell.ok-bg { border-top: 3px solid var(--ok); }
+    .matrix-cell.fire-bg { border-top: 3px solid var(--fire); }
+    .matrix-cell.gold-bg { border-top: 3px solid var(--gold); }
+    .matrix-cell.err-bg { border-top: 3px solid var(--err); }
+
+    .formula {
+      background: var(--bg-elev); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 16px 18px; margin: 12px 0 18px; overflow-x: auto;
+    }
+    .formula .fname {
+      font-family: var(--display); font-size: 0.85rem; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--fire); margin-bottom: 10px;
+    }
+    .formula .eq {
+      font-family: var(--mono); font-size: 0.88rem; color: #ffe9a8; line-height: 1.7;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .formula .ex {
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--stroke);
+      font-size: 0.82rem; color: var(--muted);
+    }
+    .formula .ex code { font-family: var(--mono); color: #7ec8c9; font-size: 0.8rem; }
+
+    .score-list { list-style: none; display: grid; gap: 8px; margin: 14px 0; }
+    .score-item {
+      display: flex; align-items: flex-start; gap: 12px; background: var(--bg-card);
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 12px 14px;
+      cursor: pointer; user-select: none; font-size: 0.9rem; color: var(--muted);
+    }
+    .score-item:hover { border-color: var(--stroke-strong); }
+    .score-item.checked {
+      border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+      background: var(--ok-dim); color: var(--text);
+    }
+    .score-item input { margin-top: 3px; accent-color: var(--ok); width: 16px; height: 16px; }
+    .score-item .n { font-family: var(--mono); font-size: 0.75rem; color: var(--fire); min-width: 1.5rem; }
+
+    .score-bar-wrap {
+      margin: 16px 0; background: var(--bg-soft); border-radius: 999px;
+      height: 12px; overflow: hidden; border: 1px solid var(--stroke);
+    }
+    .score-bar { height: 100%; width: 0%; background: var(--err); transition: width 0.25s, background 0.25s; }
+    .score-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.95rem; margin-bottom: 6px; gap: 12px; flex-wrap: wrap;
+    }
+    .score-meta .pass { color: var(--ok); font-weight: 700; }
+    .score-meta .fail { color: #ff8a8a; font-weight: 700; }
+
+    pre.tpl {
+      background: var(--bg-elev); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 16px; font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
+      overflow-x: auto; white-space: pre-wrap; line-height: 1.65;
+    }
+
+    .checklist label {
+      display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px;
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px;
+      margin-bottom: 8px; font-size: 0.9rem; color: var(--muted); cursor: pointer;
+    }
+    .checklist label:hover { border-color: var(--stroke-strong); }
+    .checklist input { margin-top: 3px; accent-color: var(--fire); }
+
+    .footer-meta {
+      margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--stroke);
+      color: var(--muted-2); font-size: 0.78rem; line-height: 1.5;
+    }
+    .footer-meta code { font-family: var(--mono); color: #7ec8c9; font-size: 0.75rem; }
+    .tag-code {
+      font-family: var(--mono); font-size: 0.76rem; background: var(--bg-soft);
+      padding: 2px 6px; border-radius: 4px; color: #7ec8c9; white-space: nowrap;
+    }
+
+    .skip-link {
+      position: absolute; left: -999px; top: 8px; background: var(--fire);
+      color: #111; padding: 8px 12px; border-radius: 8px; font-weight: 700; z-index: 100;
+    }
+    .skip-link:focus { left: 12px; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <div class="shell">
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">Flash Signals</span>
+        <span class="chip gold">US30 ↔ XAUUSD</span>
+        <span class="chip teal">Inflación · Tasas · ρ</span>
+        <span class="chip ok">v1.0 · Artefacto desk</span>
+      </div>
+      <h1>US30 vs XAUUSD</h1>
+      <p class="hero-sub">
+        Comparativo, correlación por régimen, matriz inflación × tasas reales, fórmulas
+        (Pearson / móvil / parcial / z-score) y plan de mesa para medir ρ a futuro.
+      </p>
+      <div class="stats">
+        <div class="stat fire"><div class="val">R1 Apetito</div><div class="lbl">US30↑ XAU↓ · ρ negativa</div></div>
+        <div class="stat ok"><div class="val">R2 Aversión</div><div class="lbl">US30↓ XAU↑ · ρ negativa</div></div>
+        <div class="stat gold"><div class="val">R3 Inflación</div><div class="lbl">XAU↑ · corr débil/+</div></div>
+        <div class="stat err"><div class="val">R4 Liquidez</div><div class="lbl">Ambos↓ · ρ+</div></div>
+      </div>
+      <div class="disclaimer">
+        No es consejo financiero. Las correlaciones cambian de régimen. Clasifica R1–R4 antes de size.
+        Umbral Flash: no comprar US30 “porque el oro baja” si ≥2 comprobaciones apuntan a R2/R4.
+      </div>
+    </header>
+
+    <nav class="tabs-wrap" aria-label="Tabla de contenidos">
+      <div class="tabs" role="tablist">
+        <a class="tab active" href="#resumen" data-tab="resumen" role="tab">Resumen</a>
+        <a class="tab" href="#comparativo" data-tab="comparativo" role="tab">Comparativo</a>
+        <a class="tab" href="#regimenes" data-tab="regimenes" role="tab">Regímenes</a>
+        <a class="tab" href="#inflacion" data-tab="inflacion" role="tab">Inflación &amp; tasas</a>
+        <a class="tab" href="#formulas" data-tab="formulas" role="tab">Fórmulas</a>
+        <a class="tab" href="#score" data-tab="score" role="tab">Puntuación</a>
+        <a class="tab" href="#checklist" data-tab="checklist" role="tab">Lista futura</a>
+      </div>
+    </nav>
+
+    <div id="contenido">
+
+    <!-- RESUMEN -->
+    <section id="resumen" class="panel active" role="tabpanel">
+      <h2>Resumen ejecutivo</h2>
+      <p class="section-lead">
+        Guía rápida para operar o filtrar el par <strong>US30 ↔ XAUUSD</strong> según régimen,
+        inflación y tasas reales. No es una señal aislada: primero clasifica, luego dimensiona.
+      </p>
+
+      <div class="callout info">
+        <strong>En una frase</strong>
+        Cuando hay apetito de riesgo y tasas reales altas, el Dow suele subir y el oro ceder (R1).
+        Cuando hay miedo, el Dow cae y el oro sube (R2). Si la liquidez se rompe, <em>ambos</em> pueden caer juntos (R4): ahí no operes el par.
+      </div>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Qué es cada mercado</div>
+          <ul>
+            <li><strong>US30:</strong> índice de renta variable (Dow) con apetito de riesgo; vive de crecimiento, liquidez y trayectoria de la Fed.</li>
+            <li><strong>XAUUSD:</strong> oro al contado; cobertura de inflación, geopolítica y aversión al riesgo; vive de las <em>tasas reales</em> y del dólar.</li>
+          </ul>
+        </div>
+        <div class="card gold-top">
+          <div class="card-title">Correlación típica</div>
+          <ul>
+            <li><strong>Intradía:</strong> débil y ruidosa (flujos).</li>
+            <li><strong>1–4 semanas:</strong> a menudo negativa (−0.20 a −0.60).</li>
+            <li><strong>Estrés (R4):</strong> puede volverse positiva (+0.30 o más) por liquidación.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Mapa de decisión (resumen)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Régimen</th>
+              <th>Qué ves</th>
+              <th>Qué hacer (mesa)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a">
+              <td><strong>R1</strong> Apetito / tasas reales ↑</td>
+              <td>US30↑ · XAU↓ · ρ negativa</td>
+              <td><strong>P1:</strong> comprar US30 / vender XAU (solo R1 confirmado)</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>R2</strong> Aversión / susto crecimiento</td>
+              <td>US30↓ · XAU↑ · ρ negativa fuerte</td>
+              <td><strong>P2:</strong> comprar XAU / reducir renta variable</td>
+            </tr>
+            <tr class="tone-warn">
+              <td><strong>R3</strong> Inflación pegajosa + liquidez</td>
+              <td>US30 mixto · XAU↑ · corr. débil o +</td>
+              <td>Priorizar oro; renta variable selectiva</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>R4</strong> Crisis de liquidez</td>
+              <td>US30↓ · XAU↓ · ρ positiva</td>
+              <td><strong>P3:</strong> no operar el par · efectivo</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid-3">
+        <div class="card accent">
+          <div class="card-title">Inflación</div>
+          <p>Sorpresa al alza: el oro puede subir si hay cobertura; el Dow sufre si comprimen múltiplos. Inflación bajando ordenada: a menudo R1 (Dow↑ oro↓).</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">Tasas reales</div>
+          <p>Tasa real ↑ → oro bajo presión (caro de mantener). Tasa real ↓ → oro favorecido; el Dow suele beneficiarse salvo pánico (entonces R2).</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">Regla Flash</div>
+          <p>No comprar US30 solo porque el oro baja. Si ≥2 señales apuntan a R2/R4, el filtro manda. Puntuación del par ≥7/10.</p>
+        </div>
+      </div>
+
+      <div class="callout ok">
+        <strong>Umbrales ρ (ventana 60)</strong>
+        ρ⁶⁰ &lt; −0.35 → sesgo R1/R2 · ρ⁶⁰ &gt; +0.25 → sospechar R4 ·
+        si |Δρ⁶⁰| &gt; 0.25 en ≤5 sesiones → reclasificar régimen antes de dimensionar.
+      </div>
+
+
+      <div class="corr-viz" aria-label="Correlación por horizonte">
+        <div class="corr-row">
+          <span class="pair">Intradía</span>
+          <div class="bar-track"><div class="bar-fill mix"></div></div>
+          <span class="hint corr-mix">débil / ruidosa · flujos</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">1–4 semanas</span>
+          <div class="bar-track"><div class="bar-fill inv" style="--mag:0.4"></div></div>
+          <span class="hint corr-inv">−0.20…−0.60 · a menudo inverso</span>
+        </div>
+        <div class="corr-row">
+          <span class="pair">Estrés / R4</span>
+          <div class="bar-track"><div class="bar-fill pos" style="--mag:0.35"></div></div>
+          <span class="hint corr-pos">puede → +0.30+ · liquidación</span>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card amber-top">
+          <div class="card-title">US30 <span class="badge fire">Apetito riesgo</span></div>
+          <ul>
+            <li>Índice de renta variable (Dow 30) — sensibilidad a crecimiento y liquidez</li>
+            <li>Sensible a márgenes, trayectoria de la Fed, VIX y DXY</li>
+            <li>En Flash: continuación E1 + CTR H1 (ventaja calibrada)</li>
+          </ul>
+        </div>
+        <div class="card gold-top">
+          <div class="card-title">XAUUSD <span class="badge gold">Cobertura</span></div>
+          <ul>
+            <li>Oro al contado — monetario / inflación / geopolítica</li>
+            <li>Sensible a <strong>tasas reales</strong>, DXY y sorpresa de IPC (CPI)</li>
+            <li>En Flash: filtro de régimen, no señal inventada</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout ok">
+        <strong>Regla desk</strong>
+        Clasifica R1–R4 <em>antes</em> de operar el par. Puntuación ≥7/10.
+        Tags: <span class="tag-code">REGIME_R1_RISKON</span>
+        <span class="tag-code">REGIME_R2_RISKOFF</span>
+        <span class="tag-code">REGIME_R3_INFL</span>
+        <span class="tag-code">REGIME_R4_LIQUIDITY</span>
+      </div>
+    </section>
+
+    <!-- COMPARATIVO -->
+    <section id="comparativo" class="panel" role="tabpanel">
+      <h2>Comparativo lado a lado</h2>
+      <p class="section-lead">Sensibilidades típicas (mapa de sesgo de mesa; no son betas fijas).</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>US30</th>
+              <th>XAUUSD</th>
+              <th>Implicación para ρ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="tone-warn">
+              <td><strong>Beta SPX/NDX</strong></td>
+              <td>Alta (+)</td>
+              <td>Baja / nula</td>
+              <td>El apetito de riesgo empuja ρ negativa si el oro está flojo</td>
+            </tr>
+            <tr class="tone-info">
+              <td><strong>DXY ↑</strong></td>
+              <td>Mixto / presión</td>
+              <td>Presión bajista fuerte</td>
+              <td>Ambos pueden ceder; ρ ambigua</td>
+            </tr>
+            <tr class="tone-a">
+              <td><strong>10Y real ↑</strong></td>
+              <td>Mixto (crecimiento vs financieras)</td>
+              <td>Presión bajista (oport. costo)</td>
+              <td>Sesgo R1: US30 relativo ↑ vs XAU</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>10Y real ↓</strong></td>
+              <td>Suele beneficiarse (duración / liquidez)</td>
+              <td>Alcista</td>
+              <td>Puede → R3 (ambos↑) o R2 si hay susto de crecimiento</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>VIX ↑</strong></td>
+              <td>Bajista</td>
+              <td>Alcista (salvo R4)</td>
+              <td>ρ negativa (R2)</td>
+            </tr>
+            <tr class="tone-warn">
+              <td><strong>Sorpresa CPI ↑</strong></td>
+              <td>Presión (múltiplos)</td>
+              <td>↑ si actúa como cobertura; ↓ si las tasas reales suben fuerte</td>
+              <td>Depende del canal de tasas</td>
+            </tr>
+            <tr class="tone-info">
+              <td><strong>Liquidez / margen</strong></td>
+              <td>Caída por aversión al riesgo</td>
+              <td>Puede caer (venta forzada)</td>
+              <td>ρ positiva forzada = régimen R4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Impulsores típicos</h3>
+      <div class="grid-3">
+        <div class="card accent">
+          <div class="card-title">Crecimiento</div>
+          <p>PMI / resultados → US30. El oro reacciona vía tasas y apetito de riesgo, no vía beneficios (EPS).</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">Liquidez &amp; Fed</div>
+          <p>La trayectoria de tasas y QT/QE mueven ambos; el oro mira más la <em>tasa real</em>.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">Geopolítica</div>
+          <p>Prima de riesgo: XAU↑; US30 a menudo↓ → R2. Si pánico y se busca efectivo: R4.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- REGÍMENES -->
+    <section id="regimenes" class="panel" role="tabpanel">
+      <h2>Regímenes R1–R4</h2>
+      <p class="section-lead">Clasificar ANTES de operar el par. Umbral: no comprar US30 “porque el oro baja” si ≥2 comprobaciones → R2/R4.</p>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">R1 — Apetito de riesgo / tasas reales ↑ <span class="badge up">ρ−</span></div>
+          <ul>
+            <li><strong>US30 ↑ · XAU ↓</strong></li>
+            <li>Crecimiento bien + tasas reales suben o se mantienen altas</li>
+            <li>Corr negativa clásica</li>
+            <li>Tag: <span class="tag-code">REGIME_R1_RISKON</span></li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">R2 — Aversión al riesgo / susto de crecimiento <span class="badge down">ρ− fuerte</span></div>
+          <ul>
+            <li><strong>US30 ↓ · XAU ↑</strong></li>
+            <li>Huida a la calidad; VIX↑; las tasas pueden bajar por pánico</li>
+            <li>No confundir con R1 solo porque el oro baje en otra cinta</li>
+            <li>Tag: <span class="tag-code">REGIME_R2_RISKOFF</span></li>
+          </ul>
+        </div>
+        <div class="card gold-top">
+          <div class="card-title">R3 — Inflación pegajosa + liquidez <span class="badge gold">ρ débil / +</span></div>
+          <ul>
+            <li><strong>US30 mixto · XAU ↑</strong></li>
+            <li>Cobertura de inflación con liquidez aún presente</li>
+            <li>Corr débil o positiva suave</li>
+            <li>Tag: <span class="tag-code">REGIME_R3_INFL</span></li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">R4 — Crisis de liquidez / margen <span class="badge down">ρ+</span></div>
+          <ul>
+            <li><strong>US30 ↓ · XAU ↓</strong> — el efectivo manda</li>
+            <li>Correlación positiva forzada; operar el par es peligroso</li>
+            <li>ρ⁶⁰ &gt; +0.25 → sospechar régimen R4</li>
+            <li>Tag: <span class="tag-code">REGIME_R4_LIQUIDITY</span> · <span class="tag-code">CORR_US30_XAU_POS_LIQ</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <details class="fold" open>
+        <summary>Clasificador rápido (checks)</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead>
+                <tr><th>Check</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>US30 5d</strong></td>
+                  <td>↑</td><td>↓</td><td>mixto</td><td>↓ fuerte</td>
+                </tr>
+                <tr>
+                  <td><strong>XAU 5d</strong></td>
+                  <td>↓</td><td>↑</td><td>↑</td><td>↓</td>
+                </tr>
+                <tr>
+                  <td><strong>Real yield 5d</strong></td>
+                  <td>↑ / alto</td><td>↓ pánico</td><td>↓ o pegajosa</td><td>mixto / pico</td>
+                </tr>
+                <tr>
+                  <td><strong>VIX</strong></td>
+                  <td>↓ / estable</td><td>↑</td><td>mixto</td><td>↑↑</td>
+                </tr>
+                <tr>
+                  <td><strong>ρ⁶⁰</strong></td>
+                  <td>&lt; −0.35</td><td>&lt; −0.35</td><td>≈0 / leve+</td><td>&gt; +0.25</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <h3>Playbooks P1–P3</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Setup</th><th>Régimen</th><th>Sesgo</th><th>Salida forzada</th></tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a">
+              <td><strong>P1</strong> Comprar US30 / vender XAU</td>
+              <td>Solo con R1 confirmado</td>
+              <td>Renta variable con apetito; oro flojo</td>
+              <td>ρ⁶⁰ → + · pico de VIX · la tasa real se revierte</td>
+            </tr>
+            <tr class="tone-b">
+              <td><strong>P2</strong> Comprar XAU / reducir renta variable</td>
+              <td>R2</td>
+              <td>Proteger / cubrir</td>
+              <td>Rebote de bolsas + tasa real↑ fuerte</td>
+            </tr>
+            <tr class="tone-warn">
+              <td><strong>P3</strong> No operar el par</td>
+              <td>R4</td>
+              <td>Efectivo / tamaño 0 en el par</td>
+              <td>Esperar ρ⁶⁰ &lt; 0 y que el VIX se normalice</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <strong>Size correlacionado</strong>
+        <code style="font-family:var(--mono);font-size:0.82rem;color:#ffe9a8">size_efectivo = size_plan × f_regimen × f_corr</code><br />
+        Comprar ambos (US30+XAU) ≤ <strong>0.75×</strong> · Par US30 vs XAU ≤ <strong>1.0×</strong> ·
+        f_regimen: 1.0 si R1/R2 claros · 0.5 si mixto · 0.0 en R4 si intentabas el par.
+      </div>
+    </section>
+
+    <!-- INFLACIÓN & TASAS -->
+    <section id="inflacion" class="panel" role="tabpanel">
+      <h2>Inflación &amp; tasas</h2>
+      <p class="section-lead">
+        La correlación US30–XAU es a menudo un <em>reflejo</em> de las tasas reales y del régimen de inflación.
+        Tasa real ≈ nominal − inflación de equilibrio (o rendimiento TIPS).
+      </p>
+
+      <h3>Canal inflación (CPI / PCE / core)</h3>
+      <div class="grid-2">
+        <div class="card amber-top">
+          <div class="card-title">Inflación ↑ sorpresa</div>
+          <ul>
+            <li>Si tasas reales ↓ o narrativa de cobertura → <strong>XAU↑</strong></li>
+            <li>Si hay compresión de múltiplos → <strong>US30↓</strong></li>
+            <li>Si la Fed es agresiva (hawkish) + tasas reales↑ fuertes → el XAU también bajo presión</li>
+          </ul>
+        </div>
+        <div class="card a">
+          <div class="card-title">Inflación ↓ ordenada</div>
+          <ul>
+            <li>Tasas↓ / apetito de riesgo → <strong>US30↑ XAU↓</strong> (R1)</li>
+            <li>Aterrizaje suave = correlación negativa clásica</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Canal tasas (Fed · 2Y · 10Y · tasa real)</h3>
+      <div class="grid-2">
+        <div class="card b">
+          <div class="card-title">Tasas reales ↑</div>
+          <p>El costo de oportunidad del oro ↑ → presión <strong>XAU↓</strong>. Renta variable mixta (crecimiento vs financieras). Sesgo relativo R1.</p>
+        </div>
+        <div class="card a">
+          <div class="card-title">Tasas reales ↓</div>
+          <p><strong>XAU↑</strong>; US30 suele beneficiarse (liquidez / duración). Cuidado: si es por pánico → R2, no R1.</p>
+        </div>
+      </div>
+
+      <h3>Matriz 2×2 de mesa — inflación × tasas reales</h3>
+      <div class="grid-2">
+        <div class="matrix-cell ok-bg">
+          <div class="mx-label">Inflación ↓ · Tasas reales ↓</div>
+          <p><strong>US30↑ · XAU↑/mantener</strong> — R3 ligero / aterrizaje suave con oro sostenido. Corr. débil o + suave.</p>
+        </div>
+        <div class="matrix-cell gold-bg">
+          <div class="mx-label">Inflación ↑ · Tasas reales ↓</div>
+          <p><strong>XAU↑ · US30↓/mixto</strong> — cobertura de inflación con tasas reales flojas. Cercano a R3.</p>
+        </div>
+        <div class="matrix-cell fire-bg">
+          <div class="mx-label">Inflación ↓ · Tasas reales ↑</div>
+          <p><strong>US30 mixto · XAU↓</strong> — R1 clásico (oro caro de mantener).</p>
+        </div>
+        <div class="matrix-cell err-bg">
+          <div class="mx-label">Inflación ↑ · Tasas reales ↑</div>
+          <p><strong>US30↓ · XAU↓ o mantener</strong> — estanflación / riesgo R4 si hay liquidación. Evitar operar el par a ciegas.</p>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <strong>Lista Flash</strong>
+        No comprar US30 solo porque el oro baja si ≥2 comprobaciones apuntan a R2/R4
+        (VIX↑, bolsas↓, ρ⁶⁰&gt;0, pánico en DXY, pico de tasa real por estrés).
+      </div>
+    </section>
+
+    <!-- FÓRMULAS -->
+    <section id="formulas" class="panel" role="tabpanel">
+      <h2>Fórmulas</h2>
+      <p class="section-lead">Notación: x = retornos US30 · y = retornos XAUUSD · N = tamaño de ventana · z = Δ tasa real.</p>
+
+      <div class="formula">
+        <div class="fname">1 · Retornos</div>
+        <div class="eq">r_t = ln(P_t / P_{t-1})     ← preferido
+r_t = (P_t − P_{t-1}) / P_{t-1}   ← simple</div>
+        <div class="ex">Ejemplo: P₀=42000, P₁=42210 → r = ln(42210/42000) ≈ <code>+0.00499</code> (≈0.50%).</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">2 · Correlación de Pearson (muestra)</div>
+        <div class="eq">ρ_xy = Σ (x_i − x̄)(y_i − ȳ)
+        ─────────────────────────────────────────
+        √[Σ (x_i − x̄)²]  ·  √[Σ (y_i − ȳ)²]</div>
+        <div class="ex">Ventana N barras. ρ ∈ [−1, +1]. Desk: ρ⁶⁰ &lt; −0.35 → R1/R2; ρ⁶⁰ &gt; +0.25 → sospechar régimen R4.</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">3 · Covarianza / beta del par</div>
+        <div class="eq">Cov(x,y) = 1/(N−1) · Σ (x_i − x̄)(y_i − ȳ)
+
+β_{XAU|US30} = Cov(r_XAU, r_US30) / Var(r_US30)</div>
+        <div class="ex">Ejemplo: Cov = −0.000012, Var(US30)=0.00004 → β ≈ <code>−0.30</code> (XAU se mueve ~−0.3× el move de US30 en media).</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">4 · Correlación móvil (rolling)</div>
+        <div class="eq">ρ_t^(W) = Pearson{ r_{t−W+1} , … , r_t }
+
+Ventanas: W = 20 / 60 / 120 sesiones
+         o 48 / 168 barras H1</div>
+        <div class="ex">Señal régimen: si |Δρ⁶⁰| &gt; 0.25 en ≤5 sesiones → re-clasificar R1–R4.</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">5 · Spearman (robusta)</div>
+        <div class="eq">ρ_Spearman = Pearson( rank(r_US30) , rank(r_XAU) )</div>
+        <div class="ex">Útil con valores atípicos de crisis (R4). Si Pearson y Spearman divergen → estrés / colas.</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">6 · Correlación parcial | tasa real</div>
+        <div class="eq">ρ_{US30,XAU | z}   donde z = Δ tasa real (o Δ 10Y TIPS)
+
+¿La corr. US30–XAU es “pura” o es un reflejo de las tasas?</div>
+        <div class="ex">Si ρ parcial ≈ 0 pero ρ simple es fuerte → el impulsor son las tasas, no un “diferencial renta variable–oro” autónomo.</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">7 · Z-score del diferencial (monitoreo, no arbitraje a ciegas)</div>
+        <div class="eq">s_t = z(r_US30,t) − β̂ · z(r_XAU,t)
+   (o ratio logarítmico de precios normalizados)
+
+z_t = (s_t − μ_W) / σ_W</div>
+        <div class="ex">|z| &gt; 2 = extremo estadístico. En R4 no asumas reversión a la media del par.</div>
+      </div>
+
+      <div class="formula">
+        <div class="fname">8 · Hit-rate / score de régimen</div>
+        <div class="eq">score = Σ comprobaciones binarias  (sorpresa inflación, Δ tasa real 5d,
+         Δ DXY 5d, VIX, signo ρ⁶⁰)  →  /10</div>
+        <div class="ex">Operar el par solo si la puntuación ≥ 7 (ver pestaña Puntuación).</div>
+      </div>
+
+      <div class="callout warn">
+        <strong>Tags de correlación</strong>
+        <span class="tag-code">CORR_US30_XAU_NEG</span>
+        <span class="tag-code">CORR_US30_XAU_POS_LIQ</span>
+        — registrar junto con ρ₆₀ y tasa real 5d en el historial Flash.
+      </div>
+    </section>
+
+    <!-- SCORECARD -->
+    <section id="score" class="panel" role="tabpanel">
+      <h2>Puntuación previa a la operación (par US30–XAU)</h2>
+      <p class="section-lead js-only-hint">Marca cada comprobación. Mínimo <strong>7/10</strong>. Se guarda en este navegador.</p>
+
+      <div class="score-meta">
+        <span>Puntos: <strong id="score-num">0</strong> / 10</span>
+        <span id="score-verdict" class="fail">NO OPERAR</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" id="score-bar"></div></div>
+
+      <ul class="score-list" id="score-list">
+        <li class="score-item" data-i="0"><input type="checkbox" /><span class="n">01</span><span>¿Clasifiqué R1–R4 por escrito?</span></li>
+        <li class="score-item" data-i="1"><input type="checkbox" /><span class="n">02</span><span>¿ρ⁶⁰ (o Spearman 60) calculada y anotada?</span></li>
+        <li class="score-item" data-i="2"><input type="checkbox" /><span class="n">03</span><span>¿Tasa real a 5 días coherente con el régimen?</span></li>
+        <li class="score-item" data-i="3"><input type="checkbox" /><span class="n">04</span><span>¿Sorpresa CPI/PCE o narrativa de inflación alineada?</span></li>
+        <li class="score-item" data-i="4"><input type="checkbox" /><span class="n">05</span><span>¿DXY a 5 días y VIX no contradicen el sesgo?</span></li>
+        <li class="score-item" data-i="5"><input type="checkbox" /><span class="n">06</span><span>¿Setup técnico propio en US30 y/o XAU (no solo macro)?</span></li>
+        <li class="score-item" data-i="6"><input type="checkbox" /><span class="n">07</span><span>¿Stop y R:R definidos en cada leg?</span></li>
+        <li class="score-item" data-i="7"><input type="checkbox" /><span class="n">08</span><span>¿Tamaño × f_regimen × f_corr aplicado?</span></li>
+        <li class="score-item" data-i="8"><input type="checkbox" /><span class="n">09</span><span>¿Descartado el par si R4 (ρ+ por liquidación)?</span></li>
+        <li class="score-item" data-i="9"><input type="checkbox" /><span class="n">10</span><span>¿Salida forzada escrita (ρ / VIX / tasa real)?</span></li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>&lt;7 → no trade el par</strong>
+        Anota régimen + ρ₆₀ + tasa real 5d en bitácora / historial Flash.
+      </div>
+
+      <h3>Plantilla bitácora</h3>
+      <pre class="tpl">Fecha:
+Régimen R1–R4 + score /10:
+ρ20 / ρ60 / ρ120 / Spearman60:
+Tasa real 5d Δ · DXY 5d · VIX:
+Sorpresa CPI/PCE (si aplica):
+Sesgo US30 · Sesgo XAU · Setup (P1/P2/P3):
+Tamaño × f_regimen × f_corr:
+Salida forzada:
+Etiqueta Flash: REGIME_R? + CORR_US30_XAU_?
+Resultado + lección:</pre>
+    </section>
+
+    <!-- CHECKLIST FUTURO -->
+    <section id="checklist" class="panel" role="tabpanel">
+      <h2>Lista — medir la correlación a futuro</h2>
+      <p class="section-lead">Procedimiento reproducible para la mesa / Flash Signals.</p>
+
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div><strong>Elegir timeframe</strong><span>H1 mesa · D1 régimen</span></div></div>
+        <div class="step"><div class="step-num">2</div><div><strong>Calcular retornos logarítmicos</strong><span>r = ln(P_t / P_{t−1}) en US30 y XAU</span></div></div>
+        <div class="step"><div class="step-num">3</div><div><strong>Pearson móvil 20/60/120 + Spearman 60</strong><span>Anotar ρ y signo</span></div></div>
+        <div class="step"><div class="step-num">4</div><div><strong>Cruzar con Δ tasa real y sorpresa CPI</strong><span>Misma ventana — ¿reflejo de tasas?</span></div></div>
+        <div class="step"><div class="step-num">5</div><div><strong>Clasificar R1–R4 antes de size</strong><span>Umbrales: ρ⁶⁰&lt;−0.35 · ρ⁶⁰&gt;+0.25</span></div></div>
+        <div class="step"><div class="step-num">6</div><div><strong>Registrar en Flash</strong><span>Etiqueta de régimen + ρ₆₀ + tasa real 5d</span></div></div>
+        <div class="step"><div class="step-num">7</div><div><strong>Re-evaluar si |Δρ⁶⁰| &gt; 0.25 en ≤5 sesiones</strong><span>Cambio de régimen → plano / volver a puntuar</span></div></div>
+      </div>
+
+      <div class="checklist" id="bell-list">
+        <label><input type="checkbox" /> Temporalidad elegida (H1 / D1) y fuente de precios fijada</label>
+        <label><input type="checkbox" /> Retornos logarítmicos calculados (no solo niveles)</label>
+        <label><input type="checkbox" /> ρ20 / ρ60 / ρ120 + Spearman60 en bitácora</label>
+        <label><input type="checkbox" /> Δ tasa real 5d y sorpresa CPI anotados</label>
+        <label><input type="checkbox" /> Régimen R1–R4 escrito antes del size</label>
+        <label><input type="checkbox" /> Etiqueta Flash + ρ₆₀ guardados en historial</label>
+        <label><input type="checkbox" /> Regla |Δρ⁶⁰|&gt;0.25 → re-evaluar activa</label>
+        <label><input type="checkbox" /> Puntuación del par ≥7 (si se opera hoy)</label>
+      </div>
+
+      <div class="callout ok" style="margin-top:20px">
+        <strong>Síntesis</strong>
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--ok)">R1:</strong>
+        Comprar US30 / vender XAU ·
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:#ff8a8a">R2:</strong>
+        Comprar XAU / reducir renta variable ·
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--gold)">R3:</strong>
+        XAU↑, equity selectivo ·
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--fire)">R4:</strong>
+        no operar el par — efectivo.<br /><br />
+        La ventaja no es adivinar ρ: es medirla (móvil), controlarla con tasas reales y dimensionar por régimen.
+      </div>
+
+      <p class="footer-meta">
+        Flash Signals · fire &amp; shadow · Artefacto 2026-09-24 ·
+        Hermano: <code>Petrolio - premium - bajista.html</code> ·
+        Fuente MD: <code>2026-09-24-us30-vs-xauusd-correlacion-inflacion-tasas.md</code> ·
+        Sin JS: TOC por anclas. Con JS: tabs + scorecard persistente.
+      </p>
+    </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll(".tab[data-tab]");
+      const panels = document.querySelectorAll(".panel");
+      const KEY_TAB = "us30-xau-artifact-tab";
+      const KEY_SCORE = "us30-xau-artifact-score";
+      const KEY_BELL = "us30-xau-artifact-bell";
+
+      function showTab(id, pushHash) {
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+        panels.forEach((p) => p.classList.toggle("active", p.id === id));
+        try { localStorage.setItem(KEY_TAB, id); } catch (_) {}
+        if (pushHash && history.replaceState) {
+          history.replaceState(null, "", "#" + id);
+        }
+      }
+
+      tabs.forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.preventDefault();
+          showTab(t.dataset.tab, true);
+        });
+      });
+
+      const fromHash = (location.hash || "").replace("#", "");
+      let start = fromHash;
+      try { start = start || localStorage.getItem(KEY_TAB); } catch (_) {}
+      if (start && document.getElementById(start)) showTab(start, false);
+
+      const items = [...document.querySelectorAll(".score-item")];
+      let state = [];
+      try { state = JSON.parse(localStorage.getItem(KEY_SCORE) || "[]"); } catch (_) { state = []; }
+      if (!Array.isArray(state) || state.length !== 10) state = Array(10).fill(false);
+
+      function renderScore() {
+        let n = 0;
+        items.forEach((el, i) => {
+          const on = !!state[i];
+          el.classList.toggle("checked", on);
+          const inp = el.querySelector("input");
+          if (inp) inp.checked = on;
+          if (on) n++;
+        });
+        const num = document.getElementById("score-num");
+        if (num) num.textContent = String(n);
+        const bar = document.getElementById("score-bar");
+        if (bar) {
+          bar.style.width = n * 10 + "%";
+          bar.style.background = n >= 7 ? "var(--ok)" : n >= 4 ? "var(--warn)" : "var(--err)";
+        }
+        const v = document.getElementById("score-verdict");
+        if (v) {
+          if (n >= 7) {
+            v.textContent = "LISTO PARA OPERAR";
+            v.className = "pass";
+          } else {
+            v.textContent = "NO OPERAR";
+            v.className = "fail";
+          }
+        }
+        try { localStorage.setItem(KEY_SCORE, JSON.stringify(state)); } catch (_) {}
+      }
+
+      items.forEach((el, i) => {
+        el.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT") {
+            state[i] = !state[i];
+          } else {
+            state[i] = !!el.querySelector("input").checked;
+          }
+          renderScore();
+        });
+      });
+      renderScore();
+
+      const bells = [...document.querySelectorAll("#bell-list input")];
+      let bell = [];
+      try { bell = JSON.parse(localStorage.getItem(KEY_BELL) || "[]"); } catch (_) { bell = []; }
+      if (!Array.isArray(bell) || bell.length !== bells.length) bell = Array(bells.length).fill(false);
+      bells.forEach((inp, i) => {
+        inp.checked = !!bell[i];
+        inp.addEventListener("change", () => {
+          bell[i] = inp.checked;
+          try { localStorage.setItem(KEY_BELL, JSON.stringify(bell)); } catch (_) {}
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

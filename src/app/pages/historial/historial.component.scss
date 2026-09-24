@@ -1,7 +1,8 @@
 .page {
-  max-width: 1100px;
+  max-width: 1560px;
   margin: 0 auto;
-  padding: 1.75rem 1.25rem 3rem;
+  padding: 1.75rem 1.5rem 3rem;
+  width: 100%;
 }
 
 h1 {
@@ -111,9 +112,13 @@ button:disabled {
   background: color-mix(in srgb, var(--panel) 82%, #1a1010);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 1.25rem 1.35rem;
+  padding: 1.5rem 1.6rem;
   margin-bottom: 1rem;
   box-shadow: 0 8px 28px color-mix(in srgb, black 35%, transparent);
+}
+
+.panel.table-panel {
+  padding: 1.5rem 1.75rem 1.75rem;
 }
 
 .empty h2 {
@@ -143,28 +148,36 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: #160e0e;
+  width: 100%;
 }
 
 .hist-table {
   width: 100%;
+  min-width: 1280px;
   border-collapse: collapse;
-  font-size: 0.88rem;
+  font-size: 0.95rem;
+  table-layout: auto;
 }
 
 .hist-table th,
 .hist-table td {
-  padding: 0.65rem 0.75rem;
+  padding: 1rem 1rem;
   text-align: left;
   border-bottom: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
   vertical-align: middle;
 }
 
+.hist-table tbody tr {
+  min-height: 4.25rem;
+}
+
 .hist-table thead th {
   background: color-mix(in srgb, var(--charcoal) 70%, black);
   color: color-mix(in srgb, var(--gold) 75%, white);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  padding: 0.95rem 1rem;
 }
 
 .when strong {
@@ -224,6 +237,87 @@ button:disabled {
   gap: 0.35rem;
 }
 
+.comment-cell {
+  min-width: 16rem;
+  max-width: 22rem;
+  width: 18rem;
+}
+
+.resultado-cell {
+  min-width: 9.5rem;
+  width: 10rem;
+}
+
+.hist-input,
+.hist-select {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: #160e0e;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  min-height: 2.75rem;
+  line-height: 1.35;
+  box-sizing: border-box;
+}
+
+.hist-input:focus,
+.hist-select:focus {
+  outline: 2px solid color-mix(in srgb, var(--teal) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.hist-input:disabled,
+.hist-select:disabled {
+  opacity: 0.55;
+}
+
+.hist-select.res-win {
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+  color: var(--ok);
+}
+
+.hist-select.res-lose {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+}
+
+.hist-select.res-empty {
+  color: var(--muted);
+}
+
+.save-hint {
+  color: var(--ok) !important;
+}
+
+.card-annotate {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.detail-annotate {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #160e0e;
+}
+
+.annotate-label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--gold) 70%, white);
+}
+
 .cards.mobile {
   display: none;
   flex-direction: column;
@@ -266,8 +360,9 @@ button:disabled {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, black 55%, transparent);
+  background: color-mix(in srgb, black 60%, transparent);
   z-index: 40;
+  backdrop-filter: blur(2px);
 }
 
 .drawer {
@@ -282,6 +377,21 @@ button:disabled {
   border-left: 1px solid var(--border);
   box-shadow: -12px 0 40px color-mix(in srgb, black 45%, transparent);
   padding: 1.1rem 1.15rem 2rem;
+  transition: width 0.22s ease, inset 0.22s ease, border-radius 0.22s ease, max-height 0.22s ease;
+}
+
+.drawer.expanded {
+  top: 1.25rem;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  width: auto;
+  height: auto;
+  max-height: calc(100vh - 2.5rem);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+  padding: 1.35rem 1.75rem 2.25rem;
 }
 
 .drawer-head {
@@ -295,6 +405,35 @@ button:disabled {
   background: color-mix(in srgb, #1a1010 92%, transparent);
   padding-bottom: 0.75rem;
   z-index: 1;
+}
+
+.drawer-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.drawer.expanded .detail-annotate {
+  grid-template-columns: 1fr minmax(10rem, 14rem);
+  align-items: end;
+  gap: 1rem;
+}
+
+@media (max-width: 720px) {
+  .drawer.expanded {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 1rem 1rem 1.75rem;
+  }
+
+  .drawer.expanded .detail-annotate {
+    grid-template-columns: 1fr;
+  }
 }
 
 .mode-tabs {

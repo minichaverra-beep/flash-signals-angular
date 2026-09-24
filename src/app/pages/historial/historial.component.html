@@ -57,6 +57,7 @@
   <section class="panel table-panel" *ngIf="items.length">
     <div class="meta-row">
       <p class="muted">{{ total }} entrada{{ total === 1 ? '' : 's' }} · página {{ page }} / {{ totalPages }}</p>
+      <p class="muted tiny save-hint" *ngIf="saveHint">{{ saveHint }}</p>
     </div>
 
     <div class="table-wrap desktop">
@@ -70,6 +71,8 @@
             <th>Veredicto</th>
             <th>Score</th>
             <th>Estado</th>
+            <th>Comentarios</th>
+            <th>Resultado</th>
             <th></th>
           </tr>
         </thead>
@@ -101,6 +104,33 @@
                 {{ item.status }}
               </span>
             </td>
+            <td class="comment-cell" (click)="$event.stopPropagation()">
+              <input
+                type="text"
+                class="hist-input"
+                [value]="item.comment || ''"
+                [disabled]="isSaving(item.id)"
+                placeholder="Nota…"
+                maxlength="2000"
+                (blur)="onCommentBlur(item, $event)"
+                (keydown.enter)="$any($event.target).blur()"
+              />
+            </td>
+            <td class="resultado-cell" (click)="$event.stopPropagation()">
+              <select
+                class="hist-select"
+                [ngClass]="resultadoClass(item.resultado)"
+                [disabled]="isSaving(item.id)"
+                (change)="onResultadoChange(item, $event)"
+                aria-label="Resultado de la operación"
+              >
+                <option
+                  *ngFor="let opt of resultadoOptions"
+                  [value]="opt.value"
+                  [selected]="(item.resultado || '') === opt.value"
+                >{{ opt.label }}</option>
+              </select>
+            </td>
             <td class="actions-cell">
               <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
               <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
@@ -124,6 +154,31 @@
           <span class="muted tiny">{{ absoluteTime(item.createdAt) }}</span>
         </p>
         <p class="muted tiny">{{ item.tier }} · score {{ item.scoreCombined != null ? item.scoreCombined + '%' : '—' }} · {{ item.status }}</p>
+        <div class="card-annotate" (click)="$event.stopPropagation()">
+          <input
+            type="text"
+            class="hist-input"
+            [value]="item.comment || ''"
+            [disabled]="isSaving(item.id)"
+            placeholder="Comentario…"
+            maxlength="2000"
+            (blur)="onCommentBlur(item, $event)"
+            (keydown.enter)="$any($event.target).blur()"
+          />
+          <select
+            class="hist-select"
+            [ngClass]="resultadoClass(item.resultado)"
+            [disabled]="isSaving(item.id)"
+            (change)="onResultadoChange(item, $event)"
+            aria-label="Resultado"
+          >
+            <option
+              *ngFor="let opt of resultadoOptions"
+              [value]="opt.value"
+              [selected]="(item.resultado || '') === opt.value"
+            >{{ opt.label }}</option>
+          </select>
+        </div>
         <div class="card-actions">
           <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
           <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
@@ -137,16 +192,34 @@
     </div>
   </section>
 
-  <!-- Drawer detalle -->
+  <!-- Drawer detalle (expandido por defecto al abrir Ver detalle) -->
   <div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeDetail()"></div>
-  <aside class="drawer" *ngIf="drawerOpen" role="dialog" aria-label="Detalle de historial">
+  <aside
+    class="drawer"
+    [class.expanded]="detailExpanded"
+    *ngIf="drawerOpen"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Detalle de historial"
+  >
     <div class="drawer-head">
       <div>
-        <p class="eyebrow">Detalle #{{ detail?.id || '…' }}</p>
+        <p class="eyebrow">Detalle #{{ detail?.id || '…' }}{{ detailExpanded ? ' · expandido' : '' }}</p>
         <h2 *ngIf="detail">{{ detail.market | uppercase }} · {{ detail.tier }}</h2>
         <p class="muted tiny" *ngIf="detail">{{ absoluteTime(detail.createdAt) }} · {{ relativeTime(detail.createdAt) }}</p>
       </div>
-      <button type="button" class="ghost" (click)="closeDetail()">Cerrar</button>
+      <div class="drawer-head-actions">
+        <button
+          type="button"
+          class="ghost"
+          (click)="toggleDetailExpand()"
+          [attr.aria-pressed]="detailExpanded"
+          [attr.title]="detailExpanded ? 'Vista compacta' : 'Expandir detalle'"
+        >
+          {{ detailExpanded ? 'Compactar' : 'Expandir' }}
+        </button>
+        <button type="button" class="ghost" (click)="closeDetail()">Cerrar</button>
+      </div>
     </div>
 
     <p class="muted" *ngIf="detailLoading">Cargando detalle…</p>
@@ -186,6 +259,37 @@
       </p>
 
       <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
+
+      <div class="detail-annotate" (click)="$event.stopPropagation()">
+        <label class="annotate-label">
+          Comentario
+          <input
+            type="text"
+            class="hist-input"
+            [value]="d.comment || ''"
+            [disabled]="isSaving(d.id)"
+            placeholder="Nota del trade…"
+            maxlength="2000"
+            (blur)="onCommentBlur(d, $event)"
+            (keydown.enter)="$any($event.target).blur()"
+          />
+        </label>
+        <label class="annotate-label">
+          Resultado
+          <select
+            class="hist-select"
+            [ngClass]="resultadoClass(d.resultado)"
+            [disabled]="isSaving(d.id)"
+            (change)="onResultadoChange(d, $event)"
+          >
+            <option
+              *ngFor="let opt of resultadoOptions"
+              [value]="opt.value"
+              [selected]="(d.resultado || '') === opt.value"
+            >{{ opt.label }}</option>
+          </select>
+        </label>
+      </div>
 
       <app-signal-report-viewer
         *ngIf="d.summary"

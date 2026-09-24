@@ -202,6 +202,37 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     const list = await store.listHistory({ market: 'eth' });
     assert.equal(list.total, 2);
   });
+
+  it('updateAnnotation guarda comment y resultado (ganada/perdida)', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const a = await store.updateAnnotation(id, {
+      comment: '  FVG hold ok  ',
+      resultado: 'ganada',
+    });
+    assert.equal(a.ok, true);
+    assert.equal(a.item?.comment, 'FVG hold ok');
+    assert.equal(a.item?.resultado, 'ganada');
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.comment, 'FVG hold ok');
+    assert.equal(row?.resultado, 'ganada');
+
+    const b = await store.updateAnnotation(id, { resultado: 'win' });
+    assert.equal(b.ok, true);
+    assert.equal(b.item?.resultado, 'ganada');
+
+    const c = await store.updateAnnotation(id, { resultado: '' });
+    assert.equal(c.ok, true);
+    assert.equal(c.item?.resultado, null);
+
+    const d = await store.updateAnnotation(id, { resultado: ' Empate ' });
+    assert.equal(d.ok, false);
+
+    const miss = await store.updateAnnotation(999999, { comment: 'x' });
+    assert.equal(miss.ok, false);
+    assert.equal(miss.error, 'not_found');
+  });
 });
 
 describe('history-store fallback sql.js', () => {

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FVG Breakout vs Fakeout · M5 · E1 BREAK · Flash Signals</title>
+  <meta name="description" content="Identificar breakout real de FVG intradía M5 y filtrar fakeouts: 2 cierres, 2M5 en zona, CRT PDH/PDL. Checklist y puntuación Flash Signals." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --accent: var(--teal);
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--red) 16%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+
+    .shell { max-width: var(--shell); margin: 0 auto; padding: 28px 22px 72px; }
+
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 22px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--red));
+    }
+
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    .chip.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: rgba(255,215,0,0.1); }
+
+    h1 {
+      font-family: var(--display); font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 68ch; line-height: 1.55; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+    }
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke); border-radius: var(--radius); padding: 14px 16px;
+    }
+    .stat .val { font-family: var(--display); font-size: 1.15rem; font-weight: 600; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat.fire .val { color: var(--fire); }
+    .stat.err .val { color: #ff8a8a; }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+    .stat.gold .val { color: var(--gold); }
+
+    .disclaimer {
+      margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+      background: var(--warn-dim); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8; font-size: 0.86rem; line-height: 1.45;
+    }
+
+    .tabs-wrap {
+      position: sticky; top: 0; z-index: 30;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px); border-bottom: 1px solid var(--stroke);
+      margin: 0 -22px 22px; padding: 12px 22px;
+    }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; max-width: var(--shell); margin: 0 auto; }
+    .tab {
+      appearance: none; border: 1px solid var(--stroke); background: var(--bg-elev);
+      color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.02em; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+    .tab:hover { color: var(--text); border-color: var(--stroke-strong); }
+    .tab.active, .tab:focus-visible {
+      background: linear-gradient(135deg, #ff8c00 0%, #cd1818 100%);
+      border-color: transparent; color: #fff; box-shadow: var(--glow); outline: none;
+    }
+
+    .no-js .panel { display: block !important; margin-bottom: 36px; padding-top: 8px; border-top: 1px solid var(--stroke); }
+    .no-js .panel:first-of-type { border-top: none; padding-top: 0; }
+    .has-js .panel { display: none; animation: fade 0.2s ease; }
+    .has-js .panel.active { display: block; }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    h2 {
+      font-family: var(--display); font-size: 1.4rem; letter-spacing: 0.03em;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    h3 {
+      font-family: var(--display); font-size: 1.05rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin: 26px 0 12px; color: var(--fire);
+    }
+    .section-lead { color: var(--muted); font-size: 0.92rem; margin-bottom: 18px; max-width: 72ch; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    @media (max-width: 900px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .grid-4 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .card {
+      background: var(--bg-card); border: 1px solid var(--stroke);
+      border-radius: var(--radius); padding: 18px 18px 16px;
+    }
+    .card.a { border-top: 3px solid var(--ok); }
+    .card.b { border-top: 3px solid var(--err); }
+    .card.accent { border-top: 3px solid var(--teal); }
+    .card.amber-top { border-top: 3px solid var(--fire); }
+    .card.gold-top { border-top: 3px solid var(--gold); }
+    .card-title {
+      font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    }
+    .card p, .card li { font-size: 0.9rem; color: var(--muted); line-height: 1.55; }
+    .card ul { padding-left: 1.15rem; margin-top: 8px; }
+    .card li { margin-bottom: 6px; }
+    .card strong { color: var(--text); }
+
+    .badge {
+      font-size: 0.68rem; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+      text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+    }
+    .badge.up { background: var(--ok-dim); color: var(--ok); }
+    .badge.down { background: var(--err-dim); color: #ff8a8a; }
+    .badge.neu { background: rgba(196, 168, 255, 0.14); color: var(--violet); }
+    .badge.fire { background: var(--fire-dim); color: var(--fire); }
+    .badge.gold { background: rgba(255,215,0,0.12); color: var(--gold); }
+
+    .table-wrap {
+      overflow-x: auto; border: 1px solid var(--stroke); border-radius: var(--radius);
+      margin: 12px 0 22px; background: var(--bg-elev); -webkit-overflow-scrolling: touch;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+    th {
+      text-align: left; padding: 12px 14px; background: var(--bg-soft); color: var(--gold);
+      font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--stroke); white-space: nowrap; position: sticky; top: 0;
+    }
+    td {
+      padding: 12px 14px; border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top; color: var(--muted); line-height: 1.45;
+    }
+    td strong { color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: color-mix(in srgb, var(--fire) 6%, transparent); }
+
+    .tone-a td:first-child, .tone-b td:first-child, .tone-info td:first-child, .tone-warn td:first-child {
+      border-left: 3px solid transparent; padding-left: 12px;
+    }
+    .tone-a td:first-child { border-left-color: var(--ok); }
+    .tone-b td:first-child { border-left-color: var(--err); }
+    .tone-info td:first-child { border-left-color: var(--teal); }
+    .tone-warn td:first-child { border-left-color: var(--fire); }
+
+    .corr-inv { color: var(--ok); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-pos { color: #ff8a8a; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-mix { color: var(--warn); font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+    .corr-neu { color: #7ec8c9; font-weight: 600; font-family: var(--mono); font-size: 0.8rem; }
+
+    .corr-viz { display: grid; gap: 10px; margin: 8px 0 22px; }
+    .corr-row {
+      display: grid; grid-template-columns: minmax(120px, 150px) 1fr auto;
+      gap: 12px; align-items: center; background: var(--bg-card);
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 10px 14px; font-size: 0.84rem;
+    }
+    @media (max-width: 640px) { .corr-row { grid-template-columns: 1fr; gap: 6px; } }
+    .corr-row .pair { font-weight: 700; color: var(--text); }
+    .corr-row .hint { color: var(--muted-2); font-size: 0.78rem; text-align: right; }
+    .bar-track {
+      height: 10px; border-radius: 999px; background: var(--bg-soft);
+      border: 1px solid var(--stroke); overflow: hidden; position: relative;
+    }
+    .bar-track::before {
+      content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+      background: color-mix(in srgb, var(--gold) 40%, transparent);
+    }
+    .bar-fill { height: 100%; width: calc(var(--mag, 0.4) * 50%); border-radius: 999px; }
+    .bar-fill.inv { margin-left: calc(50% - (var(--mag, 0.4) * 50%)); background: linear-gradient(90deg, var(--ok), #7dffc0); }
+    .bar-fill.pos { margin-left: 50%; background: linear-gradient(90deg, #ff8a8a, var(--fire)); }
+    .bar-fill.mix { margin-left: calc(50% - 8%); width: 28%; background: linear-gradient(90deg, var(--warn), var(--fire)); }
+
+    .callout {
+      padding: 14px 16px; border-radius: 10px; margin: 16px 0;
+      font-size: 0.9rem; border: 1px solid var(--stroke); line-height: 1.5; color: var(--muted);
+    }
+    .callout.info { background: var(--info-dim); border-color: color-mix(in srgb, var(--teal) 45%, transparent); }
+    .callout.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .callout.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .callout.danger { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+    .callout strong {
+      display: block; margin-bottom: 6px; color: var(--text);
+      font-family: var(--display); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.9rem;
+    }
+
+    details.fold {
+      background: var(--bg-card); border: 1px solid var(--stroke);
+      border-radius: var(--radius); margin: 12px 0; overflow: hidden;
+    }
+    details.fold > summary {
+      list-style: none; cursor: pointer; padding: 14px 16px; font-weight: 700; font-size: 0.92rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; user-select: none;
+    }
+    details.fold > summary::-webkit-details-marker { display: none; }
+    details.fold > summary::after { content: "+"; font-family: var(--mono); color: var(--fire); font-size: 1.1rem; }
+    details.fold[open] > summary::after { content: "−"; }
+    details.fold > summary:hover { background: color-mix(in srgb, var(--fire) 8%, transparent); }
+    details.fold .fold-body { padding: 0 16px 16px; border-top: 1px solid var(--stroke); padding-top: 14px; }
+
+    .steps { display: grid; gap: 8px; margin: 14px 0; }
+    .step {
+      display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start;
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px; padding: 12px 14px;
+    }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #ff8c00, #cd1818); color: #fff;
+      font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--glow);
+    }
+    .step strong { display: block; font-size: 0.9rem; color: var(--text); }
+    .step span { font-size: 0.82rem; color: var(--muted); }
+
+    .matrix-cell {
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 14px; min-height: 110px;
+    }
+    .matrix-cell .mx-label {
+      font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--gold); margin-bottom: 8px;
+    }
+    .matrix-cell p { font-size: 0.84rem; color: var(--muted); margin: 0; }
+    .matrix-cell.ok-bg { border-top: 3px solid var(--ok); }
+    .matrix-cell.fire-bg { border-top: 3px solid var(--fire); }
+    .matrix-cell.gold-bg { border-top: 3px solid var(--gold); }
+    .matrix-cell.err-bg { border-top: 3px solid var(--err); }
+
+    .formula {
+      background: var(--bg-elev); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 16px 18px; margin: 12px 0 18px; overflow-x: auto;
+    }
+    .formula .fname {
+      font-family: var(--display); font-size: 0.85rem; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--fire); margin-bottom: 10px;
+    }
+    .formula .eq {
+      font-family: var(--mono); font-size: 0.88rem; color: #ffe9a8; line-height: 1.7;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .formula .ex {
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--stroke);
+      font-size: 0.82rem; color: var(--muted);
+    }
+    .formula .ex code { font-family: var(--mono); color: #7ec8c9; font-size: 0.8rem; }
+
+    .score-list { list-style: none; display: grid; gap: 8px; margin: 14px 0; }
+    .score-item {
+      display: flex; align-items: flex-start; gap: 12px; background: var(--bg-card);
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 12px 14px;
+      cursor: pointer; user-select: none; font-size: 0.9rem; color: var(--muted);
+    }
+    .score-item:hover { border-color: var(--stroke-strong); }
+    .score-item.checked {
+      border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+      background: var(--ok-dim); color: var(--text);
+    }
+    .score-item input { margin-top: 3px; accent-color: var(--ok); width: 16px; height: 16px; }
+    .score-item .n { font-family: var(--mono); font-size: 0.75rem; color: var(--fire); min-width: 1.5rem; }
+
+    .score-bar-wrap {
+      margin: 16px 0; background: var(--bg-soft); border-radius: 999px;
+      height: 12px; overflow: hidden; border: 1px solid var(--stroke);
+    }
+    .score-bar { height: 100%; width: 0%; background: var(--err); transition: width 0.25s, background 0.25s; }
+    .score-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.95rem; margin-bottom: 6px; gap: 12px; flex-wrap: wrap;
+    }
+    .score-meta .pass { color: var(--ok); font-weight: 700; }
+    .score-meta .fail { color: #ff8a8a; font-weight: 700; }
+
+    pre.tpl {
+      background: var(--bg-elev); border: 1px solid var(--stroke); border-radius: var(--radius);
+      padding: 16px; font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
+      overflow-x: auto; white-space: pre-wrap; line-height: 1.65;
+    }
+
+    .checklist label {
+      display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px;
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px;
+      margin-bottom: 8px; font-size: 0.9rem; color: var(--muted); cursor: pointer;
+    }
+    .checklist label:hover { border-color: var(--stroke-strong); }
+    .checklist input { margin-top: 3px; accent-color: var(--fire); }
+
+    .footer-meta {
+      margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--stroke);
+      color: var(--muted-2); font-size: 0.78rem; line-height: 1.5;
+    }
+    .footer-meta code { font-family: var(--mono); color: #7ec8c9; font-size: 0.75rem; }
+    .tag-code {
+      font-family: var(--mono); font-size: 0.76rem; background: var(--bg-soft);
+      padding: 2px 6px; border-radius: 4px; color: #7ec8c9; white-space: nowrap;
+    }
+
+    .skip-link {
+      position: absolute; left: -999px; top: 8px; background: var(--fire);
+      color: #111; padding: 8px 12px; border-radius: 8px; font-weight: 700; z-index: 100;
+    }
+    .skip-link:focus { left: 12px; }
+  </style>
+</head>
+<body>
+
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <div class="shell">
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">Flash Signals</span>
+        <span class="chip teal">E1 BREAK · M5</span>
+        <span class="chip gold">FVG · 2M5 · CRT</span>
+        <span class="chip ok">v1.0 · Desk</span>
+      </div>
+      <h1>FVG breakout vs fakeout</h1>
+      <p class="hero-sub">
+        Cómo identificar un breakout real de FVG en intradía M5 y filtrar fakeouts:
+        hold 2 cierres, 2M5 en zona ≤0.15%, CRT / PDH-PDL, FVG solo como filtro.
+      </p>
+      <div class="stats">
+        <div class="stat ok"><div class="val">BREAK E1</div><div class="lbl">≥7/8 checks · TV</div></div>
+        <div class="stat err"><div class="val">FAKEOUT</div><div class="lbl">≥2 checks · no chase</div></div>
+        <div class="stat fire"><div class="val">2 cierres</div><div class="lbl">Hold M5 fuera edge</div></div>
+        <div class="stat teal"><div class="val">≤0.15%</div><div class="lbl">2M5 en zona</div></div>
+      </div>
+      <div class="disclaimer">
+        No es consejo financiero. FVG <strong>nunca</strong> es el único motivo de entrada — solo filtro.
+        E2 / FakeOut: checklist 6/6, máx 1/semana, <strong>prohibido en evaluación</strong>.
+      </div>
+    </header>
+
+    <nav class="tabs-wrap" aria-label="Tabla de contenidos">
+      <div class="tabs" role="tablist">
+        <a class="tab active" href="#definiciones" data-tab="definiciones" role="tab">Definiciones</a>
+        <a class="tab" href="#break-fake" data-tab="break-fake" role="tab">BREAK vs FAKEOUT</a>
+        <a class="tab" href="#flujo" data-tab="flujo" role="tab">Flujo desk</a>
+        <a class="tab" href="#checklist" data-tab="checklist" role="tab">Checklist</a>
+        <a class="tab" href="#m5" data-tab="m5" role="tab">2M5 válido</a>
+        <a class="tab" href="#ejemplos" data-tab="ejemplos" role="tab">Ejemplos</a>
+        <a class="tab" href="#score" data-tab="score" role="tab">Puntuación</a>
+      </div>
+    </nav>
+
+    <div id="contenido">
+
+    <!-- DEFINICIONES -->
+    <section id="definiciones" class="panel active" role="tabpanel">
+      <h2>Definiciones</h2>
+      <p class="section-lead">Glosario del plan E1/BREAK de Cursor Trading · presets Zentinel / Watchtower · CLI <code class="tag-code">-Break</code> / <code class="tag-code">-Reverse</code>.</p>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">BREAK (continuación E1)</div>
+          <ul>
+            <li>Ruptura de nivel / borde de FVG con <strong>continuación</strong></li>
+            <li>2 cierres M5 <strong>fuera</strong> del edge (no solo mecha)</li>
+            <li>Últimas 2 velas M5 en dirección, en zona ≤0.15%</li>
+            <li>Bias H1 / CRT alineado · sin fakeout PDH/PDL en contra</li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">FAKEOUT (no chase / E2)</div>
+          <ul>
+            <li>Pierce con mecha o 1 cierre que vuelve al rango</li>
+            <li>Sweep + reclaim inmediato → contexto REVERSE</li>
+            <li>Fakeout PDH/PDL activo contra la dirección E1</li>
+            <li>CRT invalid en esa dirección → skip E1</li>
+          </ul>
+        </div>
+        <div class="card gold-top">
+          <div class="card-title">FVG (Fair Value Gap)</div>
+          <p>Hueco de inequidad en M5/H1. En el plan es <strong>filtro / zona de edge</strong>, nunca el único trigger. Preset FVG+Vol: <span class="tag-code">Zentinel_*_E1</span> — rol: filtro.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">2M5 + zona</div>
+          <p>Las <strong>últimas 2</strong> velas M5 del mismo color (G/G long · R/R short), formándose en o cerca del edge/nivel (≤0.15%). Velas anteriores no cuentan.</p>
+        </div>
+      </div>
+
+      <h3>Confluencias Notion sugeridas</h3>
+      <div class="eyebrow" style="margin-bottom:0">
+        <span class="chip ok">Continuación</span>
+        <span class="chip warn">FakeOut</span>
+        <span class="chip fire">Resistencia débil</span>
+        <span class="chip fire">Soporte débil</span>
+        <span class="chip teal">Pullback</span>
+        <span class="chip gold">Pool-liquidez</span>
+      </div>
+
+      <h3>Riesgo del plan</h3>
+      <div class="stats" style="margin-top:12px">
+        <div class="stat fire"><div class="val">~$9</div><div class="lbl">SL típico</div></div>
+        <div class="stat ok"><div class="val">1:2</div><div class="lbl">R:R · BE en 1:1</div></div>
+        <div class="stat teal"><div class="val">3</div><div class="lbl">Máx ops / día</div></div>
+        <div class="stat err"><div class="val">2 SL</div><div class="lbl">= fin de sesión</div></div>
+      </div>
+      <p class="section-lead" style="margin-top:14px">Edge histórico E1: PF ~4.77 · Rules &gt;70% (referencia bitácora). E2 OFF en evaluación.</p>
+    </section>
+
+    <!-- BREAK VS FAKEOUT -->
+    <section id="break-fake" class="panel" role="tabpanel">
+      <h2>BREAK vs FAKEOUT</h2>
+      <p class="section-lead">Tabla rápida: ¿es breakout FVG real o fakeout?</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Pregunta</th>
+              <th>BREAK (operar E1)</th>
+              <th>FAKEOUT (no chase / E2)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a"><td>1</td><td>¿2 cierres M5 <strong>fuera</strong> del nivel / borde FVG?</td><td>Sí</td><td>No (solo mecha)</td></tr>
+            <tr class="tone-a"><td>2</td><td>¿Últimas 2M5 en dirección y en zona ≤0.15%?</td><td>Sí</td><td>Lejos o mixtas</td></tr>
+            <tr class="tone-b"><td>3</td><td>¿Fakeout PDH/PDL activo en contra?</td><td>No</td><td>Sí</td></tr>
+            <tr class="tone-b"><td>4</td><td>¿CRT invalid en esa dirección?</td><td>No</td><td>Sí</td></tr>
+            <tr class="tone-warn"><td>5</td><td>¿Sweep + reclaim inmediato?</td><td>No (continuación)</td><td>Sí → REVERSE</td></tr>
+            <tr class="tone-info"><td>6</td><td>¿Bias H1 / CRT alineado?</td><td>Sí</td><td>Contra → skip</td></tr>
+            <tr class="tone-warn"><td>7</td><td>¿FVG como único motivo de entrada?</td><td><strong>Prohibido</strong></td><td>—</td></tr>
+            <tr class="tone-a"><td>8</td><td>Pre-trade: “Sin fakeout en contra”</td><td>✅</td><td>❌ → NO OPERAR E1</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout ok">
+        <strong>Regla de puntuación</strong>
+        ≥7/8 checks BREAK → candidato a ENTRAR (confirmar en TradingView).<br />
+        ≥2 checks fakeout → <strong>no</strong> long/short BREAK; evaluar REVERSE solo si checklist E2 6/6 y ≤10% de uso.
+      </div>
+
+      <h3>Playbooks cortos</h3>
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">B1 — BREAK FVG continuation</div>
+          <p>Hold 2 cierres fuera + retest del edge + 2M5 en zona → E1 Continuación.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">B2 — Retest after break</div>
+          <p>Precio lejos (&gt;0.15%) → <strong>ESPERAR</strong> vuelta al borde FVG. No perseguir (no chase).</p>
+        </div>
+        <div class="card b">
+          <div class="card-title">F1 — Fakeout PDH/PDL</div>
+          <p>No E1. Si E2 → checklist 6 pts, máx 1/semana, <strong>prohibido en eval</strong>.</p>
+        </div>
+        <div class="card amber-top">
+          <div class="card-title">F2 — Wick-only FVG pierce</div>
+          <p>Ignorar hasta que haya 2 cierres hold fuera del edge.</p>
+        </div>
+      </div>
+
+      <h3>Invalidación inmediata</h3>
+      <ul style="color:var(--muted);padding-left:1.2rem;font-size:0.92rem;line-height:1.7">
+        <li>Cierre M5 <strong>fuera</strong> del SL estructural / zona</li>
+        <li>Breakout <strong>contrario</strong> sin rechazo</li>
+        <li>Fakeout PDH/PDL <strong>contra</strong> la dirección</li>
+        <li>CRT invalid</li>
+        <li>2 SL del día → fin de sesión</li>
+      </ul>
+    </section>
+
+    <!-- FLUJO -->
+    <section id="flujo" class="panel" role="tabpanel">
+      <h2>Flujo desk</h2>
+      <p class="section-lead">Orden fijo antes de pulsar E1 Continuación o CLI <span class="tag-code">-Break</span>.</p>
+
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div><strong>Bias H1 / CRT</strong><span>¿Alineado con la dirección? Si contra → skip E1</span></div></div>
+        <div class="step"><div class="step-num">2</div><div><strong>Nivel / borde FVG</strong><span>Marcar edge (soporte/resistencia débil, pool liquidez)</span></div></div>
+        <div class="step"><div class="step-num">3</div><div><strong>Hold 2 cierres M5</strong><span>Fuera del edge — no solo mecha</span></div></div>
+        <div class="step"><div class="step-num">4</div><div><strong>Distancia zona</strong><span>≤0.15% → listo · &gt;0.15% → B2 esperar retest</span></div></div>
+        <div class="step"><div class="step-num">5</div><div><strong>2M5 últimas 2</strong><span>Mismo color, en zona; no velas antiguas</span></div></div>
+        <div class="step"><div class="step-num">6</div><div><strong>Filtros anti-fakeout</strong><span>PDH/PDL · CRT invalid · sweep+reclaim</span></div></div>
+        <div class="step"><div class="step-num">7</div><div><strong>Score ≥7/8</strong><span>Confirmar en TV · confluencias Notion</span></div></div>
+        <div class="step"><div class="step-num">8</div><div><strong>Size / riesgo</strong><span>SL ~$9 · R:R 1:2 · BE 1:1 · cupo diario</span></div></div>
+      </div>
+
+      <div class="callout warn">
+        <strong>Prohibido</strong>
+        Entrar solo porque “hay FVG”. El FVG orienta la zona; el trigger es estructura + 2 cierres + 2M5 + bias.
+      </div>
+
+      <div class="callout info">
+        <strong>Presets</strong>
+        <span class="tag-code">Zentinel_*_E1</span> · <span class="tag-code">Watchtower_*_E1</span> ·
+        CLI High: <span class="tag-code">-Break</span> / <span class="tag-code">-Reverse</span> / <span class="tag-code">-Ilustrate</span>
+      </div>
+    </section>
+
+    <!-- CHECKLIST INTERACTIVO -->
+    <section id="checklist" class="panel" role="tabpanel">
+      <h2>Checklist interactivo</h2>
+      <p class="section-lead">Marca cada ítem BREAK. Contador fakeout aparte. Persistencia local.</p>
+
+      <div class="score-meta">
+        <span>BREAK: <strong id="break-num">0</strong> / 8</span>
+        <span id="break-verdict" class="fail">ESPERAR</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" id="break-bar"></div></div>
+
+      <ul class="score-list" id="break-list">
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">01</span><span>2 cierres M5 fuera del nivel / borde FVG</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">02</span><span>Últimas 2M5 en dirección y zona ≤0.15%</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">03</span><span>Sin fakeout PDH/PDL en contra</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">04</span><span>CRT no invalid en esa dirección</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">05</span><span>Sin sweep+reclaim inmediato (continuación)</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">06</span><span>Bias H1 / CRT alineado</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">07</span><span>FVG NO es el único motivo (hay estructura/2M5)</span></li>
+        <li class="score-item" data-kind="break"><input type="checkbox" /><span class="n">08</span><span>Pre-trade: “Sin fakeout en contra” ✅</span></li>
+      </ul>
+
+      <h3>Señales fakeout (contador)</h3>
+      <div class="score-meta">
+        <span>FAKEOUT: <strong id="fake-num">0</strong> / 5</span>
+        <span id="fake-verdict" class="pass">OK E1</span>
+      </div>
+      <ul class="score-list" id="fake-list">
+        <li class="score-item" data-kind="fake"><input type="checkbox" /><span class="n">F1</span><span>Solo mecha / sin 2 cierres hold</span></li>
+        <li class="score-item" data-kind="fake"><input type="checkbox" /><span class="n">F2</span><span>2M5 lejos (&gt;0.15%) o colores mixtos</span></li>
+        <li class="score-item" data-kind="fake"><input type="checkbox" /><span class="n">F3</span><span>Fakeout PDH/PDL activo en contra</span></li>
+        <li class="score-item" data-kind="fake"><input type="checkbox" /><span class="n">F4</span><span>CRT invalid en la dirección</span></li>
+        <li class="score-item" data-kind="fake"><input type="checkbox" /><span class="n">F5</span><span>Sweep + reclaim inmediato</span></li>
+      </ul>
+
+      <div class="callout danger">
+        <strong>≥2 fakeout → NO OPERAR BREAK</strong>
+        Evaluar REVERSE / E2 solo con checklist E2 completo, máx 1/semana, prohibido en eval.
+      </div>
+    </section>
+
+    <!-- 2M5 -->
+    <section id="m5" class="panel" role="tabpanel">
+      <h2>2M5 — válido vs inválido</h2>
+      <p class="section-lead">Regla dura del stack: cuentan solo las <strong>últimas 2</strong> velas M5.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Patrón</th><th>Estado</th><th>Nota</th></tr>
+          </thead>
+          <tbody>
+            <tr class="tone-a"><td><strong>[G][G]</strong> en soporte / edge ≤0.15%</td><td>VÁLIDO LONG</td><td>Listo si resto del checklist BREAK ok</td></tr>
+            <tr class="tone-b"><td><strong>[R][R]</strong> en resistencia / edge ≤0.15%</td><td>VÁLIDO SHORT</td><td>Idem con bias bear</td></tr>
+            <tr class="tone-warn"><td><strong>[G][G]</strong> pero &gt;0.15% lejos</td><td>ESPERAR (B2)</td><td>Patrón ok · falta retest de zona</td></tr>
+            <tr class="tone-b"><td><strong>[R][G]</strong> o <strong>[G][R]</strong></td><td>INVÁLIDO</td><td>Secuencia rota</td></tr>
+            <tr class="tone-b"><td>[G][G] … [G][G] antiguas</td><td>INVÁLIDO</td><td>No son las últimas 2 velas</td></tr>
+            <tr class="tone-warn"><td>Solo mecha atraviesa FVG</td><td>IGNORAR (F2)</td><td>Esperar 2 cierres hold</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Checklist 2M5 (mínimo)</div>
+          <ul>
+            <li>Cerca de zona (soporte/resistencia débil o edge FVG)</li>
+            <li>2 velas M5 confirman dirección</li>
+            <li>Bias H1 alineado o bias CLI forzado</li>
+            <li>RSI M5 + CRT premium/discount coherentes</li>
+            <li>Estructura/CRT sin contradicción dura</li>
+          </ul>
+          <p style="margin-top:10px"><strong>Falta ≥1 → ESPERAR.</strong></p>
+        </div>
+        <div class="card amber-top">
+          <div class="card-title">Zonas Notion</div>
+          <ul>
+            <li>Continuación</li>
+            <li>FakeOut (si aplica E2)</li>
+            <li>Resistencia débil / Soporte débil</li>
+            <li>Pullback</li>
+            <li>Pool-liquidez</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- EJEMPLOS -->
+    <section id="ejemplos" class="panel" role="tabpanel">
+      <h2>Ejemplos live (patrón)</h2>
+      <p class="section-lead">Patrones tipo señal High BTC/US30 — ilustrativos; siempre confirmar tape actual.</p>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">US30 — candidato BREAK (B1/B2)</div>
+          <ul>
+            <li>FVG bullish edge marcado · retest pendiente</li>
+            <li>[G][G] existen pero a 0.19% → <strong>ESPERAR</strong> retest (B2), no chase</li>
+            <li>Sin fakeout PDH/PDL · si H1/CRT alinean → E1 al volver a zona</li>
+            <li>Confluencia: Continuación · Soporte débil · Pullback</li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">US30 — NO BREAK (fake / REVERSE)</div>
+          <ul>
+            <li>Sweep swing + reclaim inmediato</li>
+            <li>Modo setup REVERSE / turtle soup PDH-PDL</li>
+            <li>No E1 Continuación · E2 solo si 6/6 y no eval</li>
+            <li>Confluencia: FakeOut · Pool-liquidez</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <div class="card-title">BTC — BREAK bear (E1 short)</div>
+          <ul>
+            <li>CLI bias BEARISH + modo BREAK</li>
+            <li>2 cierres M5 bajo nivel/FVG edge + [R][R] en zona</li>
+            <li>Sin fakeout PDL en contra del short</li>
+            <li>Confirm TV · Watchtower/Zentinel filtro</li>
+          </ul>
+        </div>
+        <div class="card amber-top">
+          <div class="card-title">Señal “EVITAR / lejos”</div>
+          <ul>
+            <li>Entry histórica lejos + sin 2M5 en zona</li>
+            <li>Acción: no perseguir; esperar precio→edge ≤0.15%</li>
+            <li>Re-puntuar con <span class="tag-code">-Ilustrate</span> / High signal</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <strong>Fuente viva</strong>
+        Señales en <span class="tag-code">Cursor Trading/live/*_m5_high_signal.md</span> · UI Flash Signals historial.
+      </div>
+    </section>
+
+    <!-- SCORE -->
+    <section id="score" class="panel" role="tabpanel">
+      <h2>Puntuación y plantilla</h2>
+      <p class="section-lead">Resumen operativo + nota de bitácora / Notion.</p>
+
+      <div class="callout ok">
+        <strong>Candidato ENTRAR (E1)</strong>
+        BREAK ≥7/8 · fakeout &lt;2 · 2M5 válidas en zona · bias alineado · confirmar TV · size plan.
+      </div>
+      <div class="callout danger">
+        <strong>NO OPERAR BREAK</strong>
+        Fakeout ≥2 · solo mecha · precio &gt;0.15% sin retest · CRT invalid · FVG como único motivo · 2 SL ya tocados.
+      </div>
+
+      <h3>Plantilla bitácora / Notion</h3>
+      <pre class="tpl">Fecha / activo (BTC|US30):
+Dirección (long|short) · Bias H1/CRT:
+Nivel / FVG edge:
+2 cierres M5 fuera: SÍ/NO
+2M5 últimas 2 · distancia % a zona:
+Fakeout PDH/PDL: SÍ/NO
+CRT invalid: SÍ/NO
+Sweep+reclaim: SÍ/NO
+Score BREAK /8 · Fakeout /5:
+Playbook: B1 | B2 | F1 | F2
+Confluencias Notion: Continuación · FakeOut · Resistencia/Soporte débil · Pullback · Pool-liquidez
+SL / TP / BE · R:R:
+Resultado + lección:</pre>
+
+      <p class="footer-meta">
+        Flash Signals · fire &amp; shadow · Artefacto 2026-09-24 ·
+        Plan E1/BREAK Cursor Trading · Hermano estilo: <code>Petrolio - premium - bajista.html</code> ·
+        Sin JS: TOC por anclas. Con JS: tabs + checklist persistente.
+      </p>
+    </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll(".tab[data-tab]");
+      const panels = document.querySelectorAll(".panel");
+      const KEY_TAB = "fvg-break-fake-tab";
+      const KEY_BREAK = "fvg-break-checks";
+      const KEY_FAKE = "fvg-fake-checks";
+
+      function showTab(id, pushHash) {
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+        panels.forEach((p) => p.classList.toggle("active", p.id === id));
+        try { localStorage.setItem(KEY_TAB, id); } catch (_) {}
+        if (pushHash && history.replaceState) history.replaceState(null, "", "#" + id);
+      }
+
+      tabs.forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.preventDefault();
+          showTab(t.dataset.tab, true);
+        });
+      });
+
+      const fromHash = (location.hash || "").replace("#", "");
+      let start = fromHash;
+      try { start = start || localStorage.getItem(KEY_TAB); } catch (_) {}
+      if (start && document.getElementById(start)) showTab(start, false);
+
+      function wireList(listId, key, nExpected, onRender) {
+        const items = [...document.querySelectorAll("#" + listId + " .score-item")];
+        let state = [];
+        try { state = JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) { state = []; }
+        if (!Array.isArray(state) || state.length !== nExpected) state = Array(nExpected).fill(false);
+
+        function render() {
+          let n = 0;
+          items.forEach((el, i) => {
+            const on = !!state[i];
+            el.classList.toggle("checked", on);
+            const inp = el.querySelector("input");
+            if (inp) inp.checked = on;
+            if (on) n++;
+          });
+          try { localStorage.setItem(key, JSON.stringify(state)); } catch (_) {}
+          onRender(n);
+        }
+
+        items.forEach((el, i) => {
+          el.addEventListener("click", (e) => {
+            if (e.target.tagName !== "INPUT") state[i] = !state[i];
+            else state[i] = !!el.querySelector("input").checked;
+            render();
+          });
+        });
+        render();
+      }
+
+      wireList("break-list", KEY_BREAK, 8, (n) => {
+        const num = document.getElementById("break-num");
+        if (num) num.textContent = String(n);
+        const bar = document.getElementById("break-bar");
+        if (bar) {
+          bar.style.width = (n / 8) * 100 + "%";
+          bar.style.background = n >= 7 ? "var(--ok)" : n >= 4 ? "var(--warn)" : "var(--err)";
+        }
+        const v = document.getElementById("break-verdict");
+        if (v) {
+          if (n >= 7) { v.textContent = "CANDIDATO ENTRAR"; v.className = "pass"; }
+          else { v.textContent = "ESPERAR"; v.className = "fail"; }
+        }
+      });
+
+      wireList("fake-list", KEY_FAKE, 5, (n) => {
+        const num = document.getElementById("fake-num");
+        if (num) num.textContent = String(n);
+        const v = document.getElementById("fake-verdict");
+        if (v) {
+          if (n >= 2) { v.textContent = "NO OPERAR BREAK"; v.className = "fail"; }
+          else { v.textContent = "OK E1"; v.className = "pass"; }
+        }
+      });
+    })();
+  </script>
+
+</body>
+</html>

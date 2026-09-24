@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import {
   HistoryDetail,
   HistoryListItem,
+  HistoryResultado,
   Market,
   SignalsApiService,
 } from '../../services/signals-api.service';
@@ -32,17 +33,28 @@ export class HistorialComponent implements OnInit {
   loading = false;
   error = '';
   clearing = false;
+  /** id → guardando anotación */
+  savingIds = new Set<number>();
+  saveHint = '';
 
   detail: HistoryDetail | null = null;
   detailLoading = false;
   detailMode: ReportViewMode = 'rapida';
   drawerOpen = false;
+  /** Panel detalle a pantalla amplia (vs drawer estrecho). */
+  detailExpanded = true;
 
   readonly markets: { id: Market | ''; label: string }[] = [
     { id: '', label: 'Todos' },
     { id: 'btc', label: 'BTC' },
     { id: 'us30', label: 'US30' },
     { id: 'xauusd', label: 'XAUUSD' },
+  ];
+
+  readonly resultadoOptions: { value: HistoryResultado | ''; label: string }[] = [
+    { value: '', label: '—' },
+    { value: 'ganada', label: 'Ganada (win)' },
+    { value: 'perdida', label: 'Perdida (loss)' },
   ];
 
   ngOnInit(): void {
@@ -127,8 +139,73 @@ export class HistorialComponent implements OnInit {
     return biasLabel(value);
   }
 
+  resultadoClass(value: string | null | undefined): string {
+    if (value === 'ganada') return 'res-win';
+    if (value === 'perdida') return 'res-lose';
+    return 'res-empty';
+  }
+
+  isSaving(id: number): boolean {
+    return this.savingIds.has(id);
+  }
+
+  onCommentBlur(item: HistoryListItem, ev: Event): void {
+    const el = ev.target as HTMLInputElement | HTMLTextAreaElement;
+    const next = (el.value || '').trim();
+    const prev = (item.comment || '').trim();
+    if (next === prev) return;
+    this.patchItem(item, { comment: next || null });
+  }
+
+  onResultadoChange(item: HistoryListItem, ev: Event): void {
+    const el = ev.target as HTMLSelectElement;
+    const raw = el.value;
+    const next: HistoryResultado | null =
+      raw === 'ganada' || raw === 'perdida' ? raw : null;
+    if ((item.resultado || null) === next) return;
+    this.patchItem(item, { resultado: next });
+  }
+
+  private patchItem(
+    item: HistoryListItem,
+    body: { comment?: string | null; resultado?: HistoryResultado | null }
+  ): void {
+    this.savingIds.add(item.id);
+    this.saveHint = '';
+    this.api.historyPatch(item.id, body).subscribe({
+      next: (res) => {
+        this.savingIds.delete(item.id);
+        const updated = res.item;
+        const idx = this.items.findIndex((i) => i.id === item.id);
+        if (idx >= 0) {
+          this.items[idx] = {
+            ...this.items[idx],
+            comment: updated.comment ?? null,
+            resultado: updated.resultado ?? null,
+          };
+        }
+        if (this.detail?.id === item.id) {
+          this.detail = {
+            ...this.detail,
+            comment: updated.comment ?? null,
+            resultado: updated.resultado ?? null,
+          };
+        }
+        this.saveHint = 'Guardado';
+        setTimeout(() => {
+          if (this.saveHint === 'Guardado') this.saveHint = '';
+        }, 1500);
+      },
+      error: (err: unknown) => {
+        this.savingIds.delete(item.id);
+        this.error = this.errMsg(err, 'No se pudo guardar comentario/resultado');
+      },
+    });
+  }
+
   openDetail(item: HistoryListItem): void {
     this.drawerOpen = true;
+    this.detailExpanded = true;
     this.detail = null;
     this.detailLoading = true;
     this.detailMode = 'trader';
@@ -145,9 +222,14 @@ export class HistorialComponent implements OnInit {
     });
   }
 
+  toggleDetailExpand(): void {
+    this.detailExpanded = !this.detailExpanded;
+  }
+
   closeDetail(): void {
     this.drawerOpen = false;
     this.detail = null;
+    this.detailExpanded = true;
   }
 
   deleteOne(item: HistoryListItem, ev?: Event): void {

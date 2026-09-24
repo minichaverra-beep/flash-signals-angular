@@ -40,10 +40,7 @@ function openBetterSqlite3() {
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.exec(readSchemaSql());
-  db.prepare(
-    `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`
-  ).run('001_init', new Date().toISOString());
-  return {
+  const engine = {
     kind: 'better-sqlite3',
     db,
     run(sql, params = []) {
@@ -56,6 +53,8 @@ function openBetterSqlite3() {
       return db.prepare(sql).all(...params);
     },
   };
+  applyHistoryMigrations(engine);
+  return engine;
 }
 
 async function openSqlJs() {
@@ -74,15 +73,6 @@ async function openSqlJs() {
   }
   // exec: multi-statement (run solo garantiza el primero en algunas builds).
   db.exec(readSchemaSql());
-  try {
-    db.run(
-      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
-      ['001_init', new Date().toISOString()]
-    );
-  } catch {
-    /* ignore */
-  }
-
   const persist = () => {
     const data = db.export();
     fs.writeFileSync(dbPath, Buffer.from(data));
@@ -101,7 +91,7 @@ async function openSqlJs() {
     }
   };
 
-  return {
+  const engine = {
     kind: 'sql.js',
     db,
     save: persist,
@@ -135,6 +125,56 @@ async function openSqlJs() {
       return rows;
     },
   };
+  applyHistoryMigrations(engine);
+  return engine;
+}
+
+/**
+ * Migraciones incrementales (CREATE IF NOT EXISTS no altera tablas viejas).
+ */
+function applyHistoryMigrations(e) {
+  const now = new Date().toISOString();
+  e.run(
+    `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+    ['001_init', now]
+  );
+
+  const has002 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['002_history_comment_resultado']
+  );
+  if (!has002) {
+    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
+    const names = new Set(cols.map((c) => String(c.name)));
+    if (!names.has('comment')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN comment TEXT`);
+    }
+    if (!names.has('resultado')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN resultado TEXT`);
+    }
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['002_history_comment_resultado', now]
+    );
+  }
+}
+
+const RESULTADO_OK = new Set(['ganada', 'perdida']);
+
+function normalizeComment(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  return s.slice(0, 2000);
+}
+
+function normalizeResultado(raw) {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim().toLowerCase();
+  if (s === 'win' || s === 'winning' || s === 'won') return 'ganada';
+  if (s === 'lose' || s === 'loss' || s === 'lost') return 'perdida';
+  if (RESULTADO_OK.has(s)) return s;
+  return undefined; // invalid
 }
 
 async function getEngine() {
@@ -221,6 +261,13 @@ function rowToListItem(row) {
     error: row.error || null,
     flags,
     bias: resolveBias(flags, summaryBias),
+    comment: row.comment != null && String(row.comment).trim()
+      ? String(row.comment)
+      : null,
+    resultado:
+      row.resultado != null && RESULTADO_OK.has(String(row.resultado).toLowerCase())
+        ? String(row.resultado).toLowerCase()
+        : null,
   };
 }
 
@@ -307,7 +354,7 @@ async function listHistory(opts = {}) {
     );
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error,
+              flags_json, entry, verdict, score_combined, error, comment, resultado,
               json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        WHERE market = ?
@@ -319,7 +366,7 @@ async function listHistory(opts = {}) {
     total = e.get(`SELECT COUNT(*) AS c FROM signal_history`);
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error,
+              flags_json, entry, verdict, score_combined, error, comment, resultado,
               json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        ORDER BY created_at DESC, id DESC
@@ -354,6 +401,46 @@ async function deleteById(id) {
   return { deleted: Number(info.changes || 0) };
 }
 
+/**
+ * Actualiza anotaciones del trader (comment / resultado).
+ * @param {number} id
+ * @param {{ comment?: string|null, resultado?: string|null }} patch
+ * @returns {Promise<{ ok: boolean, item?: object, error?: string }>}
+ */
+async function updateAnnotation(id, patch = {}) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) {
+    return { ok: false, error: 'id inválido' };
+  }
+  const existing = e.get(`SELECT id FROM signal_history WHERE id = ?`, [n]);
+  if (!existing) {
+    return { ok: false, error: 'not_found' };
+  }
+
+  const sets = [];
+  const params = [];
+  if (Object.prototype.hasOwnProperty.call(patch, 'comment')) {
+    sets.push('comment = ?');
+    params.push(normalizeComment(patch.comment));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'resultado')) {
+    const r = normalizeResultado(patch.resultado);
+    if (r === undefined) {
+      return { ok: false, error: 'resultado inválido (usa ganada|perdida|vacío)' };
+    }
+    sets.push('resultado = ?');
+    params.push(r);
+  }
+  if (!sets.length) {
+    return { ok: false, error: 'nada que actualizar' };
+  }
+  params.push(n);
+  e.run(`UPDATE signal_history SET ${sets.join(', ')} WHERE id = ?`, params);
+  const item = await getById(n);
+  return { ok: true, item };
+}
+
 async function clearAll() {
   const e = await getEngine();
   const info = e.run(`DELETE FROM signal_history`);
@@ -370,6 +457,7 @@ module.exports = {
   listHistory,
   getById,
   deleteById,
+  updateAnnotation,
   clearAll,
   getBackendKind,
   _resetForTests,
