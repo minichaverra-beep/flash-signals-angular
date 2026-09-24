@@ -170,14 +170,20 @@ export class SignalsApiService {
     return this.http.get<HistoryDetail>(`${this.base}/history/${id}`);
   }
 
-  historyDelete(id: number): Observable<{ ok: boolean; deleted: number }> {
+  historyDelete(
+    id: number,
+    unlockPassword: string
+  ): Observable<{ ok: boolean; deleted: number }> {
     return this.http.delete<{ ok: boolean; deleted: number }>(
-      `${this.base}/history/${id}`
+      `${this.base}/history/${id}`,
+      { headers: { 'X-History-Unlock': unlockPassword } }
     );
   }
 
-  historyClear(): Observable<{ ok: boolean; deleted: number }> {
-    return this.http.delete<{ ok: boolean; deleted: number }>(`${this.base}/history`);
+  historyClear(unlockPassword: string): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(`${this.base}/history`, {
+      headers: { 'X-History-Unlock': unlockPassword },
+    });
   }
 
   historyPatch(
@@ -187,6 +193,31 @@ export class SignalsApiService {
     return this.http.patch<{ ok: boolean; item: HistoryDetail }>(
       `${this.base}/history/${id}`,
       body
+    );
+  }
+
+  /** URL de la captura del resultado (cache-bust con updatedAt opcional). */
+  historyResultImageUrl(id: number, bust?: number | string): string {
+    const q = bust != null ? `?v=${encodeURIComponent(String(bust))}` : '';
+    return `${this.base}/history/${id}/result-image${q}`;
+  }
+
+  historyUploadResultImage(
+    id: number,
+    imageBase64: string,
+    mime?: string
+  ): Observable<{ ok: boolean; item: HistoryDetail }> {
+    return this.http.post<{ ok: boolean; item: HistoryDetail }>(
+      `${this.base}/history/${id}/result-image`,
+      { imageBase64, mime }
+    );
+  }
+
+  historyDeleteResultImage(
+    id: number
+  ): Observable<{ ok: boolean; item: HistoryDetail }> {
+    return this.http.delete<{ ok: boolean; item: HistoryDetail }>(
+      `${this.base}/history/${id}/result-image`
     );
   }
 
@@ -272,6 +303,9 @@ export interface HistoryListItem {
   comment?: string | null;
   /** Resultado de la operación: ganada | perdida. */
   resultado?: HistoryResultado | null;
+  /** Hay captura de resultado adjunta. */
+  hasResultImage?: boolean;
+  resultImageMime?: string | null;
 }
 
 export interface HistoryListResponse {

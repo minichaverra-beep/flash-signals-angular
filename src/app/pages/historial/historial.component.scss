@@ -83,6 +83,21 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--gold) 70%, white);
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: color-mix(in srgb, var(--fire) 12%, transparent);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
 }
 
 .danger {
@@ -153,7 +168,7 @@ button:disabled {
 
 .hist-table {
   width: 100%;
-  min-width: 1280px;
+  min-width: 1380px;
   border-collapse: collapse;
   font-size: 0.95rem;
   table-layout: auto;
@@ -246,6 +261,72 @@ button:disabled {
 .resultado-cell {
   min-width: 9.5rem;
   width: 10rem;
+}
+
+.shot-cell {
+  width: 4.5rem;
+  text-align: center;
+}
+
+.shot-thumb {
+  display: inline-flex;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0e0808;
+  cursor: zoom-in;
+  width: 3.25rem;
+  height: 2.4rem;
+}
+
+.shot-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.card-shot {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+.btn-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent);
+  background: color-mix(in srgb, var(--teal) 18%, var(--panel-deep));
+  color: color-mix(in srgb, var(--teal) 35%, white);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.btn-attach:hover {
+  background: color-mix(in srgb, var(--teal) 28%, var(--panel-deep));
+  border-color: var(--teal);
+}
+
+.btn-attach.sm {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
+.btn-attach.busy {
+  opacity: 0.55;
+  cursor: wait;
+  pointer-events: none;
 }
 
 .hist-input,
@@ -420,6 +501,165 @@ button:disabled {
   gap: 1rem;
 }
 
+.result-shot {
+  margin: 0 0 1.1rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 28%, transparent);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 80% at 10% 0%, color-mix(in srgb, var(--fire) 10%, transparent), transparent 55%),
+    #160e0e;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.result-shot.drop-active {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 28%, transparent);
+  background: color-mix(in srgb, var(--teal) 8%, #160e0e);
+}
+
+.result-shot.has-image {
+  border-style: solid;
+}
+
+.result-shot.busy {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.result-shot-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.result-shot-head .annotate-label {
+  margin: 0 0 0.2rem;
+}
+
+.result-shot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dropzone-panel {
+  display: grid;
+  place-items: center;
+  gap: 0.45rem;
+  text-align: center;
+  min-height: 8.5rem;
+  padding: 1.25rem 1rem;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--border) 80%, var(--gold));
+  background: color-mix(in srgb, black 22%, transparent);
+  color: var(--text);
+}
+
+.dropzone-panel.disabled {
+  opacity: 0.55;
+}
+
+.dropzone-panel .btn-attach {
+  margin-top: 0.35rem;
+}
+
+.drop-icon {
+  font-size: 1.55rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--gold) 70%, white);
+  opacity: 0.9;
+}
+
+.result-shot-preview {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0a0606;
+  cursor: zoom-in;
+}
+
+.result-shot-preview img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: #0a0606;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, black 78%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.lightbox img {
+  max-width: min(1100px, 94vw);
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+  background: #0a0606;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.unlock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: color-mix(in srgb, black 70%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.unlock-dialog {
+  position: fixed;
+  z-index: 95;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 2rem));
+  padding: 1.25rem 1.35rem 1.35rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+}
+
+.unlock-dialog h2 {
+  margin: 0.15rem 0 0.5rem;
+}
+
+.unlock-dialog .muted {
+  margin-bottom: 0.85rem;
+}
+
+.unlock-dialog .annotate-label {
+  margin-bottom: 0.65rem;
+}
+
+.unlock-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
 @media (max-width: 720px) {
   .drawer.expanded {
     top: 0;
@@ -433,6 +673,10 @@ button:disabled {
 
   .drawer.expanded .detail-annotate {
     grid-template-columns: 1fr;
+  }
+
+  .result-shot-head {
+    flex-direction: column;
   }
 }
 

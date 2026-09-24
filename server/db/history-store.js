@@ -157,9 +157,50 @@ function applyHistoryMigrations(e) {
       ['002_history_comment_resultado', now]
     );
   }
+
+  const has003 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['003_history_result_image']
+  );
+  if (!has003) {
+    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
+    const names = new Set(cols.map((c) => String(c.name)));
+    if (!names.has('result_image_name')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN result_image_name TEXT`);
+    }
+    if (!names.has('result_image_mime')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN result_image_mime TEXT`);
+    }
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['003_history_result_image', now]
+    );
+  }
 }
 
 const RESULTADO_OK = new Set(['ganada', 'perdida']);
+
+const IMAGE_MIME = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
+const MAX_RESULT_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function getAttachmentsDir() {
+  return path.join(getDataDir(), 'history-attachments');
+}
+
+function ensureAttachmentsDir() {
+  const dir = getAttachmentsDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
 
 function normalizeComment(raw) {
   if (raw == null) return null;
@@ -268,6 +309,13 @@ function rowToListItem(row) {
       row.resultado != null && RESULTADO_OK.has(String(row.resultado).toLowerCase())
         ? String(row.resultado).toLowerCase()
         : null,
+    hasResultImage: Boolean(
+      row.result_image_name != null && String(row.result_image_name).trim()
+    ),
+    resultImageMime:
+      row.result_image_mime != null && String(row.result_image_mime).trim()
+        ? String(row.result_image_mime).trim()
+        : null,
   };
 }
 
@@ -355,6 +403,7 @@ async function listHistory(opts = {}) {
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
+              result_image_name, result_image_mime,
               json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        WHERE market = ?
@@ -367,6 +416,7 @@ async function listHistory(opts = {}) {
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
+              result_image_name, result_image_mime,
               json_extract(summary_json, '$.bias') AS summary_bias
        FROM signal_history
        ORDER BY created_at DESC, id DESC
@@ -397,6 +447,21 @@ async function deleteById(id) {
   const e = await getEngine();
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) return { deleted: 0 };
+  const existing = e.get(
+    `SELECT result_image_name FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (existing?.result_image_name) {
+    const abs = path.join(
+      getAttachmentsDir(),
+      String(existing.result_image_name)
+    );
+    try {
+      if (fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {
+      /* ignore */
+    }
+  }
   const info = e.run(`DELETE FROM signal_history WHERE id = ?`, [n]);
   return { deleted: Number(info.changes || 0) };
 }
@@ -441,14 +506,136 @@ async function updateAnnotation(id, patch = {}) {
   return { ok: true, item };
 }
 
+/**
+ * @param {number} id
+ * @returns {Promise<{ absPath: string, mime: string } | null>}
+ */
+async function getResultImageFile(id) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return null;
+  const row = e.get(
+    `SELECT result_image_name, result_image_mime FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (!row?.result_image_name) return null;
+  const name = String(row.result_image_name);
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+    return null;
+  }
+  const absPath = path.join(getAttachmentsDir(), name);
+  if (!fs.existsSync(absPath)) return null;
+  return {
+    absPath,
+    mime: row.result_image_mime || 'application/octet-stream',
+  };
+}
+
+/**
+ * Guarda captura del resultado (PNG/JPEG/WebP/GIF).
+ * @param {number} id
+ * @param {Buffer} buffer
+ * @param {string} mime
+ */
+async function saveResultImage(id, buffer, mime) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) {
+    return { ok: false, error: 'id inválido' };
+  }
+  const existing = e.get(
+    `SELECT id, result_image_name FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (!existing) {
+    return { ok: false, error: 'not_found' };
+  }
+  const mimeNorm = String(mime || '')
+    .trim()
+    .toLowerCase()
+    .split(';')[0];
+  const ext = IMAGE_MIME[mimeNorm];
+  if (!ext) {
+    return { ok: false, error: 'formato no soportado (usa PNG, JPG, WebP o GIF)' };
+  }
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24) {
+    return { ok: false, error: 'imagen vacía o inválida' };
+  }
+  if (buffer.length > MAX_RESULT_IMAGE_BYTES) {
+    return { ok: false, error: 'imagen demasiado grande (máx 5 MB)' };
+  }
+
+  const dir = ensureAttachmentsDir();
+  // Borra archivo previo si existía
+  if (existing.result_image_name) {
+    const prev = path.join(dir, String(existing.result_image_name));
+    try {
+      if (fs.existsSync(prev)) fs.unlinkSync(prev);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const fileName = `${n}-${Date.now()}.${ext}`;
+  const abs = path.join(dir, fileName);
+  fs.writeFileSync(abs, buffer);
+  e.run(
+    `UPDATE signal_history SET result_image_name = ?, result_image_mime = ? WHERE id = ?`,
+    [fileName, mimeNorm === 'image/jpg' ? 'image/jpeg' : mimeNorm, n]
+  );
+  const item = await getById(n);
+  return { ok: true, item };
+}
+
+async function deleteResultImage(id) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) {
+    return { ok: false, error: 'id inválido' };
+  }
+  const existing = e.get(
+    `SELECT id, result_image_name FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (!existing) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (existing.result_image_name) {
+    const abs = path.join(getAttachmentsDir(), String(existing.result_image_name));
+    try {
+      if (fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch {
+      /* ignore */
+    }
+  }
+  e.run(
+    `UPDATE signal_history SET result_image_name = NULL, result_image_mime = NULL WHERE id = ?`,
+    [n]
+  );
+  const item = await getById(n);
+  return { ok: true, item };
+}
+
 async function clearAll() {
   const e = await getEngine();
+  // Limpia adjuntos en disco
+  const dir = getAttachmentsDir();
+  if (fs.existsSync(dir)) {
+    for (const name of fs.readdirSync(dir)) {
+      try {
+        fs.unlinkSync(path.join(dir, name));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
   const info = e.run(`DELETE FROM signal_history`);
   return { deleted: Number(info.changes || 0) };
 }
 
 async function init() {
   await getEngine();
+  ensureAttachmentsDir();
 }
 
 module.exports = {
@@ -458,13 +645,20 @@ module.exports = {
   getById,
   deleteById,
   updateAnnotation,
+  saveResultImage,
+  deleteResultImage,
+  getResultImageFile,
   clearAll,
   getBackendKind,
   _resetForTests,
+  MAX_RESULT_IMAGE_BYTES,
   get DATA_DIR() {
     return getDataDir();
   },
   get DB_PATH() {
     return getDbPath();
+  },
+  get ATTACHMENTS_DIR() {
+    return getAttachmentsDir();
   },
 };

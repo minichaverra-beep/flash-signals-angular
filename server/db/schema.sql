@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS signal_history (
   error TEXT,
   -- Anotaciones del trader (editables desde /historial)
   comment TEXT,
-  resultado TEXT
+  resultado TEXT,
+  -- Captura del resultado (archivo en data/history-attachments/)
+  result_image_name TEXT,
+  result_image_mime TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_signal_history_created

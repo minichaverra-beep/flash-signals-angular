@@ -26,6 +26,7 @@
       >{{ m.label }}</button>
     </div>
     <div class="toolbar-actions">
+      <span class="lock-badge" title="Borrar filas requiere contraseña">🔒 Bloqueo activo</span>
       <button type="button" class="ghost" (click)="load()" [disabled]="loading">
         {{ loading ? 'Cargando…' : 'Actualizar' }}
       </button>
@@ -73,6 +74,7 @@
             <th>Estado</th>
             <th>Comentarios</th>
             <th>Resultado</th>
+            <th>Captura</th>
             <th></th>
           </tr>
         </thead>
@@ -131,6 +133,32 @@
                 >{{ opt.label }}</option>
               </select>
             </td>
+            <td class="shot-cell" (click)="$event.stopPropagation()">
+              <button
+                *ngIf="item.hasResultImage && resultImageUrl(item) as thumb"
+                type="button"
+                class="shot-thumb"
+                (click)="openLightbox(item, $event)"
+                title="Ver captura"
+              >
+                <img [src]="thumb" alt="Captura resultado" />
+              </button>
+              <label
+                *ngIf="!item.hasResultImage"
+                class="btn-attach sm"
+                [class.busy]="isImageBusy(item.id)"
+                title="Adjuntar captura"
+              >
+                {{ isImageBusy(item.id) ? '…' : 'Adjuntar' }}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  hidden
+                  [disabled]="isImageBusy(item.id)"
+                  (change)="onFilePicked(item, $event)"
+                />
+              </label>
+            </td>
             <td class="actions-cell">
               <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
               <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
@@ -178,6 +206,25 @@
               [selected]="(item.resultado || '') === opt.value"
             >{{ opt.label }}</option>
           </select>
+          <div class="card-shot" *ngIf="item.hasResultImage && resultImageUrl(item) as thumb">
+            <button type="button" class="shot-thumb" (click)="openLightbox(item, $event)">
+              <img [src]="thumb" alt="Captura" />
+            </button>
+            <span class="muted tiny">Captura adjunta</span>
+          </div>
+          <label
+            class="btn-attach"
+            [class.busy]="isImageBusy(item.id)"
+          >
+            {{ isImageBusy(item.id) ? 'Subiendo…' : (item.hasResultImage ? 'Reemplazar captura' : 'Adjuntar archivo') }}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+              [disabled]="isImageBusy(item.id)"
+              (change)="onFilePicked(item, $event)"
+            />
+          </label>
         </div>
         <div class="card-actions">
           <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
@@ -291,6 +338,75 @@
         </label>
       </div>
 
+      <div
+        class="result-shot"
+        [class.has-image]="d.hasResultImage"
+        [class.busy]="isImageBusy(d.id)"
+        [class.drop-active]="dropActive"
+        (dragover)="onDropZoneDragOver($event)"
+        (dragleave)="onDropZoneDragLeave($event)"
+        (drop)="onDropZoneDrop(d, $event)"
+      >
+        <div class="result-shot-head">
+          <div>
+            <p class="annotate-label">Captura del resultado</p>
+            <p class="muted tiny">PNG / JPG / WebP / GIF · máx. 5 MB · también puedes arrastrar o pegar (Ctrl+V)</p>
+          </div>
+          <div class="result-shot-actions">
+            <label
+              class="btn-attach"
+              [class.busy]="isImageBusy(d.id)"
+            >
+              {{ isImageBusy(d.id) ? 'Subiendo…' : (d.hasResultImage ? 'Reemplazar archivo' : 'Adjuntar archivo') }}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                hidden
+                [disabled]="isImageBusy(d.id)"
+                (change)="onFilePicked(d, $event)"
+              />
+            </label>
+            <button
+              *ngIf="d.hasResultImage"
+              type="button"
+              class="ghost sm"
+              (click)="openLightbox(d)"
+            >Ampliar</button>
+            <button
+              *ngIf="d.hasResultImage"
+              type="button"
+              class="ghost sm danger-text"
+              [disabled]="isImageBusy(d.id)"
+              (click)="removeResultImage(d, $event)"
+            >Quitar</button>
+          </div>
+        </div>
+
+        <ng-container *ngIf="d.hasResultImage && resultImageUrl(d) as shot; else dropEmpty">
+          <button type="button" class="result-shot-preview" (click)="openLightbox(d)">
+            <img [src]="shot" alt="Captura del resultado" />
+          </button>
+        </ng-container>
+
+        <ng-template #dropEmpty>
+          <div class="dropzone-panel" [class.disabled]="isImageBusy(d.id)">
+            <span class="drop-icon" aria-hidden="true">⧉</span>
+            <strong>{{ isImageBusy(d.id) ? 'Subiendo captura…' : 'Arrastra la captura aquí' }}</strong>
+            <span class="muted tiny">o usa el botón «Adjuntar archivo»</span>
+            <label class="btn-attach" [class.busy]="isImageBusy(d.id)">
+              {{ isImageBusy(d.id) ? 'Subiendo…' : 'Elegir archivo…' }}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                hidden
+                [disabled]="isImageBusy(d.id)"
+                (change)="onFilePicked(d, $event)"
+              />
+            </label>
+          </div>
+        </ng-template>
+      </div>
+
       <app-signal-report-viewer
         *ngIf="d.summary"
         [summary]="d.summary"
@@ -306,4 +422,49 @@
       </p>
     </ng-container>
   </aside>
+
+  <!-- Lightbox captura -->
+  <div class="lightbox" *ngIf="lightboxUrl" (click)="closeLightbox()" role="dialog" aria-modal="true" aria-label="Captura ampliada">
+    <button type="button" class="ghost lightbox-close" (click)="closeLightbox()">Cerrar</button>
+    <img [src]="lightboxUrl" alt="Captura del resultado" (click)="$event.stopPropagation()" />
+  </div>
+
+  <!-- Modo lock: contraseña para borrar -->
+  <div
+    class="unlock-backdrop"
+    *ngIf="unlockOpen"
+    (click)="cancelUnlock()"
+  ></div>
+  <div
+    class="unlock-dialog"
+    *ngIf="unlockOpen"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Contraseña de bloqueo"
+    (click)="$event.stopPropagation()"
+  >
+    <p class="eyebrow">Modo lock</p>
+    <h2>{{ unlockTitle() }}</h2>
+    <p class="muted">{{ unlockHint() }}</p>
+    <label class="annotate-label">
+      Contraseña
+      <input
+        type="password"
+        class="hist-input"
+        autocomplete="current-password"
+        [value]="unlockPassword"
+        [disabled]="unlockBusy"
+        (input)="onUnlockPasswordInput($event)"
+        (keydown.enter)="confirmUnlock()"
+        autofocus
+      />
+    </label>
+    <p class="msg err" *ngIf="unlockError">{{ unlockError }}</p>
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="cancelUnlock()" [disabled]="unlockBusy">Cancelar</button>
+      <button type="button" class="danger" (click)="confirmUnlock()" [disabled]="unlockBusy">
+        {{ unlockBusy ? 'Comprobando…' : (unlockKind === 'clear' ? 'Limpiar' : 'Borrar') }}
+      </button>
+    </div>
+  </div>
 </div>

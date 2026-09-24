@@ -233,6 +233,33 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(miss.ok, false);
     assert.equal(miss.error, 'not_found');
   });
+
+  it('saveResultImage / getResultImageFile / deleteResultImage', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    // PNG 1x1 mínimo
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    const saved = await store.saveResultImage(id, png, 'image/png');
+    assert.equal(saved.ok, true);
+    assert.equal(saved.item?.hasResultImage, true);
+    assert.equal(saved.item?.resultImageMime, 'image/png');
+
+    const file = await store.getResultImageFile(id);
+    assert.ok(file);
+    assert.equal(file.mime, 'image/png');
+    assert.ok(fs.existsSync(file.absPath));
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.hasResultImage, true);
+
+    const deleted = await store.deleteResultImage(id);
+    assert.equal(deleted.ok, true);
+    assert.equal(deleted.item?.hasResultImage, false);
+    assert.equal(await store.getResultImageFile(id), null);
+  });
 });
 
 describe('history-store fallback sql.js', () => {

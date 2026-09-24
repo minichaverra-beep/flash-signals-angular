@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
@@ -17,6 +18,10 @@ const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const TRADING_ROOT =
   process.env.CURSOR_TRADING_ROOT ||
   path.normalize('D:\\Danilo\\Trading\\Cursor Trading');
+
+/** Contraseña para borrar filas / limpiar historial (modo lock). */
+const HISTORY_UNLOCK_PASSWORD =
+  process.env.HISTORY_UNLOCK_PASSWORD || 'Elxokas2026*';
 
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:4400',
@@ -114,6 +119,38 @@ function parseHistoryId(raw) {
   return n;
 }
 
+/**
+ * Modo lock: borrado de historial requiere contraseña
+ * (header X-History-Unlock o body.password / unlockPassword).
+ * @returns {boolean} true si autorizado; si no, ya respondió 401/403.
+ */
+function requireHistoryUnlock(req, res) {
+  const fromHeader = req.get('x-history-unlock');
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const provided = String(
+    fromHeader ?? body.unlockPassword ?? body.password ?? ''
+  );
+  if (!provided) {
+    res.status(401).json({
+      error: 'Historial bloqueado: se requiere contraseña para borrar',
+      locked: true,
+    });
+    return false;
+  }
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(HISTORY_UNLOCK_PASSWORD, 'utf8');
+  const ok =
+    a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!ok) {
+    res.status(403).json({
+      error: 'Contraseña incorrecta',
+      locked: true,
+    });
+    return false;
+  }
+  return true;
+}
+
 function flagsFromBody(body) {
   return {
     bullish: !!body.bullish,
@@ -176,7 +213,8 @@ app.use(
     },
   })
 );
-app.use(express.json({ limit: '1mb' }));
+// 8mb: permite adjuntar captura del resultado en base64 (~5 MB binario).
+app.use(express.json({ limit: '8mb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // Wiki embebe HTML/PDF en iframe same-origin vía /api/artifacts/raw (proxy :4400→:3847).
@@ -836,6 +874,7 @@ app.delete('/api/history/:id', async (req, res) => {
   if (id == null) {
     return res.status(400).json({ error: 'id inválido' });
   }
+  if (!requireHistoryUnlock(req, res)) return;
   try {
     const result = await historyStore.deleteById(id);
     if (!result.deleted) {
@@ -885,7 +924,89 @@ app.patch('/api/history/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/history', async (_req, res) => {
+/**
+ * Captura del resultado: body JSON { imageBase64, mime? } (data-URL también ok).
+ * Sin multer — archivo en data/history-attachments/.
+ */
+app.post('/api/history/:id/result-image', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  let raw = body.imageBase64 ?? body.base64 ?? body.data ?? '';
+  let mime = body.mime || body.contentType || '';
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return res.status(400).json({ error: 'Envía imageBase64 (PNG/JPG/WebP/GIF)' });
+  }
+  raw = raw.trim();
+  const dataUrl = /^data:([^;]+);base64,(.+)$/i.exec(raw);
+  if (dataUrl) {
+    mime = mime || dataUrl[1];
+    raw = dataUrl[2];
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(raw, 'base64');
+  } catch {
+    return res.status(400).json({ error: 'imageBase64 inválido' });
+  }
+  try {
+    const result = await historyStore.saveResultImage(id, buffer, mime || 'image/png');
+    if (!result.ok && result.error === 'not_found') {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo guardar la imagen' });
+    }
+    res.json({ ok: true, item: result.item });
+  } catch (err) {
+    console.error('[history] result-image post:', err);
+    res.status(500).json({ error: 'No se pudo guardar la imagen del resultado' });
+  }
+});
+
+app.get('/api/history/:id/result-image', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const file = await historyStore.getResultImageFile(id);
+    if (!file) {
+      return res.status(404).json({ error: 'Sin imagen de resultado' });
+    }
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Cache-Control', 'private, max-age=120');
+    res.sendFile(file.absPath);
+  } catch (err) {
+    console.error('[history] result-image get:', err);
+    res.status(500).json({ error: 'No se pudo leer la imagen' });
+  }
+});
+
+app.delete('/api/history/:id/result-image', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const result = await historyStore.deleteResultImage(id);
+    if (!result.ok && result.error === 'not_found') {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo borrar la imagen' });
+    }
+    res.json({ ok: true, item: result.item });
+  } catch (err) {
+    console.error('[history] result-image delete:', err);
+    res.status(500).json({ error: 'No se pudo borrar la imagen del resultado' });
+  }
+});
+
+app.delete('/api/history', async (req, res) => {
+  if (!requireHistoryUnlock(req, res)) return;
   try {
     const result = await historyStore.clearAll();
     res.json({ ok: true, deleted: result.deleted });

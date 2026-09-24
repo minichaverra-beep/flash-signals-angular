@@ -55,6 +55,7 @@ pids*.txt
 data/*.sqlite
 data/*.sqlite-*
 data/*.db
+data/history-attachments/
 
 # Temporales en Artifacts (versionar el resto: README y artefactos útiles)
 docs/Artifacts/**/*.tmp
