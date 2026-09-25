@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDH · PPD D · NWOG · GT · Integración E1 · Flash Signals</title>
+  <meta name="description" content="Cómo usar PDH, PPD D (PDL), NWOG y GT (Golden Time / killzones) con la estrategia E1. Filtros soft estilo Zentinel; sin winrates inventados." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: var(--shell); margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 22px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    .chip.gold { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); background: rgba(255,215,0,0.1); }
+    .chip.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent); background: var(--err-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+    }
+    h3 { font-size: 0.95rem; margin: 14px 0 8px; color: #7ec8c9; }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 72ch; line-height: 1.55; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+      .pipe { grid-template-columns: 1fr !important; }
+      .grid2 { grid-template-columns: 1fr !important; }
+    }
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke); border-radius: var(--radius); padding: 14px 16px;
+    }
+    .stat .val { font-family: var(--display); font-size: 1.15rem; font-weight: 600; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat.fire .val { color: var(--fire); }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+    .stat.gold .val { color: var(--gold); }
+    .stat.warn .val { color: var(--warn); }
+    .disclaimer {
+      margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+      background: var(--warn-dim); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8; font-size: 0.86rem; line-height: 1.45;
+    }
+    .card {
+      background: var(--bg-elev); border: 1px solid var(--stroke);
+      border-radius: 16px; padding: 22px 24px; margin-bottom: 16px;
+    }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 0.84rem;
+    }
+    th, td {
+      text-align: left; padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top;
+    }
+    th { color: var(--muted-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td code, .mono { font-family: var(--mono); font-size: 0.78rem; color: #ffd9a0; }
+    .tag {
+      display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 6px;
+    }
+    .tag.pending { background: var(--warn-dim); color: var(--warn); }
+    .tag.real { background: var(--ok-dim); color: var(--ok); }
+    .tag.filter { background: var(--info-dim); color: #7ec8c9; }
+    .tag.trigger { background: var(--fire-dim); color: var(--fire); }
+    .tag.core { background: rgba(255,215,0,0.12); color: var(--gold); }
+    .pipe {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px;
+    }
+    .pipe-step {
+      background: var(--bg-card); border: 1px solid var(--stroke); border-radius: 10px;
+      padding: 12px 10px; text-align: center; font-size: 0.78rem;
+    }
+    .pipe-step strong {
+      display: block; font-family: var(--display); font-size: 0.95rem;
+      letter-spacing: 0.03em; margin-bottom: 4px; color: var(--fire);
+    }
+    .grid2 {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;
+    }
+    .mini {
+      background: var(--bg-card); border: 1px solid var(--stroke);
+      border-radius: 10px; padding: 14px 16px; font-size: 0.86rem; color: var(--muted);
+    }
+    .mini strong { color: var(--text); }
+    .formula {
+      font-family: var(--mono); font-size: 0.8rem; background: #1a1212;
+      border: 1px solid var(--stroke); border-radius: 10px; padding: 14px 16px;
+      color: #e8dcc8; overflow-x: auto; line-height: 1.7; margin: 10px 0 4px;
+    }
+    .footer {
+      margin-top: 28px; font-size: 0.78rem; color: var(--muted-2);
+      border-top: 1px solid var(--stroke); padding-top: 16px;
+    }
+    a { color: #7ec8c9; }
+    ul.compact { margin: 8px 0 0 18px; color: var(--muted); font-size: 0.88rem; }
+    ul.compact li { margin-bottom: 4px; }
+    p.lead { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .toc a {
+      font-size: 0.75rem; text-decoration: none; padding: 4px 10px;
+      border-radius: 999px; border: 1px solid var(--stroke); background: var(--bg-soft); color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">E1 · CRT / Scalping</span>
+        <span class="chip teal">Filter-first · Zentinel</span>
+        <span class="chip gold">ICT capas</span>
+        <span class="chip warn">NWOG · PENDING backtest</span>
+      </div>
+      <h1>PDH · PPD D · NWOG · GT en E1</h1>
+      <p class="hero-sub">
+        Guía operativa en español: cómo leer <strong>PDH</strong> y <strong>PPD D (PDL)</strong> del núcleo CRT,
+        sumar <strong>NWOG</strong> (New Week Opening Gap) y <strong>GT</strong> (Golden Time / killzones Watchtower)
+        sin romper el contrato E1 — entrada = H1/CTR + zona + 2M5; el resto es filtro / confluencia.
+      </p>
+      <div class="stats">
+        <div class="stat fire">
+          <div class="val">NÚCLEO</div>
+          <div class="lbl">PDH / PPD D · CRT</div>
+        </div>
+        <div class="stat teal">
+          <div class="val">FILTRO</div>
+          <div class="lbl">GT · killzones NY</div>
+        </div>
+        <div class="stat warn">
+          <div class="val">PENDING</div>
+          <div class="lbl">NWOG aislado</div>
+        </div>
+        <div class="stat ok">
+          <div class="val">PF 4.77</div>
+          <div class="lbl">E1 plan (no capa sola)</div>
+        </div>
+      </div>
+      <div class="disclaimer">
+        <strong>Honestidad:</strong> no hay backtest aislado de NWOG ni de “GT solo” en el repo.
+        WR/PF citados abajo son del <em>plan E1 completo</em>
+        (<code>TRADING_PROFESSIONAL_STATS</code> / <code>TRADING_VISUAL_CONTEXT</code>), no de cada capa ICT.
+        NWOG no está cableado en el stack Python — integración propuesta = soft filter.
+      </div>
+      <nav class="toc" aria-label="Secciones">
+        <a href="#glosario">Glosario</a>
+        <a href="#uso">Cómo usarlos</a>
+        <a href="#efectividad">Efectividad</a>
+        <a href="#integracion">Integración E1</a>
+        <a href="#checklist">Checklist</a>
+        <a href="#fuentes">Fuentes</a>
+      </nav>
+    </header>
+
+    <section class="card" id="glosario">
+      <h2>1 · Glosario (tu stack, no teoría genérica)</h2>
+      <p class="lead">
+        En Cursor Trading, PDH/PDL ya viven en CRT (visual + High signal). NWOG y GT se alinean a ICT / Watchtower;
+        <code>NWOG</code> no aparece como símbolo en código — se documenta aquí para fusión futura.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Sigla</th><th>Significado</th><th>En tu plan</th><th>Rol</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>PDH</code></td>
+            <td>Previous Day High — máximo del día anterior</td>
+            <td>CRT §1.1 Visual · matriz INDICATORS_RULES §3.2 · High CRT deep dive</td>
+            <td><span class="tag core">Núcleo bias</span></td>
+          </tr>
+          <tr>
+            <td><code>PPD D</code> / <code>PDL</code></td>
+            <td>Previous Day Low (rango diario previo) — “PPD D” = lectura día previo / PDL</td>
+            <td>Mismo CRT: dentro rango = NEUTRAL; cierre &lt; PDL = BEAR; fakeout PDL → E2</td>
+            <td><span class="tag core">Núcleo bias</span></td>
+          </tr>
+          <tr>
+            <td><code>NWOG</code></td>
+            <td>New Week Opening Gap — hueco apertura semanal (dom/lun ↔ cierre viernes)</td>
+            <td>No en repo; cercano a ORG (Opening Range Gap) del Watchtower US30</td>
+            <td><span class="tag filter">Soft filter</span> <span class="tag pending">PENDING</span></td>
+          </tr>
+          <tr>
+            <td><code>GT</code></td>
+            <td>Golden Time — ventanas de liquidez (killzones)</td>
+            <td>Watchtower ON: NY 08–10 · 10–11 · 14–16; OFF Asia/London/Lunch</td>
+            <td><span class="tag filter">Soft bonus</span></td>
+          </tr>
+          <tr>
+            <td><code>CRT</code></td>
+            <td>Candle Range Theory — pending / completed / invalid + 0.5</td>
+            <td>Indicador núcleo Legacy Pro + coherencia 12% en High scorecard</td>
+            <td><span class="tag core">Núcleo</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" id="uso">
+      <h2>2 · Cómo usarlos con E1 (paso a paso)</h2>
+      <p class="lead">
+        Orden mental alineado a <code>TRADING_INDICATORS_RULES</code> §6 (orden de capas) y al mandato
+        <code>TRADING_STRATEGY_CONTEXT</code>: BTC/US30 · sesión NY · solo E1 90%+.
+      </p>
+
+      <h3>2.1 PDH + PPD D (PDL) — bias diario</h3>
+      <table>
+        <thead>
+          <tr><th>Lectura</th><th>Acción E1</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Precio <strong>dentro</strong> PDH–PDL</td><td><strong>NEUTRAL</strong> — no forzar; esperar pending CRT HTF</td></tr>
+          <tr><td>Cierre <strong>&gt; PDH</strong></td><td>Sesgo <strong>alcista</strong> — longs en pullback a soporte débil</td></tr>
+          <tr><td>Cierre <strong>&lt; PDL</strong></td><td>Sesgo <strong>bajista</strong> — shorts en rechazo a resistencia débil</td></tr>
+          <tr><td><strong>Fakeout PDH</strong> (wick↑ cierre↓)</td><td><strong>NO long E1</strong> — trampa; CRT invalid bearish</td></tr>
+          <tr><td><strong>Fakeout PDL</strong> (wick↓ cierre↑)</td><td>Contexto <strong>E2</strong> turtle soup — no scalping E1</td></tr>
+        </tbody>
+      </table>
+      <ul class="compact">
+        <li>Long E1 preferible en <strong>discount</strong> vs 0.5 HTF; short en <strong>premium</strong> (INDICATORS §3.4).</li>
+        <li>Fakeout ≠ Break: sweep + reclaim no es breakout de continuación (High signal / protocols).</li>
+        <li>Trigger de entrada sigue siendo <strong>zona + 2 velas M5</strong>, no el cruce de PDH solo.</li>
+      </ul>
+
+      <h3>2.2 NWOG — imán semanal (soft)</h3>
+      <div class="grid2">
+        <div class="mini">
+          <strong>Qué mirar (manual en TV)</strong><br />
+          Marca el gap entre cierre semanal previo y apertura de la semana.
+          Si el precio está midiendo / llenando / rechazando NWOG cerca de tu zona morada, suma confluencia —
+          no abre trade por sí solo.
+        </div>
+        <div class="mini">
+          <strong>Encaje E1</strong><br />
+          Lunes NY AM: si NWOG coincide con PDH/PDL o pool débil + bias H1, sube calidad A+.
+          Si NWOG empuja a London/Asia o a E2 impulsivo → <strong>skip</strong> (mandato sesión NY).
+        </div>
+      </div>
+      <p class="lead" style="margin-top:12px;">
+        Pariente en presets: US30 Watchtower tiene <code>org: true</code> (Opening Range Gap RTH);
+        BTC tiene <code>mno: true</code>. NWOG semanal sería la capa “semana” análoga — aún no versionada en YAML.
+      </p>
+
+      <h3>2.3 GT — Golden Time / killzones</h3>
+      <table>
+        <thead>
+          <tr><th>Ventana (America/New_York)</th><th>Watchtower</th><th>Uso E1</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>08:00–10:00 · 10:00–11:00 · 14:00–16:00</td><td><span class="tag real">ON</span></td><td>Operar E1; soft bonus en confluencia / ICT <code>killzone_ok</code></td></tr>
+          <tr><td>Asia 19–20 · London 02–05 · Lunch 11–14</td><td><span class="tag err">OFF</span></td><td>No live (Asia solo demo). London diluye PF del plan</td></tr>
+        </tbody>
+      </table>
+      <ul class="compact">
+        <li>GT <strong>no sustituye</strong> Rules &gt;70% ni 2M5.</li>
+        <li>Fuera de NY el plan reporta deterioro cualitativo (~20% WR proxy en stats profesionales — sesión, no GT aislado).</li>
+      </ul>
+
+      <h3>2.4 Flujo mental A+</h3>
+      <div class="pipe">
+        <div class="pipe-step"><strong>1 Bias</strong>H1 + PDH/PDL</div>
+        <div class="pipe-step"><strong>2 Gap</strong>NWOG / ORG soft</div>
+        <div class="pipe-step"><strong>3 GT</strong>KZ NY ON?</div>
+        <div class="pipe-step"><strong>4 Zona</strong>+ 2M5</div>
+        <div class="pipe-step"><strong>5 Entrar</strong>R:R 1:2 · SL~9</div>
+      </div>
+    </section>
+
+    <section class="card" id="efectividad">
+      <h2>3 · Efectividad relativa al plan</h2>
+      <p class="lead">
+        Solo números que existen en docs reales. Capas sin medición aislada → <span class="tag pending">PENDING</span>
+        o juicio cualitativo del plan.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Capa</th><th>Evidencia</th><th>Veredicto</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>PDH / PPD D (CRT diario)</td>
+            <td>
+              Núcleo en Visual §1.1 + INDICATORS §3; High exige CRT coherence (12% scorecard).
+              Plan E1: PF <strong>4.77</strong>, WR continuación proxy <strong>75%</strong>, solo E1 Visual WR <strong>73.1%</strong>
+              (<code>TRADING_PROFESSIONAL_STATS</code>).
+            </td>
+            <td><span class="tag real">Alta (plan)</span> — no WR de “solo PDH”</td>
+          </tr>
+          <tr>
+            <td>GT (killzones NY)</td>
+            <td>
+              Sesión NY es regla inmutable; London/mezcla → PF cae a ~2.5 (Visual §2.4).
+              Soft bonus ya en <code>compute_confluencia_setup</code> / ICT scan.
+            </td>
+            <td><span class="tag filter">Filtro crítico</span> · backtest GT solo <span class="tag pending">PENDING</span></td>
+          </tr>
+          <tr>
+            <td>NWOG</td>
+            <td>Sin menciones ni scripts en Cursor Trading. Sin CSV de fills vs gap semanal.</td>
+            <td><span class="tag pending">PENDING</span> — cualitativo ICT / imán de liquidez</td>
+          </tr>
+          <tr>
+            <td>Stack completo E1</td>
+            <td>Notion global WR 67% · Desktop abr–ago 71.2% · disciplina ~74% cumplimiento</td>
+            <td><span class="tag real">Rentable</span> si se respeta NY + CRT + 2M5</td>
+          </tr>
+          <tr>
+            <td>ML / Neural High</td>
+            <td>
+              Fusión Rules 28% · Ext 12% · CRT 12% · Neural 25% · ML 18%
+              (<code>DEEP_LEARNING_SIGNALS</code>). Gating — no pad Neural vacío.
+            </td>
+            <td>Refuerzo; <strong>no</strong> override de fakeout PDH</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="disclaimer" style="margin-top:14px;">
+        Inventar winrate “NWOG 72%” o “GT +15% edge” violaría la honestidad del stack.
+        Hasta un walk-forward etiquetado, trata NWOG como hipótesis H-gap.
+      </div>
+    </section>
+
+    <section class="card" id="integracion">
+      <h2>4 · Integración en E1 (Zentinel-style)</h2>
+      <p class="lead">
+        Contrato Zentinel: <em>FVG+Vol = filtro, nunca trigger</em>. Misma filosofía para NWOG y GT.
+        PDH/PDL ya son bias (pueden <strong>vetar</strong> ENTRAR) — más duros que un soft bonus.
+      </p>
+
+      <h3>4.1 Matriz soft filter vs trigger</h3>
+      <table>
+        <thead>
+          <tr><th>Señal</th><th>¿Puede disparar ENTRAR sola?</th><th>¿Puede bloquear / soft-skip?</th><th>Dónde vive hoy</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>2M5 + zona + H1</td>
+            <td><span class="tag trigger">SÍ (trigger)</span></td>
+            <td>—</td>
+            <td>Rules E1 · High Entrada optimizada</td>
+          </tr>
+          <tr>
+            <td>Fakeout PDH / CRT invalid</td>
+            <td>No</td>
+            <td><span class="tag err">Veto duro</span> (no long)</td>
+            <td>CRT deep dive · scorecard CRT 12%</td>
+          </tr>
+          <tr>
+            <td>Dentro PDH–PDL NEUTRAL</td>
+            <td>No</td>
+            <td><span class="tag filter">Hold / esperar</span></td>
+            <td>Categories + matriz §3.2</td>
+          </tr>
+          <tr>
+            <td>GT killzone ON</td>
+            <td>No</td>
+            <td>Soft bonus confluencia</td>
+            <td><code>zentinel_presets</code> · <code>classify_killzone</code></td>
+          </tr>
+          <tr>
+            <td>Vol Zentinel alto/extremo</td>
+            <td>No</td>
+            <td>Soft points</td>
+            <td>FVG+Vol presets</td>
+          </tr>
+          <tr>
+            <td>NWOG fill / reject</td>
+            <td>No</td>
+            <td>Propuesto soft ≤ soft-KZ</td>
+            <td><span class="tag pending">No cableado</span></td>
+          </tr>
+          <tr>
+            <td>ML / Neural</td>
+            <td>No</td>
+            <td>Gated en fusión High</td>
+            <td><code>DEEP_LEARNING_SIGNALS</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>4.2 Fusión High / analyze_*</h3>
+      <div class="formula">
+analyze-btc-high / analyze-us30-high  (−Advanced −ML −Neural −Ilustrate)<br />
+→ Categories · Entrada E1 · CRT (PDH/PDL + fakeout) · ICT killzone · Confluencia<br />
+→ Scorecard: Rules + Ext + CRT + Neural + ML   |   NWOG: n/d (añadir como flag soft)
+      </div>
+      <ul class="compact">
+        <li><strong>Light / snapshot:</strong> PDH/PDL básico + sesión; menos fakeout/H1 CRT.</li>
+        <li><strong>High:</strong> CRT completo + premium/discount 0.5 + acción E1 por fakeout (protocols High).</li>
+        <li><strong>No tocar:</strong> las 8 reglas inmutables ni pesos Rules 28% al meter NWOG.</li>
+      </ul>
+
+      <h3>4.3 Propuesta de cableado NWOG (sin implementar aquí)</h3>
+      <ul class="compact">
+        <li>Feature: <code>nwog_mid</code>, <code>dist_nwog_atr</code>, <code>nwog_fill_state</code> (unfilled / partial / filled).</li>
+        <li>Confluencia: +1 soft si precio reacciona en NWOG <em>y</em> GT ON <em>y</em> bias PDH/PDL alineado; −1 si NWOG empuja contra H1.</li>
+        <li>YAML opcional junto a <code>org</code>/<code>mno</code> en Watchtower — checklist TV manual (TV no se lee en vivo).</li>
+        <li>Aceptación: walk-forward OOS antes de subir peso; si ΔF1 &lt; umbral → dejar solo checklist humano.</li>
+      </ul>
+
+      <h3>4.4 Qué NO hacer</h3>
+      <ul class="compact">
+        <li>Entrar solo porque “tocó NWOG” o “está en GT”.</li>
+        <li>Tratar fakeout PDH como Break E1.</li>
+        <li>Operar London porque “NY ya pasó” (Visual: FOMO / PF↓).</li>
+        <li>Mezclar E2 turtle en el mismo día que scalping E1 sin checklist E2.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="checklist">
+      <h2>5 · Checklist pre-trade (capas juntas)</h2>
+      <ul class="compact">
+        <li>[ ] Sesión <strong>GT ON</strong> (NY Watchtower) — si OFF live → no operar</li>
+        <li>[ ] Lectura <strong>PDH / PPD D</strong>: no NEUTRAL forzado; sin fakeout contra el bando</li>
+        <li>[ ] CRT HTF pending/completed alineado; no invalid reciente en la dirección</li>
+        <li>[ ] 0.5 discount/premium coherente con long/short</li>
+        <li>[ ] NWOG (si hay gap semanal visible): ¿confluencia o ruido? — soft only</li>
+        <li>[ ] Zona débil + <strong>2M5</strong> a favor + R:R ≥ 1:2 + SL ~$9</li>
+        <li>[ ] Rules &gt;70% / scorecard High sin veto CRT</li>
+        <li>[ ] Vol Zentinel no “muy_bajo” extremo sin otras A+ (filtro, no trigger)</li>
+      </ul>
+      <p class="lead" style="margin-top:12px;">
+        Frase guía (Visual §7): <em>«Si no es A+ con CRT + 2 velas M5, es ESPERAR — el mercado mañana sigue ahí.»</em>
+      </p>
+    </section>
+
+    <section class="card" id="fuentes">
+      <h2>6 · Fuentes citadas</h2>
+      <table>
+        <thead>
+          <tr><th>Doc</th><th>Aporte a este artifact</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>TRADING_STRATEGY_CONTEXT.md</code></td><td>Mercados, NY, E1/E2, checklist, confluencias Notion</td></tr>
+          <tr><td><code>TRADING_VISUAL_CONTEXT.md</code></td><td>CRT PDH/PDL §1.1 · PF E1 4.77 · dilución London</td></tr>
+          <tr><td><code>TRADING_INDICATORS_RULES.md</code></td><td>Matriz acción CRT · núcleo CRT+RSI · orden de capas</td></tr>
+          <tr><td><code>DEEP_LEARNING_SIGNALS.md</code></td><td>Pesos fusión High · gating Neural/ML</td></tr>
+          <tr><td><code>ZENTINEL_TV_PRESETS.md</code> + YAML</td><td>Killzones GT · FVG filtro · ORG/MNO</td></tr>
+          <tr><td><code>TRADING_LIVE_*_HIGH_SIGNAL.md</code></td><td>PDH/PDL + fakeout en High · Entrada optimizada</td></tr>
+          <tr><td><code>TRADING_LIVE_*_SIGNAL_LIGHT.md</code></td><td>Modo light / menos profundidad CRT</td></tr>
+          <tr><td><code>TRADING_PROFESSIONAL_STATS.md</code></td><td>WR/PF plan consolidados (no capa aislada)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="footer">
+      Stack: <code>D:\Danilo\Trading\Cursor Trading</code> · Artifact Wiki:
+      <code>docs/Artifacts/2026-09-25-pdh-ppd-nwog-gt-e1.html</code><br />
+      La Wiki de Flash Signals escanea <code>docs/Artifacts</code> al pulsar Actualizar / Escanear — no hace falta registro manual.<br />
+      Estilo alineado a Artifacts Flash Signals · 2026-09-25 · sin commit automático.
+    </p>
+  </div>
+</body>
+</html>

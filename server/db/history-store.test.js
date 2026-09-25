@@ -98,6 +98,7 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(all.total, 3);
     assert.equal(all.items.length, 3);
     assert.ok(all.items.every((i) => i.id && i.createdAt && i.market));
+    assert.ok(all.items.every((i) => i.chartPath === '/tmp/chart.png'));
 
     const btc = await store.listHistory({ market: 'btc' });
     assert.equal(btc.total, 2);
@@ -172,6 +173,43 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(byMarket.xauusd, 'alcista');
   });
 
+  it('listHistory expone winrate (tasa de acierto) desde summary, no el veredicto', async () => {
+    const rate = '~82% — patrón ganador similar · histórico El BTC';
+    await store.insertSnapshot(
+      sampleSnap({
+        summary: {
+          verdict: 'NO_OPERAR',
+          scoreCombined: 22,
+          winrate: rate,
+        },
+      })
+    );
+    const list = await store.listHistory({ pageSize: 5 });
+    assert.equal(list.total, 1);
+    assert.equal(list.items[0].verdict, 'NO_OPERAR');
+    assert.equal(list.items[0].winrate, rate);
+
+    const detail = await store.getById(list.items[0].id);
+    assert.equal(detail?.winrate, rate);
+    assert.equal(detail?.summary?.winrate, rate);
+  });
+
+  it('listHistory expone plannedRr desde summary.planDetails.rr', async () => {
+    await store.insertSnapshot(
+      sampleSnap({
+        summary: {
+          verdict: 'OPERAR_LONG',
+          scoreCombined: 62,
+          planDetails: { rr: '1:2.4' },
+        },
+      })
+    );
+    const list = await store.listHistory({ pageSize: 5 });
+    assert.equal(list.items[0].plannedRr, '1:2.4');
+    const detail = await store.getById(list.items[0].id);
+    assert.equal(detail?.plannedRr, '1:2.4');
+  });
+
   it('deleteById elimina uno y no afecta otros', async () => {
     const a = await store.insertSnapshot(sampleSnap({ market: 'btc' }));
     const b = await store.insertSnapshot(sampleSnap({ market: 'us30' }));
@@ -203,7 +241,7 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(list.total, 2);
   });
 
-  it('updateAnnotation guarda comment y resultado (ganada/perdida)', async () => {
+  it('updateAnnotation guarda comment y resultado (ganada/perdida/no_tomada)', async () => {
     const { id } = await store.insertSnapshot(sampleSnap());
     const a = await store.updateAnnotation(id, {
       comment: '  FVG hold ok  ',
@@ -229,9 +267,119 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     const d = await store.updateAnnotation(id, { resultado: ' Empate ' });
     assert.equal(d.ok, false);
 
+    const e = await store.updateAnnotation(id, { resultado: 'no-tomada' });
+    assert.equal(e.ok, true);
+    assert.equal(e.item?.resultado, 'no_tomada');
+
+    const f = await store.updateAnnotation(id, { resultado: 'No tomada' });
+    assert.equal(f.ok, true);
+    assert.equal(f.item?.resultado, 'no_tomada');
+
     const miss = await store.updateAnnotation(999999, { comment: 'x' });
     assert.equal(miss.ok, false);
     assert.equal(miss.error, 'not_found');
+  });
+
+  it('updateAnnotation guarda pnlUsd (nullable float)', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const a = await store.updateAnnotation(id, { pnlUsd: 125.5 });
+    assert.equal(a.ok, true);
+    assert.equal(a.item?.pnlUsd, 125.5);
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.pnlUsd, 125.5);
+
+    const b = await store.updateAnnotation(id, { pnl_usd: '-40' });
+    assert.equal(b.ok, true);
+    assert.equal(b.item?.pnlUsd, -40);
+
+    const c = await store.updateAnnotation(id, { pnlMoney: '' });
+    assert.equal(c.ok, true);
+    assert.equal(c.item?.pnlUsd, null);
+
+    const bad = await store.updateAnnotation(id, { pnlUsd: 'abc' });
+    assert.equal(bad.ok, false);
+  });
+
+  it('updateAnnotation guarda motivoEntradaSalida', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const a = await store.updateAnnotation(id, {
+      motivoEntradaSalida: '  Quiebre desde zona premium  ',
+    });
+    assert.equal(a.ok, true);
+    assert.equal(a.item?.motivoEntradaSalida, 'Quiebre desde zona premium');
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.motivoEntradaSalida, 'Quiebre desde zona premium');
+
+    const b = await store.updateAnnotation(id, { motivo_entrada_salida: '' });
+    assert.equal(b.ok, true);
+    assert.equal(b.item?.motivoEntradaSalida, null);
+  });
+
+  it('listTags incluye Dirección y se puede asignar a una fila', async () => {
+    const tags = await store.listTags();
+    const names = tags.map((t) => t.name);
+    assert.ok(names.includes('En descuento'));
+    assert.ok(names.includes('Dirección'));
+    const direccion = tags.find((t) => t.name === 'Dirección');
+    assert.ok(direccion);
+    assert.equal(direccion.color, '#2563eb');
+
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const patched = await store.updateAnnotation(id, {
+      tagIds: [direccion.id],
+    });
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item?.tags?.length, 1);
+    assert.equal(patched.item?.tags?.[0].name, 'Dirección');
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.tags?.[0]?.name, 'Dirección');
+
+    const cleared = await store.updateAnnotation(id, { tagIds: [] });
+    assert.equal(cleared.ok, true);
+    assert.deepEqual(cleared.item?.tags, []);
+  });
+
+  it('listConfluencias seed + multi-select persistente', async () => {
+    const catalog = await store.listConfluencias();
+    const names = catalog.map((c) => c.name);
+    assert.ok(names.includes('Continuación'));
+    assert.ok(names.includes('Reversion'));
+    assert.ok(names.includes('Macro tendencia'));
+    assert.ok(names.includes('Pullback-Continuo'));
+    assert.equal(catalog.length >= 13, true);
+
+    const a = catalog.find((c) => c.name === 'Reversion');
+    const b = catalog.find((c) => c.name === 'Macro tendencia');
+    assert.ok(a && b);
+    assert.equal(a.color, '#6b7280');
+    assert.equal(b.color, '#ea580c');
+
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const patched = await store.updateAnnotation(id, {
+      confluenceIds: [a.id, b.id],
+    });
+    assert.equal(patched.ok, true);
+    assert.equal(patched.item?.confluencias?.length, 2);
+    const assigned = (patched.item?.confluencias || []).map((c) => c.name).sort();
+    assert.deepEqual(assigned, ['Macro tendencia', 'Reversion']);
+
+    const listed = await store.listHistory({ pageSize: 5 });
+    const row = listed.items.find((i) => i.id === id);
+    assert.equal(row?.confluencias?.length, 2);
+
+    // Seed no duplica al listar de nuevo
+    const again = await store.listConfluencias();
+    assert.equal(again.filter((c) => c.name === 'Reversion').length, 1);
+
+    const cleared = await store.updateAnnotation(id, { confluenceIds: [] });
+    assert.equal(cleared.ok, true);
+    assert.deepEqual(cleared.item?.confluencias, []);
   });
 
   it('saveResultImage / getResultImageFile / deleteResultImage', async () => {

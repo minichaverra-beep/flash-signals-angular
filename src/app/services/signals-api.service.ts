@@ -233,12 +233,50 @@ export class SignalsApiService {
 
   historyPatch(
     id: number,
-    body: { comment?: string | null; resultado?: HistoryResultado | null }
+    body: {
+      comment?: string | null;
+      motivoEntradaSalida?: string | null;
+      resultado?: HistoryResultado | null;
+      pnlUsd?: number | null;
+      tagIds?: number[];
+      confluenceIds?: number[];
+    }
   ): Observable<{ ok: boolean; item: HistoryDetail }> {
     return this.http.patch<{ ok: boolean; item: HistoryDetail }>(
       `${this.base}/history/${id}`,
       body
     );
+  }
+
+  historyTagsList(): Observable<{ tags: HistoryTag[] }> {
+    return this.http.get<{ tags: HistoryTag[] }>(`${this.base}/history/tags`);
+  }
+
+  historyTagCreate(body: {
+    name: string;
+    color?: string | null;
+  }): Observable<{ ok: boolean; tag: HistoryTag; created: boolean }> {
+    return this.http.post<{ ok: boolean; tag: HistoryTag; created: boolean }>(
+      `${this.base}/history/tags`,
+      body
+    );
+  }
+
+  historyConfluenciasList(): Observable<{ confluencias: HistoryTag[] }> {
+    return this.http.get<{ confluencias: HistoryTag[] }>(
+      `${this.base}/history/confluencias`
+    );
+  }
+
+  historyConfluenciaCreate(body: {
+    name: string;
+    color?: string | null;
+  }): Observable<{ ok: boolean; confluencia: HistoryTag; created: boolean }> {
+    return this.http.post<{
+      ok: boolean;
+      confluencia: HistoryTag;
+      created: boolean;
+    }>(`${this.base}/history/confluencias`, body);
   }
 
   /** URL de la captura del resultado (cache-bust con updatedAt opcional). */
@@ -327,7 +365,7 @@ export class SignalsApiService {
   }
 }
 
-export type HistoryResultado = 'ganada' | 'perdida';
+export type HistoryResultado = 'ganada' | 'perdida' | 'no_tomada';
 
 export interface HistoryListItem {
   id: number;
@@ -340,17 +378,42 @@ export interface HistoryListItem {
   verdict?: string | null;
   /** Bias elegido (bullish/bearish/auto) o texto del summary. */
   bias?: string | null;
+  /**
+   * Tasa de acierto / patrón ganador (summary.winrate del MD).
+   * No es el veredicto wait/stop (NO_OPERAR, ESPERAR).
+   */
+  winrate?: string | null;
+  /** R:R del plan (summary.planDetails.rr), si existe en el snapshot. */
+  plannedRr?: string | null;
   scoreCombined?: number | null;
   entry?: string | null;
   error?: string | null;
   flags?: Record<string, boolean>;
   /** Comentario del trader (editable, hive box local). */
   comment?: string | null;
-  /** Resultado de la operación: ganada | perdida. */
+  /** Motivo de entrada/salida (editable, hive box local). */
+  motivoEntradaSalida?: string | null;
+  /** Resultado de la operación: ganada | perdida | no_tomada. */
   resultado?: HistoryResultado | null;
+  /** PnL real en USD (nullable; editable en /historial). */
+  pnlUsd?: number | null;
   /** Hay captura de resultado adjunta. */
   hasResultImage?: boolean;
   resultImageMime?: string | null;
+  /** Chart anotado del detalle de la señal (si la corrida lo generó). */
+  chartPath?: string | null;
+  /** Etiquetas de Dirección (single-select; catálogo history_tags). */
+  tags?: HistoryTag[];
+  /** Confluencias (multi-select; catálogo history_confluencias). */
+  confluencias?: HistoryTag[];
+}
+
+export interface HistoryTag {
+  id: number;
+  name: string;
+  color?: string | null;
+  sortOrder?: number;
+  createdAt?: string | null;
 }
 
 export interface HistoryListResponse {

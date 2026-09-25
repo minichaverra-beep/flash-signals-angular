@@ -4,10 +4,10 @@
  */
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const { spawn } = require('child_process');
+const path = require('node:path');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
 const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
 const macdQuantStore = require('./db/macd-quant-store');
@@ -20,9 +20,9 @@ const TRADING_ROOT =
   process.env.CURSOR_TRADING_ROOT ||
   path.normalize('D:\\Danilo\\Trading\\Cursor Trading');
 
-/** Contraseña para borrar filas / limpiar historial (modo lock). */
+/** Contraseña para borrar filas / limpiar historial (modo lock). Local desk tool. */
 const HISTORY_UNLOCK_PASSWORD =
-  process.env.HISTORY_UNLOCK_PASSWORD || 'Elxokas2026*';
+  process.env.HISTORY_UNLOCK_PASSWORD || 'Elxokas2026*'; // NOSONAR S2068 — solo loopback local
 
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:4400',
@@ -462,7 +462,10 @@ function parseScorecard(md) {
   const rows = parseMarkdownTable(block[1]).slice(1);
   return rows
     .map((cells) => {
-      const label = stripMd(cells[0] || '').replace(/^\*\*|\*\*$/g, '');
+      const labelRaw = stripMd(cells[0] || '').replace(/^\*\*|\*\*$/g, '');
+      const label = /score\s*combinado|^combinado$/i.test(labelRaw)
+        ? 'Probabilidad de éxito'
+        : labelRaw;
       const raw = stripMd(cells[1] || '');
       const weight = stripMd(cells[2] || '');
       const note = stripMd(cells[3] || '');
@@ -632,7 +635,7 @@ function parseSummary(md, market, tier) {
     (md.match(/Estado del impulso:\s*\*\*([^*]+)\*\*/i) || [])[1] || null;
 
   const combinedFromCard = scorecard.find((s) =>
-    /combinado/i.test(s.label)
+    /combinado|probabilidad de [eé]xito/i.test(s.label)
   );
 
   const zentinel = {
@@ -657,13 +660,15 @@ function parseSummary(md, market, tier) {
   };
   if (scorecard.length) {
     for (const s of scorecard) {
-      if (/combinado/i.test(s.label)) continue;
+      if (/combinado|probabilidad de [eé]xito/i.test(s.label)) continue;
       // Skip omitted layers (n/d) — do not paint a fake 0% Neural bar
       if (s.value == null) continue;
       if (/n\/d/i.test(s.raw || '') || /omitido/i.test(s.note || '')) continue;
       pushScore(s.label.replace(/\s*\(.*?\)\s*/g, '').slice(0, 28), s.value);
     }
-    if (combinedFromCard?.value != null) pushScore('Combinado', combinedFromCard.value);
+    if (combinedFromCard?.value != null) {
+      pushScore('Probabilidad de éxito', combinedFromCard.value);
+    }
   } else {
     pushScore('Rules', metrics.rulesPct);
     pushScore('ML', metrics.mlPct);
@@ -689,7 +694,9 @@ function parseSummary(md, market, tier) {
     bias: contextBias ? stripMd(contextBias) : extractField(md, 'Modo bias'),
     setup: extractField(md, 'Modo setup'),
     impulso: impulso ? stripMd(impulso) : null,
-    winrate: extractField(md, 'Winrate setup'),
+    winrate:
+      extractField(md, 'Winrate setup') ||
+      extractField(md, 'Tasa de acierto'),
     rulesPct: metrics.rulesPct,
     mlPct: metrics.mlPct,
     confluencePct: metrics.confluencePct,
@@ -1055,9 +1062,9 @@ app.get('/api/signals/macd-quant/history', async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 20;
-    const marketRaw = req.query.market
-      ? String(req.query.market).toLowerCase()
-      : null;
+    const marketQuery = req.query.market;
+    const marketRaw =
+      typeof marketQuery === 'string' ? marketQuery.toLowerCase() : null;
     if (marketRaw && !MARKETS.has(marketRaw)) {
       return res.status(400).json({ error: MARKET_ERROR });
     }
@@ -1122,11 +1129,13 @@ app.get('/api/history', async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const pageSize = Number(req.query.pageSize) || 20;
-    const marketRaw = req.query.market
-      ? String(req.query.market).toLowerCase()
-      : null;
-    const market =
-      marketRaw && MARKETS.has(marketRaw) ? marketRaw : marketRaw ? null : undefined;
+    const marketQuery = req.query.market;
+    const marketRaw =
+      typeof marketQuery === 'string' ? marketQuery.toLowerCase() : null;
+    let market;
+    if (marketRaw) {
+      market = MARKETS.has(marketRaw) ? marketRaw : null;
+    }
     if (marketRaw && market === null) {
       return res.status(400).json({ error: MARKET_ERROR });
     }
@@ -1139,6 +1148,72 @@ app.get('/api/history', async (req, res) => {
   } catch (err) {
     console.error('[history] list:', err);
     res.status(500).json({ error: 'No se pudo leer el historial local' });
+  }
+});
+
+/** Catálogo de etiquetas Dirección (ex-Tags; seed incluye Dirección). Antes de /:id. */
+app.get('/api/history/tags', async (_req, res) => {
+  try {
+    const tags = await historyStore.listTags();
+    res.json({ tags });
+  } catch (err) {
+    console.error('[history] tags list:', err);
+    res.status(500).json({ error: 'No se pudieron leer las etiquetas' });
+  }
+});
+
+app.post('/api/history/tags', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const result = await historyStore.createTag({
+      name: body.name,
+      color: body.color,
+      sortOrder: body.sortOrder ?? body.sort_order,
+    });
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo crear' });
+    }
+    res.status(result.created ? 201 : 200).json({
+      ok: true,
+      tag: result.tag,
+      created: result.created,
+    });
+  } catch (err) {
+    console.error('[history] tags create:', err);
+    res.status(500).json({ error: 'No se pudo crear la etiqueta' });
+  }
+});
+
+/** Catálogo de Confluencias (multi-select). Antes de /:id. */
+app.get('/api/history/confluencias', async (_req, res) => {
+  try {
+    const confluencias = await historyStore.listConfluencias();
+    res.json({ confluencias });
+  } catch (err) {
+    console.error('[history] confluencias list:', err);
+    res.status(500).json({ error: 'No se pudieron leer las confluencias' });
+  }
+});
+
+app.post('/api/history/confluencias', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const result = await historyStore.createConfluencia({
+      name: body.name,
+      color: body.color,
+      sortOrder: body.sortOrder ?? body.sort_order,
+    });
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo crear' });
+    }
+    res.status(result.created ? 201 : 200).json({
+      ok: true,
+      confluencia: result.confluencia,
+      created: result.created,
+    });
+  } catch (err) {
+    console.error('[history] confluencias create:', err);
+    res.status(500).json({ error: 'No se pudo crear la confluencia' });
   }
 });
 
@@ -1177,7 +1252,7 @@ app.delete('/api/history/:id', async (req, res) => {
   }
 });
 
-/** Anotaciones trader: comment + resultado (ganada|perdida). */
+/** Anotaciones trader: comment + motivoEntradaSalida + resultado + pnlUsd. */
 app.patch('/api/history/:id', async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {
@@ -1185,18 +1260,44 @@ app.patch('/api/history/:id', async (req, res) => {
   }
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const patch = {};
-  if (Object.prototype.hasOwnProperty.call(body, 'comment')) {
+  const hasOwn = (key) => Object.hasOwn(body, key);
+  if (hasOwn('comment')) {
     patch.comment = body.comment;
   }
-  if (Object.prototype.hasOwnProperty.call(body, 'resultado')) {
+  if (hasOwn('motivoEntradaSalida')) {
+    patch.motivoEntradaSalida = body.motivoEntradaSalida;
+  } else if (hasOwn('motivo_entrada_salida')) {
+    patch.motivoEntradaSalida = body.motivo_entrada_salida;
+  }
+  if (hasOwn('resultado')) {
     patch.resultado = body.resultado;
   }
-  if (Object.prototype.hasOwnProperty.call(body, 'result') && patch.resultado === undefined) {
+  if (hasOwn('result') && patch.resultado === undefined) {
     patch.resultado = body.result;
+  }
+  if (hasOwn('pnlUsd')) {
+    patch.pnlUsd = body.pnlUsd;
+  } else if (hasOwn('pnl_usd')) {
+    patch.pnlUsd = body.pnl_usd;
+  } else if (hasOwn('pnlMoney')) {
+    patch.pnlUsd = body.pnlMoney;
+  }
+  if (hasOwn('tagIds')) {
+    patch.tagIds = body.tagIds;
+  } else if (hasOwn('tag_ids')) {
+    patch.tagIds = body.tag_ids;
+  }
+  if (hasOwn('confluenceIds')) {
+    patch.confluenceIds = body.confluenceIds;
+  } else if (hasOwn('confluenciaIds')) {
+    patch.confluenceIds = body.confluenciaIds;
+  } else if (hasOwn('confluencia_ids')) {
+    patch.confluenceIds = body.confluencia_ids;
   }
   if (!Object.keys(patch).length) {
     return res.status(400).json({
-      error: 'Envía comment y/o resultado (ganada|perdida|vacío)',
+      error:
+        'Envía comment, motivoEntradaSalida, resultado (ganada|perdida|no_tomada|vacío), pnlUsd, tagIds y/o confluenceIds',
     });
   }
   try {
@@ -1326,7 +1427,10 @@ app.get('/api/artifacts/item', async (req, res) => {
     if (!result.ok) {
       return res.status(result.status).json({ error: result.error });
     }
-    const { ok: _ok, ...payload } = result;
+    const { ok, ...payload } = result;
+    if (!ok) {
+      return res.status(500).json({ error: 'Respuesta de artefacto inválida' });
+    }
     res.json(payload);
   } catch (err) {
     console.error('[artifacts] item:', err);

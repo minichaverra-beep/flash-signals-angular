@@ -20,7 +20,10 @@ import {
   scoreKpiRows,
   setupRows,
   verdictRows,
+  verdictSectionTone,
   verdictTone,
+  displayScoreLabel,
+  isCombinedScoreLabel,
   biasTone,
   volMarkerPct,
 } from './signal-report.helpers';
@@ -52,6 +55,9 @@ export class SignalReportViewerComponent {
   readonly hasChecklistsCard = hasChecklistsCard;
   readonly hasDetalleAdicional = hasDetalleAdicional;
   readonly verdictTone = verdictTone;
+  readonly verdictSectionTone = verdictSectionTone;
+  readonly displayScoreLabel = displayScoreLabel;
+  readonly isCombinedScoreLabel = isCombinedScoreLabel;
   readonly investorVerdictTitle = investorVerdictTitle;
   readonly investorVerdictExplain = investorVerdictExplain;
   readonly investorActionHint = investorActionHint;

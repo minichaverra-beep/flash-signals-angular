@@ -29,9 +29,29 @@ export function chartHref(
   return null;
 }
 
+/** Score combinado (0–100) desde summary o barra chartScores. */
+export function resolveSuccessProbabilityPct(
+  s: SignalSummary | null
+): number | null {
+  if (!s) return null;
+  if (s.scoreCombined != null && Number.isFinite(s.scoreCombined)) {
+    return s.scoreCombined;
+  }
+  const bar = s.chartScores?.find((b) =>
+    /combinado|probabilidad de [eé]xito/i.test(b.label || '')
+  );
+  if (bar?.value != null && Number.isFinite(bar.value)) return bar.value;
+  return null;
+}
+
+/**
+ * Fila del bloque VEREDICTO: probabilidad de éxito (score combinado),
+ * no estados wait/stop (NO_OPERAR, ESPERAR, etc.).
+ */
 export function verdictRows(s: SignalSummary | null): KpiRow[] {
-  if (!s?.verdict) return [];
-  return [{ campo: 'Veredicto', valor: s.verdict }];
+  const pct = resolveSuccessProbabilityPct(s);
+  if (pct == null) return [];
+  return [{ campo: 'Probabilidad de éxito', valor: `${Math.round(pct)}%` }];
 }
 
 export function marketRows(s: SignalSummary | null): KpiRow[] {
@@ -67,9 +87,7 @@ export function scoreKpiRows(s: SignalSummary | null): KpiRow[] {
     const label = s.confluenceLabel ? `${s.confluenceLabel} · ` : '';
     rows.push({ campo: 'Acuerdo entre capas', valor: `${label}${s.confluencePct}%` });
   }
-  if (s.scoreCombined != null) {
-    rows.push({ campo: 'Nota combinada', valor: `${s.scoreCombined}%` });
-  }
+  // scoreCombined vive en el bloque VEREDICTO como «Probabilidad de éxito»
   if (s.scoreExtended != null) {
     rows.push({ campo: 'Nota extendida', valor: `${s.scoreExtended}%` });
   }
@@ -105,11 +123,51 @@ export function hasDetalleAdicional(
 
 export function verdictTone(v: string | null | undefined): string {
   const t = (v || '').toUpperCase();
+  // Porcentaje (Probabilidad de éxito) — no es un badge wait/stop
+  const pct = String(v || '').match(/^\s*(\d+(?:[.,]\d+)?)\s*%\s*$/);
+  if (pct) {
+    return successProbabilityTone(Number(String(pct[1]).replace(',', '.')));
+  }
   if (/NO_OPERAR|NO OPERAR|ESPERAR|WAIT/.test(t)) return 'warn';
   if (/SHORT/.test(t) && !/NO_/.test(t)) return 'bearish';
   if (/LONG/.test(t) && !/NO_/.test(t)) return 'bullish';
   if (/OPERAR|GO/.test(t) && !/NO_/.test(t)) return 'ok';
   return '';
+}
+
+/** Tone del bloque Veredicto: prioriza score combinado sobre strings wait/stop. */
+export function verdictSectionTone(s: SignalSummary | null): string {
+  const pct = resolveSuccessProbabilityPct(s);
+  if (pct != null) return successProbabilityTone(pct);
+  return verdictTone(s?.verdict);
+}
+
+export function successProbabilityTone(pct: number | null | undefined): string {
+  if (pct == null || !Number.isFinite(pct)) return '';
+  if (pct >= 70) return 'ok';
+  if (pct >= 45) return '';
+  return 'warn';
+}
+
+/**
+ * Tone para texto de tasa de acierto (~82% — patrón ganador similar · …).
+ * Extrae el primer % del string; no usa veredictos wait/stop.
+ */
+export function hitRateTone(winrate: string | null | undefined): string {
+  const m = String(winrate || '').match(/(\d+(?:[.,]\d+)?)\s*%/);
+  if (!m) return '';
+  return successProbabilityTone(Number(String(m[1]).replace(',', '.')));
+}
+
+/** Etiqueta de capa/score: Combinado → Probabilidad de éxito. */
+export function displayScoreLabel(label: string | null | undefined): string {
+  const t = (label || '').trim();
+  if (/score\s*combinado|^combinado$/i.test(t)) return 'Probabilidad de éxito';
+  return t || '—';
+}
+
+export function isCombinedScoreLabel(label: string | null | undefined): boolean {
+  return /combinado|probabilidad de [eé]xito/i.test(label || '');
 }
 
 /** Tone visual para bias: bullish=verde, bearish=rojo, auto/neutro=muted. */
@@ -439,9 +497,9 @@ export function investorScoreRows(s: SignalSummary | null): InvestorExplainRow[]
   }
   if (s.scoreCombined != null) {
     rows.push({
-      campo: 'Nota global',
+      campo: 'Probabilidad de éxito',
       valor: `${s.scoreCombined}%`,
-      significado: 'Resumen de 0 a 100 de la fuerza de la idea.',
+      significado: 'Resumen de 0 a 100 de la fuerza de la idea (score combinado).',
     });
   }
   if (s.scoreExtended != null) {

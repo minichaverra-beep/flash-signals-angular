@@ -8,6 +8,8 @@ import {
   chartHref,
   verdictRows,
   verdictTone,
+  displayScoreLabel,
+  isCombinedScoreLabel,
   biasTone,
   biasLabel,
   resolveRunBias,
@@ -16,6 +18,7 @@ import {
   parseRewardMultiple,
   investorRiskCard,
   riskGaugeHint,
+  hitRateTone,
 } from './signal-report.helpers.ts';
 
 describe('signal-report.helpers', () => {
@@ -65,18 +68,52 @@ describe('signal-report.helpers', () => {
     assert.equal(resolveRunBias(null, null), null);
   });
 
-  it('verdictRows y marketRows parsean summary vacío vs con datos', () => {
+  it('verdictRows muestra Probabilidad de éxito (score combinado), no wait/stop', () => {
     assert.deepEqual(verdictRows(null), []);
     assert.deepEqual(marketRows(null), []);
 
     const s: SignalSummary = {
-      verdict: 'OPERAR_SHORT',
+      verdict: 'NO_OPERAR',
+      scoreCombined: 68,
       price: '100',
       entryOptima: '99',
       plan: 'break',
     };
-    assert.deepEqual(verdictRows(s), [{ campo: 'Veredicto', valor: 'OPERAR_SHORT' }]);
+    assert.deepEqual(verdictRows(s), [
+      { campo: 'Probabilidad de éxito', valor: '68%' },
+    ]);
+    // Sin score: no rellenar con NO_OPERAR / ESPERAR
+    assert.deepEqual(verdictRows({ verdict: 'ESPERAR' }), []);
+    assert.deepEqual(
+      verdictRows({
+        verdict: 'ESPERAR',
+        chartScores: [{ label: 'Combinado', value: 55 }],
+      }),
+      [{ campo: 'Probabilidad de éxito', valor: '55%' }]
+    );
     assert.equal(marketRows(s).length, 3);
+  });
+
+  it('verdictTone entiende porcentajes y displayScoreLabel renombra Combinado', () => {
+    assert.equal(verdictTone('75%'), 'ok');
+    assert.equal(verdictTone('68%'), '');
+    assert.equal(verdictTone('40%'), 'warn');
+    assert.equal(verdictTone('NO_OPERAR'), 'warn');
+    assert.equal(displayScoreLabel('Combinado'), 'Probabilidad de éxito');
+    assert.equal(displayScoreLabel('Score combinado'), 'Probabilidad de éxito');
+    assert.equal(displayScoreLabel('Rules E1'), 'Rules E1');
+    assert.equal(isCombinedScoreLabel('Probabilidad de éxito'), true);
+  });
+
+  it('hitRateTone extrae % de texto de patrón ganador', () => {
+    assert.equal(
+      hitRateTone('~82% — patrón ganador similar · histórico El BTC'),
+      'ok'
+    );
+    assert.equal(hitRateTone('55% similar'), '');
+    assert.equal(hitRateTone('~30% — bajo'), 'warn');
+    assert.equal(hitRateTone(null), '');
+    assert.equal(hitRateTone('sin dato'), '');
   });
 
   it('hasDetalleAdicional (empty-state útil para historial/reporte)', () => {

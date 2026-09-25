@@ -58,6 +58,10 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
 }
 
 .seg button,
@@ -263,6 +267,44 @@ button:disabled {
   width: 10rem;
 }
 
+.pnl-cell {
+  min-width: 7.5rem;
+  width: 8rem;
+}
+
+.pnl-field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.pnl-field-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hist-input.pnl-input {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-align: right;
+}
+
+.hist-input.pnl-pos {
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+  color: var(--ok);
+}
+
+.hist-input.pnl-neg {
+  border-color: color-mix(in srgb, var(--fire) 55%, transparent);
+  color: var(--fire);
+}
+
+.hist-input.pnl-zero,
+.hist-input.pnl-empty {
+  color: var(--muted);
+}
+
 .shot-cell {
   width: 4.5rem;
   text-align: center;
@@ -344,6 +386,19 @@ button:disabled {
   box-sizing: border-box;
 }
 
+textarea.hist-textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 2.75rem;
+  field-sizing: content;
+}
+
+textarea.hist-textarea-compact {
+  min-height: 2.4rem;
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
+
 .hist-input:focus,
 .hist-select:focus {
   outline: 2px solid color-mix(in srgb, var(--teal) 55%, transparent);
@@ -363,6 +418,11 @@ button:disabled {
 .hist-select.res-lose {
   border-color: color-mix(in srgb, var(--fire) 55%, transparent);
   color: var(--fire);
+}
+
+.hist-select.res-skip {
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 40%, transparent);
 }
 
 .hist-select.res-empty {
@@ -399,6 +459,10 @@ button:disabled {
   color: color-mix(in srgb, var(--gold) 70%, white);
 }
 
+.annotate-label.annotate-span {
+  grid-column: 1 / -1;
+}
+
 .cards.mobile {
   display: none;
   flex-direction: column;
@@ -426,6 +490,62 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.hit-rate-cell {
+  max-width: 18rem;
+}
+
+.hit-rate {
+  display: inline-block;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.hit-rate[data-tone='ok'] {
+  color: var(--ok);
+}
+
+.hit-rate[data-tone='warn'] {
+  color: var(--warn);
+}
+
+.hit-rate-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0 0 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-deep) 88%, #1a1010);
+}
+
+.hit-rate-label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 92%, white);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.hit-rate-value {
+  flex: 1 1 auto;
+  text-align: right;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.hit-rate-row[data-tone='ok'] .hit-rate-value {
+  color: var(--ok);
+}
+
+.hit-rate-row[data-tone='warn'] .hit-rate-value {
+  color: var(--warn);
+}
+
 .card-actions {
   display: flex;
   gap: 0.4rem;
@@ -438,9 +558,20 @@ button:disabled {
   margin-top: 1rem;
 }
 
-.drawer-backdrop {
+.drawer-backdrop,
+.unlock-backdrop,
+.lightbox-scrim {
   position: fixed;
   inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.drawer-backdrop {
   background: color-mix(in srgb, black 60%, transparent);
   z-index: 40;
   backdrop-filter: blur(2px);
@@ -499,6 +630,10 @@ button:disabled {
   grid-template-columns: 1fr minmax(10rem, 14rem);
   align-items: end;
   gap: 1rem;
+}
+
+.drawer.expanded .detail-annotate .annotate-span {
+  grid-column: 1 / -1;
 }
 
 .result-shot {
@@ -599,11 +734,23 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 1.5rem;
+  background: transparent;
+  pointer-events: none;
+}
+
+.lightbox > * {
+  pointer-events: auto;
+}
+
+.lightbox-scrim {
+  z-index: 80;
   background: color-mix(in srgb, black 78%, transparent);
   backdrop-filter: blur(4px);
 }
 
 .lightbox img {
+  position: relative;
+  z-index: 81;
   max-width: min(1100px, 94vw);
   max-height: 88vh;
   object-fit: contain;
@@ -617,11 +764,10 @@ button:disabled {
   position: absolute;
   top: 1rem;
   right: 1rem;
+  z-index: 82;
 }
 
 .unlock-backdrop {
-  position: fixed;
-  inset: 0;
   z-index: 90;
   background: color-mix(in srgb, black 70%, transparent);
   backdrop-filter: blur(3px);
@@ -742,7 +888,414 @@ code {
     display: none;
   }
 
+  .hit-rate-row {
+    padding: 0.4rem 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .hit-rate-label,
+  .hit-rate-value {
+    font-size: 0.78rem;
+  }
+
   .mode-hint {
     display: none;
   }
+}
+
+/* —— Métricas del historial —— */
+.metrics-panel {
+  padding: 1.35rem 1.5rem 1.5rem;
+}
+
+.metrics-head {
+  margin-bottom: 1rem;
+}
+
+.metrics-head .eyebrow {
+  margin: 0 0 0.2rem;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem 1rem;
+  background: #160e0e;
+  min-height: 8.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.metric-card h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--gold) 70%, white);
+  font-family: inherit;
+}
+
+.metric-body {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.metric-body.col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.metric-value-block {
+  min-width: 0;
+}
+
+.metric-value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.metric-value .unit {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 0.15rem;
+}
+
+.metric-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.metric-card[data-tone='ok'] .metric-value,
+.metric-card[data-sign='pos'] .metric-value {
+  color: var(--ok);
+}
+
+.metric-card[data-tone='warn'] .metric-value {
+  color: var(--warn);
+}
+
+.metric-card[data-tone='bad'] .metric-value,
+.metric-card[data-sign='neg'] .metric-value {
+  color: color-mix(in srgb, var(--fire) 85%, white);
+}
+
+.ring {
+  width: 3.6rem;
+  height: 3.6rem;
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+}
+
+.ring-bg {
+  fill: none;
+  stroke: color-mix(in srgb, var(--border) 80%, #2a1a1a);
+  stroke-width: 3.2;
+}
+
+.ring-fg {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.35s ease;
+}
+
+.metric-card[data-tone='ok'] .ring-fg { stroke: var(--ok); }
+.metric-card[data-tone='warn'] .ring-fg { stroke: var(--warn); }
+.metric-card[data-tone='bad'] .ring-fg { stroke: var(--fire); }
+
+.spark {
+  width: 100%;
+  height: 2.1rem;
+  display: block;
+}
+
+.spark polyline {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.metric-card[data-sign='neg'] .spark polyline {
+  stroke: var(--fire);
+}
+
+.metric-card[data-sign='pos'] .spark polyline {
+  stroke: var(--ok);
+}
+
+.bar-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, black 35%, #2a1a1a);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  min-width: 0;
+  transition: width 0.3s ease;
+}
+
+.bar-fill.teal { background: var(--teal); }
+.bar-fill.gold { background: var(--gold); }
+.bar-fill.ok { background: var(--ok); }
+.bar-fill.bad { background: var(--fire); }
+
+.streak-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.streak-dots span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--fire);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--fire) 40%, transparent);
+}
+
+.metrics-notes {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 22%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, black 18%, transparent);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.metrics-notes summary {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--gold) 65%, white);
+  font-weight: 600;
+}
+
+.metrics-notes ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 768px) {
+  .metrics-panel {
+    padding: 1rem 0.85rem 1.15rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .metric-card {
+    min-height: 0;
+    padding: 0.7rem 0.7rem 0.8rem;
+  }
+
+  .metric-value {
+    font-size: 1.25rem;
+  }
+
+  .ring {
+    width: 2.85rem;
+    height: 2.85rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* —— Tags / Dirección / Confluencias por fila —— */
+.tags-cell {
+  min-width: 9rem;
+  max-width: 14rem;
+  position: relative;
+  vertical-align: top;
+}
+
+.confluencias-cell {
+  min-width: 11rem;
+  max-width: 18rem;
+}
+
+.tag-picker {
+  position: relative;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  align-items: center;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.tag-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.85;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.05rem;
+}
+
+.tag-x:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.tag-add {
+  border: 1px dashed color-mix(in srgb, var(--border) 80%, #888);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.tag-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.tag-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 14rem;
+  max-width: 18rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  padding: 0.55rem;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--panel) 94%, #120808);
+  border: 1px solid color-mix(in srgb, var(--gold, #c9a227) 28%, var(--border));
+  box-shadow: 0 12px 28px color-mix(in srgb, black 45%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.tag-menu-confluencias {
+  min-width: 15.5rem;
+  max-width: 20rem;
+}
+
+.tag-menu-hint {
+  margin: 0 0 0.2rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.tag-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.tag-option.active {
+  border-color: color-mix(in srgb, var(--gold, #c9a227) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.tag-option-pill {
+  padding: 0.28rem 0.35rem;
+}
+
+.tag-drag {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  opacity: 0.65;
+  letter-spacing: -0.05em;
+  user-select: none;
+}
+
+.tag-pill-option {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 0.35rem;
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.tag-swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.tag-create {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.tag-create .hist-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-annotate .tag-picker {
+  width: 100%;
 }

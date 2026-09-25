@@ -3,8 +3,8 @@
  * Preferencia: better-sqlite3. Fallback: sql.js (WASM, sin nativos) si falla en Windows.
  * Archivo: data/signals-history.sqlite (gitignored).
  */
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
@@ -39,6 +39,7 @@ function openBetterSqlite3() {
   const dbPath = getDbPath();
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   db.exec(readSchemaSql());
   const engine = {
     kind: 'better-sqlite3',
@@ -72,6 +73,7 @@ async function openSqlJs() {
     db = new SQL.Database();
   }
   // exec: multi-statement (run solo garantiza el primero en algunas builds).
+  db.exec('PRAGMA foreign_keys = ON;');
   db.exec(readSchemaSql());
   const persist = () => {
     const data = db.export();
@@ -105,7 +107,7 @@ async function openSqlJs() {
     },
     get(sql, params = []) {
       const stmt = db.prepare(sql);
-      if (params && params.length) stmt.bind(params);
+      if (params?.length) stmt.bind(params);
       if (stmt.step()) {
         const row = stmt.getAsObject();
         stmt.free();
@@ -116,7 +118,7 @@ async function openSqlJs() {
     },
     all(sql, params = []) {
       const stmt = db.prepare(sql);
-      if (params && params.length) stmt.bind(params);
+      if (params?.length) stmt.bind(params);
       const rows = [];
       while (stmt.step()) {
         rows.push(stmt.getAsObject());
@@ -176,9 +178,175 @@ function applyHistoryMigrations(e) {
       ['003_history_result_image', now]
     );
   }
+
+  const has004 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['004_history_pnl_usd']
+  );
+  if (!has004) {
+    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
+    const names = new Set(cols.map((c) => String(c.name)));
+    if (!names.has('pnl_usd')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN pnl_usd REAL`);
+    }
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['004_history_pnl_usd', now]
+    );
+  }
+
+  // 005: documenta valor canónico 'no_tomada' en resultado (TEXT; sin ALTER).
+  e.run(
+    `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+    ['005_history_resultado_no_tomada', now]
+  );
+
+  // 006: catálogo history_tags + junction + seed durable (incl. Dirección).
+  const has006 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['006_history_tags']
+  );
+  if (!has006) {
+    e.run(`
+      CREATE TABLE IF NOT EXISTS history_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    `);
+    e.run(`
+      CREATE INDEX IF NOT EXISTS idx_history_tags_sort
+        ON history_tags (sort_order ASC, id ASC)
+    `);
+    e.run(`
+      CREATE TABLE IF NOT EXISTS signal_history_tags (
+        history_id INTEGER NOT NULL REFERENCES signal_history(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES history_tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (history_id, tag_id)
+      )
+    `);
+    e.run(`
+      CREATE INDEX IF NOT EXISTS idx_signal_history_tags_tag
+        ON signal_history_tags (tag_id)
+    `);
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['006_history_tags', now]
+    );
+  }
+
+  // 007: motivo de entrada/salida (texto libre del trader).
+  const has007 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['007_history_motivo_entrada_salida']
+  );
+  if (!has007) {
+    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
+    const names = new Set(cols.map((c) => String(c.name)));
+    if (!names.has('motivo_entrada_salida')) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN motivo_entrada_salida TEXT`);
+    }
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['007_history_motivo_entrada_salida', now]
+    );
+  }
+
+  // 008: catálogo history_confluencias + junction (multi-select, separado de Dirección/tags).
+  const has008 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['008_history_confluencias']
+  );
+  if (!has008) {
+    e.run(`
+      CREATE TABLE IF NOT EXISTS history_confluencias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    `);
+    e.run(`
+      CREATE INDEX IF NOT EXISTS idx_history_confluencias_sort
+        ON history_confluencias (sort_order ASC, id ASC)
+    `);
+    e.run(`
+      CREATE TABLE IF NOT EXISTS signal_history_confluencias (
+        history_id INTEGER NOT NULL REFERENCES signal_history(id) ON DELETE CASCADE,
+        confluencia_id INTEGER NOT NULL REFERENCES history_confluencias(id) ON DELETE CASCADE,
+        PRIMARY KEY (history_id, confluencia_id)
+      )
+    `);
+    e.run(`
+      CREATE INDEX IF NOT EXISTS idx_signal_history_confluencias_cf
+        ON signal_history_confluencias (confluencia_id)
+    `);
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['008_history_confluencias', now]
+    );
+  }
+  seedDefaultHistoryTags(e, now);
+  seedDefaultHistoryConfluencias(e, now);
 }
 
-const RESULTADO_OK = new Set(['ganada', 'perdida']);
+/** Seed durable de etiquetas Dirección (ex-Tags; INSERT OR IGNORE por name). */
+const DEFAULT_HISTORY_TAGS = [
+  { name: 'En descuento', color: '#78716c', sortOrder: 10 },
+  { name: 'Pre-equilibrio', color: '#166534', sortOrder: 20 },
+  { name: 'Premium', color: '#6b7280', sortOrder: 30 },
+  { name: 'Macro-Pre-equilibrio', color: '#7c3aed', sortOrder: 40 },
+  { name: 'Test', color: '#be185d', sortOrder: 50 },
+  { name: 'Dirección', color: '#2563eb', sortOrder: 60 },
+];
+
+/**
+ * Seed durable de Confluencias (Notion-style). Colores aproximados al picker del usuario.
+ * Solo INSERT OR IGNORE — no borra opciones creadas por el usuario.
+ */
+const DEFAULT_HISTORY_CONFLUENCIAS = [
+  { name: 'Continuación', color: '#2563eb', sortOrder: 10 },
+  { name: 'Reversion', color: '#6b7280', sortOrder: 20 },
+  { name: 'Macro tendencia', color: '#ea580c', sortOrder: 30 },
+  { name: 'Micro tendencia', color: '#f87171', sortOrder: 40 },
+  { name: 'Resistencia débil', color: '#9333ea', sortOrder: 50 },
+  { name: 'Soporte débil', color: '#a16207', sortOrder: 60 },
+  { name: 'Pre-Entrada', color: '#db2777', sortOrder: 70 },
+  { name: 'FakeOut', color: '#92400e', sortOrder: 80 },
+  { name: 'Pullback', color: '#16a34a', sortOrder: 90 },
+  { name: 'All', color: '#4b5563', sortOrder: 100 },
+  { name: 'Tope ganancia enemiga', color: '#1f2937', sortOrder: 110 },
+  { name: 'Pool-liquidez', color: '#0f766e', sortOrder: 120 },
+  { name: 'Pullback-Continuo', color: '#92700c', sortOrder: 130 },
+];
+
+function seedDefaultHistoryTags(e, nowIso) {
+  const now = nowIso || new Date().toISOString();
+  for (const tag of DEFAULT_HISTORY_TAGS) {
+    e.run(
+      `INSERT OR IGNORE INTO history_tags (name, color, sort_order, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [tag.name, tag.color, tag.sortOrder, now]
+    );
+  }
+}
+
+function seedDefaultHistoryConfluencias(e, nowIso) {
+  const now = nowIso || new Date().toISOString();
+  for (const item of DEFAULT_HISTORY_CONFLUENCIAS) {
+    e.run(
+      `INSERT OR IGNORE INTO history_confluencias (name, color, sort_order, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [item.name, item.color, item.sortOrder, now]
+    );
+  }
+}
+
+/** Valores persistidos: NULL | ganada | perdida | no_tomada */
+const RESULTADO_OK = new Set(['ganada', 'perdida', 'no_tomada']);
 
 const IMAGE_MIME = {
   'image/png': 'png',
@@ -211,11 +379,46 @@ function normalizeComment(raw) {
 
 function normalizeResultado(raw) {
   if (raw == null || raw === '') return null;
-  const s = String(raw).trim().toLowerCase();
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, '_');
   if (s === 'win' || s === 'winning' || s === 'won') return 'ganada';
   if (s === 'lose' || s === 'loss' || s === 'lost') return 'perdida';
+  if (
+    s === 'no_tomada' ||
+    s === 'no-tomada' ||
+    s === 'notomada' ||
+    s === 'skipped' ||
+    s === 'skip'
+  ) {
+    return 'no_tomada';
+  }
   if (RESULTADO_OK.has(s)) return s;
   return undefined; // invalid
+}
+
+/**
+ * PnL en USD (nullable). '' / null limpia; número o string parseable → float.
+ * @returns {number|null|undefined} undefined = inválido
+ */
+function normalizePnlUsd(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw)) return undefined;
+    return Math.round(raw * 100) / 100;
+  }
+  const s = String(raw).trim().replace(/\s/g, '').replace(',', '.');
+  if (!s) return null;
+  // Permite "$123.45", "+50", "-12.5"
+  const cleaned = s.replace(/^\$/, '');
+  if (!/^[+-]?\d+(\.\d+)?$/.test(cleaned)) return undefined;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
+function readPnlUsd(row) {
+  if (row?.pnl_usd == null || row.pnl_usd === '') return null;
+  const n = Number(row.pnl_usd);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
 async function getEngine() {
@@ -252,6 +455,260 @@ async function getBackendKind() {
   return e.kind;
 }
 
+function rowToTag(row) {
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    name: String(row.name),
+    color: row.color != null && String(row.color).trim() ? String(row.color) : null,
+    sortOrder: Number(row.sort_order) || 0,
+    createdAt: row.created_at || null,
+  };
+}
+
+/** Misma forma que Tag; catálogo Confluencias. */
+function rowToConfluencia(row) {
+  return rowToTag(row);
+}
+
+/**
+ * Carga tags asignados a varias filas de historial (mapa historyId → Tag[]).
+ * @param {any} e
+ * @param {number[]} historyIds
+ */
+function loadTagsByHistoryIds(e, historyIds) {
+  /** @type {Map<number, object[]>} */
+  const map = new Map();
+  const ids = (historyIds || [])
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (!ids.length) return map;
+  for (const id of ids) map.set(id, []);
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = e.all(
+    `SELECT sht.history_id AS history_id,
+            ht.id, ht.name, ht.color, ht.sort_order, ht.created_at
+     FROM signal_history_tags sht
+     INNER JOIN history_tags ht ON ht.id = sht.tag_id
+     WHERE sht.history_id IN (${placeholders})
+     ORDER BY ht.sort_order ASC, ht.id ASC`,
+    ids
+  );
+  for (const row of rows || []) {
+    const hid = Number(row.history_id);
+    const list = map.get(hid);
+    if (list) list.push(rowToTag(row));
+  }
+  return map;
+}
+
+/**
+ * Carga confluencias asignadas (mapa historyId → Confluencia[]).
+ * @param {any} e
+ * @param {number[]} historyIds
+ */
+function loadConfluenciasByHistoryIds(e, historyIds) {
+  /** @type {Map<number, object[]>} */
+  const map = new Map();
+  const ids = (historyIds || [])
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (!ids.length) return map;
+  for (const id of ids) map.set(id, []);
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = e.all(
+    `SELECT shc.history_id AS history_id,
+            hc.id, hc.name, hc.color, hc.sort_order, hc.created_at
+     FROM signal_history_confluencias shc
+     INNER JOIN history_confluencias hc ON hc.id = shc.confluencia_id
+     WHERE shc.history_id IN (${placeholders})
+     ORDER BY hc.sort_order ASC, hc.id ASC`,
+    ids
+  );
+  for (const row of rows || []) {
+    const hid = Number(row.history_id);
+    const list = map.get(hid);
+    if (list) list.push(rowToConfluencia(row));
+  }
+  return map;
+}
+
+async function listTags() {
+  const e = await getEngine();
+  seedDefaultHistoryTags(e);
+  const rows = e.all(
+    `SELECT id, name, color, sort_order, created_at
+     FROM history_tags
+     ORDER BY sort_order ASC, id ASC`
+  );
+  return (rows || []).map(rowToTag);
+}
+
+async function listConfluencias() {
+  const e = await getEngine();
+  seedDefaultHistoryConfluencias(e);
+  const rows = e.all(
+    `SELECT id, name, color, sort_order, created_at
+     FROM history_confluencias
+     ORDER BY sort_order ASC, id ASC`
+  );
+  return (rows || []).map(rowToConfluencia);
+}
+
+/**
+ * Crea etiqueta durable (o reutiliza si ya existe por name, case-insensitive).
+ * @param {{ name: string, color?: string|null, sortOrder?: number }} input
+ */
+async function createTag(input = {}) {
+  const e = await getEngine();
+  const name = input.name != null ? String(input.name).trim() : '';
+  if (!name || name.length > 80) {
+    return { ok: false, error: 'name inválido (1–80 caracteres)' };
+  }
+  const color =
+    input.color != null && String(input.color).trim()
+      ? String(input.color).trim().slice(0, 32)
+      : null;
+  const sortOrder =
+    input.sortOrder != null && Number.isFinite(Number(input.sortOrder))
+      ? Math.trunc(Number(input.sortOrder))
+      : 100;
+  const existing = e.get(
+    `SELECT id, name, color, sort_order, created_at
+     FROM history_tags WHERE lower(name) = lower(?)`,
+    [name]
+  );
+  if (existing) {
+    return { ok: true, tag: rowToTag(existing), created: false };
+  }
+  const now = new Date().toISOString();
+  const info = e.run(
+    `INSERT INTO history_tags (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)`,
+    [name, color, sortOrder, now]
+  );
+  const row = e.get(
+    `SELECT id, name, color, sort_order, created_at FROM history_tags WHERE id = ?`,
+    [Number(info.lastInsertRowid)]
+  );
+  return { ok: true, tag: rowToTag(row), created: true };
+}
+
+/**
+ * Crea confluencia durable (o reutiliza por name case-insensitive).
+ * @param {{ name: string, color?: string|null, sortOrder?: number }} input
+ */
+async function createConfluencia(input = {}) {
+  const e = await getEngine();
+  const name = input.name != null ? String(input.name).trim() : '';
+  if (!name || name.length > 80) {
+    return { ok: false, error: 'name inválido (1–80 caracteres)' };
+  }
+  const color =
+    input.color != null && String(input.color).trim()
+      ? String(input.color).trim().slice(0, 32)
+      : null;
+  const sortOrder =
+    input.sortOrder != null && Number.isFinite(Number(input.sortOrder))
+      ? Math.trunc(Number(input.sortOrder))
+      : 200;
+  const existing = e.get(
+    `SELECT id, name, color, sort_order, created_at
+     FROM history_confluencias WHERE lower(name) = lower(?)`,
+    [name]
+  );
+  if (existing) {
+    return { ok: true, confluencia: rowToConfluencia(existing), created: false };
+  }
+  const now = new Date().toISOString();
+  const info = e.run(
+    `INSERT INTO history_confluencias (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)`,
+    [name, color, sortOrder, now]
+  );
+  const row = e.get(
+    `SELECT id, name, color, sort_order, created_at FROM history_confluencias WHERE id = ?`,
+    [Number(info.lastInsertRowid)]
+  );
+  return { ok: true, confluencia: rowToConfluencia(row), created: true };
+}
+
+/**
+ * Reemplaza el set de tags de una fila (Dirección: single-select en UI).
+ * @param {any} e
+ * @param {number} historyId
+ * @param {unknown} rawIds
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+function replaceHistoryTags(e, historyId, rawIds) {
+  if (!Array.isArray(rawIds)) {
+    return { ok: false, error: 'tagIds debe ser un array de ids' };
+  }
+  const ids = [];
+  const seen = new Set();
+  for (const raw of rawIds) {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) {
+      return { ok: false, error: 'tagIds contiene id inválido' };
+    }
+    if (!seen.has(n)) {
+      seen.add(n);
+      ids.push(n);
+    }
+  }
+  for (const tid of ids) {
+    const exists = e.get(`SELECT id FROM history_tags WHERE id = ?`, [tid]);
+    if (!exists) {
+      return { ok: false, error: `tag id ${tid} no existe` };
+    }
+  }
+  e.run(`DELETE FROM signal_history_tags WHERE history_id = ?`, [historyId]);
+  for (const tid of ids) {
+    e.run(
+      `INSERT INTO signal_history_tags (history_id, tag_id) VALUES (?, ?)`,
+      [historyId, tid]
+    );
+  }
+  return { ok: true };
+}
+
+/**
+ * Reemplaza el set de confluencias de una fila (multi-select).
+ * @param {any} e
+ * @param {number} historyId
+ * @param {unknown} rawIds
+ * @returns {{ ok: true } | { ok: false, error: string }}
+ */
+function replaceHistoryConfluencias(e, historyId, rawIds) {
+  if (!Array.isArray(rawIds)) {
+    return { ok: false, error: 'confluenceIds debe ser un array de ids' };
+  }
+  const ids = [];
+  const seen = new Set();
+  for (const raw of rawIds) {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1) {
+      return { ok: false, error: 'confluenceIds contiene id inválido' };
+    }
+    if (!seen.has(n)) {
+      seen.add(n);
+      ids.push(n);
+    }
+  }
+  for (const cid of ids) {
+    const exists = e.get(`SELECT id FROM history_confluencias WHERE id = ?`, [cid]);
+    if (!exists) {
+      return { ok: false, error: `confluencia id ${cid} no existe` };
+    }
+  }
+  e.run(`DELETE FROM signal_history_confluencias WHERE history_id = ?`, [historyId]);
+  for (const cid of ids) {
+    e.run(
+      `INSERT INTO signal_history_confluencias (history_id, confluencia_id) VALUES (?, ?)`,
+      [historyId, cid]
+    );
+  }
+  return { ok: true };
+}
+
 function parseJson(raw, fallback) {
   if (raw == null || raw === '') return fallback;
   try {
@@ -285,6 +742,14 @@ function rowToListItem(row) {
     row.summary_bias != null && String(row.summary_bias).trim()
       ? String(row.summary_bias).trim()
       : null;
+  const winrate =
+    row.summary_winrate != null && String(row.summary_winrate).trim()
+      ? String(row.summary_winrate).trim()
+      : null;
+  const plannedRr =
+    row.summary_planned_rr != null && String(row.summary_planned_rr).trim()
+      ? String(row.summary_planned_rr).trim()
+      : null;
   return {
     id: Number(row.id),
     createdAt: row.created_at,
@@ -302,13 +767,24 @@ function rowToListItem(row) {
     error: row.error || null,
     flags,
     bias: resolveBias(flags, summaryBias),
+    /** Tasa de acierto / patrón ganador (summary.winrate), no veredicto wait/stop. */
+    winrate,
+    /** R:R del plan (summary.planDetails.rr) para métricas del historial. */
+    plannedRr,
     comment: row.comment != null && String(row.comment).trim()
       ? String(row.comment)
       : null,
+    /** Motivo de entrada/salida (nullable; editable desde /historial). */
+    motivoEntradaSalida:
+      row.motivo_entrada_salida != null && String(row.motivo_entrada_salida).trim()
+        ? String(row.motivo_entrada_salida)
+        : null,
     resultado:
       row.resultado != null && RESULTADO_OK.has(String(row.resultado).toLowerCase())
         ? String(row.resultado).toLowerCase()
         : null,
+    /** PnL real en USD (nullable; editable desde /historial). */
+    pnlUsd: readPnlUsd(row),
     hasResultImage: Boolean(
       row.result_image_name != null && String(row.result_image_name).trim()
     ),
@@ -316,6 +792,13 @@ function rowToListItem(row) {
       row.result_image_mime != null && String(row.result_image_mime).trim()
         ? String(row.result_image_mime).trim()
         : null,
+    /** Ruta del chart anotado del detalle (si la corrida lo generó). */
+    chartPath:
+      row.chart_path != null && String(row.chart_path).trim()
+        ? String(row.chart_path).trim()
+        : null,
+    tags: Array.isArray(row._tags) ? row._tags : [],
+    confluencias: Array.isArray(row._confluencias) ? row._confluencias : [],
   };
 }
 
@@ -325,6 +808,9 @@ function rowToDetail(row) {
   const base = rowToListItem({
     ...row,
     summary_bias: summary?.bias ?? row.summary_bias ?? null,
+    summary_winrate: summary?.winrate ?? row.summary_winrate ?? null,
+    summary_planned_rr:
+      summary?.planDetails?.rr ?? row.summary_planned_rr ?? null,
   });
   return {
     ...base,
@@ -403,8 +889,11 @@ async function listHistory(opts = {}) {
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
-              result_image_name, result_image_mime,
-              json_extract(summary_json, '$.bias') AS summary_bias
+              pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
+              chart_path,
+              json_extract(summary_json, '$.bias') AS summary_bias,
+              json_extract(summary_json, '$.winrate') AS summary_winrate,
+              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr
        FROM signal_history
        WHERE market = ?
        ORDER BY created_at DESC, id DESC
@@ -416,8 +905,11 @@ async function listHistory(opts = {}) {
     rows = e.all(
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
-              result_image_name, result_image_mime,
-              json_extract(summary_json, '$.bias') AS summary_bias
+              pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
+              chart_path,
+              json_extract(summary_json, '$.bias') AS summary_bias,
+              json_extract(summary_json, '$.winrate') AS summary_winrate,
+              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr
        FROM signal_history
        ORDER BY created_at DESC, id DESC
        LIMIT ? OFFSET ?`,
@@ -426,8 +918,16 @@ async function listHistory(opts = {}) {
   }
 
   const count = Number(total?.c ?? 0);
+  const items = (rows || []).map(rowToListItem);
+  const ids = items.map((i) => i.id);
+  const tagMap = loadTagsByHistoryIds(e, ids);
+  const confMap = loadConfluenciasByHistoryIds(e, ids);
+  for (const item of items) {
+    item.tags = tagMap.get(item.id) || [];
+    item.confluencias = confMap.get(item.id) || [];
+  }
   return {
-    items: (rows || []).map(rowToListItem),
+    items,
     page,
     pageSize,
     total: count,
@@ -440,7 +940,13 @@ async function getById(id) {
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) return null;
   const row = e.get(`SELECT * FROM signal_history WHERE id = ?`, [n]);
-  return rowToDetail(row);
+  const detail = rowToDetail(row);
+  if (!detail) return null;
+  const tagMap = loadTagsByHistoryIds(e, [detail.id]);
+  const confMap = loadConfluenciasByHistoryIds(e, [detail.id]);
+  detail.tags = tagMap.get(detail.id) || [];
+  detail.confluencias = confMap.get(detail.id) || [];
+  return detail;
 }
 
 async function deleteById(id) {
@@ -467,9 +973,9 @@ async function deleteById(id) {
 }
 
 /**
- * Actualiza anotaciones del trader (comment / resultado).
+ * Actualiza anotaciones del trader (comment / motivo / resultado / pnlUsd / tagIds / confluenceIds).
  * @param {number} id
- * @param {{ comment?: string|null, resultado?: string|null }} patch
+ * @param {{ comment?: string|null, motivoEntradaSalida?: string|null, motivo_entrada_salida?: string|null, resultado?: string|null, pnlUsd?: number|string|null, pnl_usd?: number|string|null, pnlMoney?: number|string|null, tagIds?: number[], confluenceIds?: number[], confluenciaIds?: number[] }} patch
  * @returns {Promise<{ ok: boolean, item?: object, error?: string }>}
  */
 async function updateAnnotation(id, patch = {}) {
@@ -483,25 +989,72 @@ async function updateAnnotation(id, patch = {}) {
     return { ok: false, error: 'not_found' };
   }
 
+  const hasOwn = (key) => Object.hasOwn(patch, key);
+
   const sets = [];
   const params = [];
-  if (Object.prototype.hasOwnProperty.call(patch, 'comment')) {
+  if (hasOwn('comment')) {
     sets.push('comment = ?');
     params.push(normalizeComment(patch.comment));
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'resultado')) {
+  const hasMotivo = hasOwn('motivoEntradaSalida') || hasOwn('motivo_entrada_salida');
+  if (hasMotivo) {
+    const raw = hasOwn('motivoEntradaSalida')
+      ? patch.motivoEntradaSalida
+      : patch.motivo_entrada_salida;
+    sets.push('motivo_entrada_salida = ?');
+    params.push(normalizeComment(raw));
+  }
+  if (hasOwn('resultado')) {
     const r = normalizeResultado(patch.resultado);
     if (r === undefined) {
-      return { ok: false, error: 'resultado inválido (usa ganada|perdida|vacío)' };
+      return {
+        ok: false,
+        error: 'resultado inválido (usa ganada|perdida|no_tomada|vacío)',
+      };
     }
     sets.push('resultado = ?');
     params.push(r);
   }
-  if (!sets.length) {
+  const hasPnl = hasOwn('pnlUsd') || hasOwn('pnl_usd') || hasOwn('pnlMoney');
+  if (hasPnl) {
+    let raw = patch.pnlMoney;
+    if (hasOwn('pnlUsd')) raw = patch.pnlUsd;
+    else if (hasOwn('pnl_usd')) raw = patch.pnl_usd;
+    const p = normalizePnlUsd(raw);
+    if (p === undefined) {
+      return { ok: false, error: 'pnlUsd inválido (usa número, p.ej. 125.5 o -40)' };
+    }
+    sets.push('pnl_usd = ?');
+    params.push(p);
+  }
+
+  const hasTags = hasOwn('tagIds');
+  if (hasTags) {
+    const tagResult = replaceHistoryTags(e, n, patch.tagIds);
+    if (!tagResult.ok) {
+      return { ok: false, error: tagResult.error };
+    }
+  }
+
+  const hasConfluencias = hasOwn('confluenceIds') || hasOwn('confluenciaIds');
+  if (hasConfluencias) {
+    const raw = hasOwn('confluenceIds')
+      ? patch.confluenceIds
+      : patch.confluenciaIds;
+    const confResult = replaceHistoryConfluencias(e, n, raw);
+    if (!confResult.ok) {
+      return { ok: false, error: confResult.error };
+    }
+  }
+
+  if (!sets.length && !hasTags && !hasConfluencias) {
     return { ok: false, error: 'nada que actualizar' };
   }
-  params.push(n);
-  e.run(`UPDATE signal_history SET ${sets.join(', ')} WHERE id = ?`, params);
+  if (sets.length) {
+    params.push(n);
+    e.run(`UPDATE signal_history SET ${sets.join(', ')} WHERE id = ?`, params);
+  }
   const item = await getById(n);
   return { ok: true, item };
 }
@@ -645,6 +1198,10 @@ module.exports = {
   getById,
   deleteById,
   updateAnnotation,
+  listTags,
+  createTag,
+  listConfluencias,
+  createConfluencia,
   saveResultImage,
   deleteResultImage,
   getResultImageFile,
@@ -652,6 +1209,8 @@ module.exports = {
   getBackendKind,
   _resetForTests,
   MAX_RESULT_IMAGE_BYTES,
+  DEFAULT_HISTORY_TAGS,
+  DEFAULT_HISTORY_CONFLUENCIAS,
   get DATA_DIR() {
     return getDataDir();
   },

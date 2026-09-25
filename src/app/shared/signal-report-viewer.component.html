@@ -6,7 +6,7 @@
         <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible" open>
           <summary>Veredicto</summary>
           <div class="collapsible-body">
-            <p class="card-hint muted hide-on-phone">Decisión del sistema para esta corrida (operar, esperar o no entrar).</p>
+            <p class="card-hint muted hide-on-phone">Probabilidad de éxito del score combinado (0–100%). La acción sugerida sigue en el plan y las reglas.</p>
             <div class="table-wrap">
               <table class="matrix kpi-table">
                 <thead><tr><th>Qué mirar</th><th>Resultado</th></tr></thead>
@@ -151,7 +151,7 @@
               @for (bar of s.chartScores; track bar.label) {
                 <div class="bar-row">
                   <div class="bar-meta">
-                    <span>{{ bar.label }}</span>
+                    <span>{{ displayScoreLabel(bar.label) }}</span>
                     <strong>{{ bar.value != null ? (bar.value | number:'1.0-1') + '%' : (bar.raw || '—') }}</strong>
                   </div>
                   <div class="bar-track">
@@ -181,8 +181,8 @@
                 </thead>
                 <tbody>
                   @for (row of s.scorecard; track row.label) {
-                    <tr [class.emphasis]="(row.label || '').toLowerCase().includes('combinado')">
-                      <td>{{ row.label }}</td>
+                    <tr [class.emphasis]="isCombinedScoreLabel(row.label)">
+                      <td>{{ displayScoreLabel(row.label) }}</td>
                       <td>{{ row.raw || (row.value != null ? row.value : '—') }}</td>
                       <td>{{ row.weight || '—' }}</td>
                       <td>{{ row.note || '—' }}</td>
@@ -486,7 +486,7 @@
     <div class="rapida">
       @if (verdictRows(s); as vRows) {
         @if (vRows.length) {
-          <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible rapida-verdict" open [attr.data-tone]="verdictTone(s.verdict)">
+          <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible rapida-verdict" open [attr.data-tone]="verdictSectionTone(s)">
             <summary>Veredicto</summary>
             <div class="collapsible-body">
               <div class="table-wrap">
@@ -573,7 +573,7 @@
               @for (bar of s.chartScores; track bar.label) {
                 <div class="bar-row">
                   <div class="bar-meta">
-                    <span>{{ bar.label }}</span>
+                    <span>{{ displayScoreLabel(bar.label) }}</span>
                     <strong>{{ bar.value != null ? (bar.value | number:'1.0-1') + '%' : (bar.raw || '—') }}</strong>
                   </div>
                   <div class="bar-track">
@@ -647,8 +647,8 @@
                 </thead>
                 <tbody>
                   @for (row of s.scorecard; track row.label) {
-                    <tr [class.emphasis]="(row.label || '').toLowerCase().includes('combinado')">
-                      <td>{{ row.label }}</td>
+                    <tr [class.emphasis]="isCombinedScoreLabel(row.label)">
+                      <td>{{ displayScoreLabel(row.label) }}</td>
                       <td>{{ row.raw || (row.value != null ? row.value : '—') }}</td>
                       <td>{{ row.weight || '—' }}</td>
                       <td>{{ row.note || '—' }}</td>
