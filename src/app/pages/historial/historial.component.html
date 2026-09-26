@@ -36,7 +36,7 @@
         class="ghost"
         (click)="recalcAllProbabilidad()"
         [disabled]="loading || recalcBusy || !total"
-        title="Recalcula Probabilidad de todas las filas con acuerdo + ubicación"
+        title="Recalcula Probabilidad v3: bias + Premium/Discount + acuerdo"
       >
         {{ recalcBusy ? 'Recalculando…' : 'Actualizar Probabilidad' }}
       </button>
@@ -153,12 +153,37 @@
               >{{ biasText(itemBias(item)) }}</span>
             </td>
             <td class="hit-rate-cell">
-              <span
-                class="hit-rate"
-                [attr.data-tone]="hitRateTone(item)"
-              >{{ hitRate(item) }}</span>
+              <ng-container *ngIf="hitRateAnalysis(item) as ha">
+                <div
+                  class="hit-rate-adv has-tip"
+                  [attr.data-tone]="hitRateTone(item)"
+                  [attr.data-tooltip]="hitRateTip(item)"
+                  [attr.aria-label]="hitRateTip(item)"
+                >
+                  <span class="hit-rate-pct">{{ ha.pctLabel }}</span>
+                  <span class="hit-rate-src muted tiny" *ngIf="ha.source">{{ ha.source }}</span>
+                  <div class="hit-rate-factors" *ngIf="ha.factors.length">
+                    <span
+                      class="hit-factor has-tip"
+                      *ngFor="let f of ha.factors"
+                      [attr.data-kind]="f.kind"
+                      [attr.data-tone]="factorTone(f.delta)"
+                      [attr.data-tooltip]="factorTip(f)"
+                    >{{ f.label }}</span>
+                  </div>
+                </div>
+              </ng-container>
             </td>
-            <td>{{ item.scoreCombined != null ? (item.scoreCombined | number:'1.0-1') + '%' : '—' }}</td>
+            <td class="prob-cell">
+              <div
+                class="prob-adv has-tip"
+                [attr.data-tooltip]="probTip(item)"
+                [attr.aria-label]="probTip(item)"
+              >
+                <span class="prob-pct">{{ item.scoreCombined != null ? (item.scoreCombined | number:'1.0-1') + '%' : '—' }}</span>
+                <span class="prob-hint muted tiny" *ngIf="probHint(item) as ph">{{ ph }}</span>
+              </div>
+            </td>
             <td>
               <span class="status" [class.ok]="item.status === 'done'" [class.bad]="item.status === 'error'">
                 {{ item.status }}
@@ -422,13 +447,38 @@
         </header>
         <div class="hit-rate-row" [attr.data-tone]="hitRateTone(item)">
           <span class="hit-rate-label">Tasa de acierto</span>
-          <span class="hit-rate-value">{{ hitRate(item) }}</span>
+          <ng-container *ngIf="hitRateAnalysis(item) as ha">
+            <div
+              class="hit-rate-adv has-tip"
+              [attr.data-tooltip]="hitRateTip(item)"
+              [attr.aria-label]="hitRateTip(item)"
+            >
+              <span class="hit-rate-pct">{{ ha.pctLabel }}</span>
+              <span class="hit-rate-src muted tiny" *ngIf="ha.source">{{ ha.source }}</span>
+              <div class="hit-rate-factors" *ngIf="ha.factors.length">
+                <span
+                  class="hit-factor has-tip"
+                  *ngFor="let f of ha.factors"
+                  [attr.data-kind]="f.kind"
+                  [attr.data-tone]="factorTone(f.delta)"
+                  [attr.data-tooltip]="factorTip(f)"
+                >{{ f.label }}</span>
+              </div>
+            </div>
+          </ng-container>
         </div>
         <p class="when">
           <strong>{{ relativeTime(item.createdAt) }}</strong>
           <span class="muted tiny hide-on-phone">{{ absoluteTime(item.createdAt) }}</span>
         </p>
-        <p class="muted tiny">probabilidad {{ item.scoreCombined != null ? item.scoreCombined + '%' : '—' }} · {{ item.status }}</p>
+        <p
+          class="muted tiny has-tip"
+          [attr.data-tooltip]="probTip(item)"
+        >
+          probabilidad {{ item.scoreCombined != null ? item.scoreCombined + '%' : '—' }}
+          <span *ngIf="probHint(item) as ph"> · {{ ph }}</span>
+          · {{ item.status }}
+        </p>
         <div class="card-annotate" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
           <textarea
             class="hist-input hist-textarea"

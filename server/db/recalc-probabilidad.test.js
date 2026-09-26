@@ -23,6 +23,17 @@ describe('recalc-probabilidad', () => {
     assert.equal(r.locationMult, 0.72);
   });
 
+  it('bonifica SHORT en PREMIUM (zona a favor)', () => {
+    const r = computeNewProbabilidad(60, {
+      direction: 'SHORT',
+      setupMode: 'reverse',
+      premiumDiscount: 'PREMIUM',
+      confluencePct: null,
+    });
+    assert.equal(r.locationMult, 1.06);
+    assert.ok(r.scoreCombined > 60);
+  });
+
   it('is idempotent via scoreRecalcVersion', () => {
     const summary = {
       scoreCombined: 73,
@@ -43,5 +54,23 @@ describe('recalc-probabilidad', () => {
     });
     assert.equal(second.changed, false);
     assert.equal(second.scoreCombined, first.scoreCombined);
+  });
+
+  it('tasa refleja SHORT en DISCOUNT y bias alineado', () => {
+    const { computeNewWinrate } = require('./recalc-probabilidad');
+    const wr = computeNewWinrate({
+      rulesPct: 83,
+      setupMode: 'reverse',
+      direction: 'SHORT',
+      premiumDiscount: 'DISCOUNT',
+      confluenceLabel: 'BAJA',
+      confluencePct: 38,
+      biasH1: 'BEARISH',
+      modeBias: 'bearish',
+    });
+    assert.ok(wr);
+    assert.match(wr.winrateDisplay, /DISCOUNT/);
+    assert.match(wr.winrateSource, /H1 BEARISH a favor/);
+    assert.match(wr.winrateSource, /acuerdo BAJA/);
   });
 });

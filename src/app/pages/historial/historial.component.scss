@@ -172,7 +172,7 @@ button:disabled {
 
 .hist-table {
   width: 100%;
-  min-width: 1380px;
+  min-width: 1580px;
   border-collapse: collapse;
   font-size: 0.95rem;
   table-layout: auto;
@@ -584,7 +584,168 @@ textarea.hist-textarea-compact {
 }
 
 .hit-rate-cell {
-  max-width: 18rem;
+  min-width: 18rem;
+  max-width: 32rem;
+  width: 28%;
+}
+
+.hit-rate-adv {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  max-width: 30rem;
+}
+
+.hit-rate-pct {
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.hit-rate-adv[data-tone='ok'] .hit-rate-pct {
+  color: var(--ok);
+}
+
+.hit-rate-adv[data-tone='warn'] .hit-rate-pct {
+  color: var(--warn);
+}
+
+.hit-rate-src {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hit-rate-factors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.hit-factor {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  background: color-mix(in srgb, var(--panel-deep) 80%, #1a1010);
+  color: color-mix(in srgb, var(--muted) 88%, white);
+  font-size: 0.7rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.hit-factor[data-kind='pd'] {
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+  color: color-mix(in srgb, var(--gold) 70%, white);
+}
+
+.hit-factor[data-kind='bias'] {
+  border-color: color-mix(in srgb, #6ea8fe 45%, transparent);
+  color: color-mix(in srgb, #6ea8fe 75%, white);
+}
+
+.hit-factor[data-kind='acuerdo'] {
+  border-color: color-mix(in srgb, #c4a7e7 40%, transparent);
+  color: color-mix(in srgb, #c4a7e7 80%, white);
+}
+
+.hit-factor[data-tone='up'] {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  color: var(--ok);
+}
+
+.hit-factor[data-tone='down'] {
+  border-color: color-mix(in srgb, var(--danger, #e07171) 45%, transparent);
+  color: var(--danger, #e07171);
+}
+
+.prob-cell {
+  min-width: 7.5rem;
+  max-width: 12rem;
+  width: 9%;
+  vertical-align: middle;
+}
+
+.prob-adv {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  max-width: 11rem;
+}
+
+.prob-pct {
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.prob-hint {
+  display: block;
+  max-width: 11rem;
+  line-height: 1.3;
+}
+
+/* Tooltip explicativo (bias / PD / acuerdo) */
+.has-tip {
+  position: relative;
+  cursor: help;
+}
+
+.has-tip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.45rem);
+  z-index: 40;
+  display: block;
+  width: max-content;
+  max-width: min(28rem, 70vw);
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  background: color-mix(in srgb, #1a1210 92%, black);
+  color: color-mix(in srgb, var(--text) 92%, white);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: pre-line;
+  text-align: left;
+  box-shadow: 0 10px 28px color-mix(in srgb, black 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.has-tip:hover::after,
+.has-tip:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Si el cursor está en un chip, no mostrar también el tip del contenedor */
+.hit-rate-adv.has-tip:has(.hit-factor:hover)::after {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hit-factor.has-tip::after {
+  left: 0;
+  max-width: min(22rem, 65vw);
+  font-size: 0.72rem;
+}
+
+.prob-adv.has-tip::after {
+  left: 0;
+  max-width: min(24rem, 65vw);
 }
 
 .hit-rate {
@@ -631,12 +792,30 @@ textarea.hist-textarea-compact {
   word-break: break-word;
 }
 
-.hit-rate-row[data-tone='ok'] .hit-rate-value {
+.hit-rate-row[data-tone='ok'] .hit-rate-value,
+.hit-rate-row[data-tone='ok'] .hit-rate-pct {
   color: var(--ok);
 }
 
-.hit-rate-row[data-tone='warn'] .hit-rate-value {
+.hit-rate-row[data-tone='warn'] .hit-rate-value,
+.hit-rate-row[data-tone='warn'] .hit-rate-pct {
   color: var(--warn);
+}
+
+.hit-rate-row .hit-rate-adv {
+  flex: 1 1 auto;
+  align-items: flex-end;
+  text-align: right;
+  max-width: 100%;
+}
+
+.hit-rate-row .hit-rate-factors {
+  justify-content: flex-end;
+}
+
+.hit-rate-row .has-tip::after {
+  left: auto;
+  right: 0;
 }
 
 .card-actions {

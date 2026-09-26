@@ -19,6 +19,10 @@ import {
   investorRiskCard,
   riskGaugeHint,
   hitRateTone,
+  parseHitRateAnalysis,
+  probabilityHint,
+  hitRateTooltip,
+  probabilityTooltip,
 } from './signal-report.helpers.ts';
 
 describe('signal-report.helpers', () => {
@@ -114,6 +118,48 @@ describe('signal-report.helpers', () => {
     assert.equal(hitRateTone('~30% — bajo'), 'warn');
     assert.equal(hitRateTone(null), '');
     assert.equal(hitRateTone('sin dato'), '');
+  });
+
+  it('parseHitRateAnalysis separa % y factores bias/PD/acuerdo', () => {
+    const a = parseHitRateAnalysis(
+      '~48% — histórico E2 reversión BTC · 83% reglas; patron WIN similar +3; SHORT en DISCOUNT -7; acuerdo BAJA -8'
+    );
+    assert.equal(a.pctLabel, '~48%');
+    assert.equal(a.pct, 48);
+    assert.match(String(a.source), /E2/);
+    assert.ok(a.factors.some((f) => f.kind === 'pd' && /DISCOUNT/.test(f.label)));
+    assert.ok(a.factors.some((f) => f.kind === 'acuerdo' && /BAJA/.test(f.label)));
+    assert.ok(a.factors.some((f) => f.kind === 'patron'));
+  });
+
+  it('probabilityHint resume PD desde winrate o tags', () => {
+    assert.match(
+      String(
+        probabilityHint({
+          winrate:
+            '~55% — histórico E1 BTC · SHORT en PREMIUM +2 (zona a favor); H1 BEARISH a favor +4',
+        })
+      ),
+      /PREMIUM/
+    );
+  });
+
+  it('hitRateTooltip explica bias y Premium/Discount', () => {
+    const tip = hitRateTooltip(
+      '~48% — histórico E2 reversión BTC · SHORT en DISCOUNT -7; acuerdo BAJA -8'
+    );
+    assert.match(tip, /Tasa de acierto/);
+    assert.match(tip, /Premium \/ Discount|DISCOUNT/);
+    assert.match(tip, /Acuerdo|acuerdo/i);
+  });
+
+  it('probabilityTooltip resume score y contexto', () => {
+    const tip = probabilityTooltip({
+      scoreCombined: 58,
+      winrate: '~48% — histórico E2 · SHORT en DISCOUNT -7; H1 BEARISH a favor +4',
+    });
+    assert.match(tip, /58%/);
+    assert.match(tip, /Premium\/Discount|DISCOUNT|blend/i);
   });
 
   it('hasDetalleAdicional (empty-state útil para historial/reporte)', () => {

@@ -315,11 +315,11 @@ function applyHistoryMigrations(e) {
        VALUES (?, ?, ?, NULL)`,
       [
         now,
-        'Cálculo v2 — Entry/SL/TP + acuerdo + tasa',
+        'Cálculo v3 — bias + Premium/Discount + acuerdo + tasa',
         [
           '• Entry/SL/TP: LONG no ancla SL a resistencia; daytrader ≤60 pips del spot.',
-          '• Probabilidad de éxito: blend 62/38 con Acuerdo entre capas; Break en PREMIUM ×0.72.',
-          '• Tasa de acierto: ya no ~82% fijo; curva por % reglas + ubicación + acuerdo (techo 74%).',
+          '• Probabilidad de éxito: bias H1/CLI + Premium/Discount + blend 62/38 Acuerdo.',
+          '• Tasa de acierto: curva reglas + zona PD + bias + acuerdo (techo 74%).',
           'Señales ENCIMA de esta barra usan el cálculo nuevo. Debajo = histórico anterior.',
         ].join('\n'),
       ]

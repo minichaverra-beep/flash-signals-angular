@@ -159,6 +159,301 @@ export function hitRateTone(winrate: string | null | undefined): string {
   return successProbabilityTone(Number(String(m[1]).replace(',', '.')));
 }
 
+/** Factor individual del desglose de tasa (bias / PD / acuerdo / patrón). */
+export interface HitRateFactor {
+  label: string;
+  /** Delta numérico si se detecta (+3, -7); null si es informativo. */
+  delta: number | null;
+  kind: 'pd' | 'bias' | 'acuerdo' | 'patron' | 'reglas' | 'other';
+}
+
+export interface HitRateAnalysis {
+  /** Porcentaje principal (~48%). */
+  pctLabel: string;
+  pct: number | null;
+  /** Fuente corta: E2 reversión BTC / E1 BTC. */
+  source: string | null;
+  factors: HitRateFactor[];
+  /** Texto crudo si no se pudo parsear. */
+  raw: string;
+}
+
+function classifyHitFactor(label: string): HitRateFactor['kind'] {
+  const t = label.toLowerCase();
+  if (/premium|discount|equilibrio|zona|chase/.test(t)) return 'pd';
+  if (/\bh1\b|\bcli\b|bias|bullish|bearish|a favor|vs (long|short)/.test(t))
+    return 'bias';
+  if (/acuerdo/.test(t)) return 'acuerdo';
+  if (/patron|patrón|win|loss|mixtos/.test(t)) return 'patron';
+  if (/reglas|fusi[oó]n|ancla|hist[oó]rico/.test(t)) return 'reglas';
+  return 'other';
+}
+
+/**
+ * Separa «~48% — histórico E2 · SHORT en DISCOUNT -7; acuerdo BAJA -8»
+ * en % + chips de factores (bias / premium / discount / acuerdo).
+ */
+export function parseHitRateAnalysis(
+  winrate: string | null | undefined
+): HitRateAnalysis {
+  const raw = String(winrate || '').trim();
+  if (!raw || raw === '—' || raw === '-') {
+    return { pctLabel: '—', pct: null, source: null, factors: [], raw };
+  }
+
+  const pctM = raw.match(/~?\s*(\d+(?:[.,]\d+)?)\s*%/);
+  const pct = pctM ? Number(String(pctM[1]).replace(',', '.')) : null;
+  const pctLabel =
+    pct != null && Number.isFinite(pct)
+      ? `~${Math.round(pct)}%`
+      : raw.slice(0, 12);
+
+  let rest = raw;
+  if (pctM && pctM.index != null) {
+    rest = raw.slice(pctM.index + pctM[0].length).replace(/^\s*[—–\-]+\s*/, '');
+  }
+
+  let source: string | null = null;
+  const srcM = rest.match(
+    /hist[oó]rico\s+([^·|;]+?)(?:\s*[·|;]\s*|\s*$)/i
+  );
+  if (srcM) {
+    source = srcM[1].trim();
+    rest = rest.slice(srcM.index! + srcM[0].length);
+  }
+
+  const factors: HitRateFactor[] = [];
+  const chunks = rest
+    .split(/[;|]/)
+    .map((c) => c.replace(/^\s*·\s*/, '').trim())
+    .filter(Boolean);
+
+  for (const chunk of chunks) {
+    if (/^hist[oó]rico/i.test(chunk)) continue;
+    const dm = chunk.match(/([+\-−]\s*\d+(?:[.,]\d+)?)\s*(?:\(|$)/);
+    let delta: number | null = null;
+    if (dm) {
+      delta = Number(String(dm[1]).replace(/[−\s]/g, (ch) => (ch === '−' ? '-' : '')).replace(',', '.'));
+      if (!Number.isFinite(delta)) delta = null;
+    } else {
+      const dm2 = chunk.match(/([+\-−]\d+(?:[.,]\d+)?)\s*$/);
+      if (dm2) {
+        delta = Number(String(dm2[1]).replace('−', '-').replace(',', '.'));
+        if (!Number.isFinite(delta)) delta = null;
+      }
+    }
+    factors.push({
+      label: chunk,
+      delta,
+      kind: classifyHitFactor(chunk),
+    });
+  }
+
+  return { pctLabel, pct, source, factors, raw };
+}
+
+/** Resumen corto para columna Probabilidad (meta de recalc o tags PD). */
+export function probabilityHint(item: {
+  tags?: Array<{ name?: string } | string> | null;
+  winrate?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  const tags = item.tags || [];
+  for (const t of tags) {
+    const name = String(typeof t === 'string' ? t : t?.name || '').toUpperCase();
+    if (name === 'PREMIUM' || name === 'DISCOUNT') {
+      parts.push(name);
+      break;
+    }
+  }
+  const analysis = parseHitRateAnalysis(item.winrate);
+  const pd = analysis.factors.find((f) => f.kind === 'pd');
+  const bias = analysis.factors.find((f) => f.kind === 'bias');
+  const acuerdo = analysis.factors.find((f) => f.kind === 'acuerdo');
+  if (pd && !parts.length) {
+    const m = pd.label.match(/\b(PREMIUM|DISCOUNT|EQUILIBRIO)\b/i);
+    if (m) parts.push(m[1].toUpperCase());
+  }
+  if (bias) {
+    const m = bias.label.match(/\b(BULLISH|BEARISH|NEUTRAL|CLI\s+\w+)\b/i);
+    if (m) parts.push(m[1].toUpperCase().replace(/\s+/, ' '));
+  } else if (acuerdo) {
+    const m = acuerdo.label.match(/acuerdo\s+(\w+)/i);
+    if (m) parts.push(`acuerdo ${m[1]}`);
+  }
+  return parts.length ? parts.join(' · ') : null;
+}
+
+const KIND_TITLE: Record<HitRateFactor['kind'], string> = {
+  pd: 'Premium / Discount',
+  bias: 'Bias H1 / CLI',
+  acuerdo: 'Acuerdo entre capas',
+  patron: 'Patrón similar',
+  reglas: 'Reglas / ancla',
+  other: 'Factor',
+};
+
+/** Explicación corta de un factor del desglose (para tooltip). */
+export function explainHitFactor(factor: HitRateFactor): string {
+  const t = factor.label.toLowerCase();
+  const delta =
+    factor.delta != null
+      ? factor.delta > 0
+        ? `+${factor.delta}`
+        : String(factor.delta)
+      : null;
+
+  if (factor.kind === 'pd') {
+    if (/chase|vs zona|premium.*-|discount.*-/.test(t) || (factor.delta != null && factor.delta < 0)) {
+      return (
+        `Zona en contra (ICT: long en discount / short en premium).` +
+        (delta ? ` Ajuste ${delta} pts.` : '')
+      );
+    }
+    if (/a favor|\+/.test(t) || (factor.delta != null && factor.delta > 0)) {
+      return (
+        `Zona a favor del setup.` +
+        (delta ? ` Ajuste ${delta} pts.` : '')
+      );
+    }
+    if (/equilibrio/.test(t)) {
+      return 'Precio en equilibrio: sin ajuste por ubicación.';
+    }
+    return `Ubicación Premium/Discount.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+  }
+
+  if (factor.kind === 'bias') {
+    if (/a favor|alinead/.test(t) || (factor.delta != null && factor.delta > 0)) {
+      return (
+        `Bias alineado con la dirección del trade.` +
+        (delta ? ` Ajuste ${delta} pts.` : '')
+      );
+    }
+    if (/vs |conflicto|contra/.test(t) || (factor.delta != null && factor.delta < 0)) {
+      return (
+        `Bias en conflicto con la dirección.` +
+        (delta ? ` Ajuste ${delta} pts.` : '')
+      );
+    }
+    if (/neutral/.test(t)) {
+      return 'H1 neutral: no suma ni resta por bias.';
+    }
+    return `Sesgo direccional.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+  }
+
+  if (factor.kind === 'acuerdo') {
+    if (/alta/.test(t)) {
+      return `Capas alineadas (acuerdo ALTA).${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    if (/baja|nula/.test(t)) {
+      return `Poco acuerdo entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    if (/media/.test(t)) {
+      return `Acuerdo medio entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    return `Acuerdo entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+  }
+
+  if (factor.kind === 'patron') {
+    if (/win/.test(t)) {
+      return `Galería: patrón ganador similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    if (/loss/.test(t)) {
+      return `Galería: patrón perdedor similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    if (/mixtos/.test(t)) {
+      return `Galería mixta WIN/LOSS.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+    }
+    return `Patrón histórico similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+  }
+
+  if (factor.kind === 'reglas') {
+    if (/reglas/.test(t)) {
+      return 'Base de la curva: % de reglas E1/E2 cumplidas.';
+    }
+    if (/fusi[oó]n|ancla/.test(t)) {
+      return 'Ancla suave hacia la Probabilidad de éxito (fusión).';
+    }
+    return factor.label;
+  }
+
+  return factor.label + (delta ? ` (${delta})` : '');
+}
+
+/**
+ * Tooltip multilínea para la columna Tasa de acierto.
+ * Explica % + cada factor (bias, PD, acuerdo…).
+ */
+export function hitRateTooltip(winrate: string | null | undefined): string {
+  const a = parseHitRateAnalysis(winrate);
+  if (!a.raw || a.pct == null) {
+    return a.raw && a.raw !== '—' ? a.raw : 'Sin tasa de acierto estimada.';
+  }
+  const lines: string[] = [
+    `Tasa de acierto estimada: ${a.pctLabel}`,
+  ];
+  if (a.source) {
+    lines.push(`Fuente: histórico ${a.source}`);
+  }
+  lines.push('');
+  lines.push('Desglose (bias · Premium/Discount · acuerdo):');
+  if (!a.factors.length) {
+    lines.push('• Sin factores adicionales parseados.');
+  } else {
+    for (const f of a.factors) {
+      const title = KIND_TITLE[f.kind];
+      lines.push(`• ${title}: ${f.label}`);
+      lines.push(`  ${explainHitFactor(f)}`);
+    }
+  }
+  lines.push('');
+  lines.push('No es un oráculo: estima calidad del setup.');
+  return lines.join('\n');
+}
+
+/**
+ * Tooltip para Probabilidad de éxito (score combinado + contexto PD/bias).
+ */
+export function probabilityTooltip(item: {
+  scoreCombined?: number | null;
+  tags?: Array<{ name?: string } | string> | null;
+  winrate?: string | null;
+}): string {
+  const pct =
+    item.scoreCombined != null && Number.isFinite(Number(item.scoreCombined))
+      ? `${Math.round(Number(item.scoreCombined) * 10) / 10}%`
+      : null;
+  if (!pct) return 'Sin Probabilidad de éxito calculada.';
+
+  const lines: string[] = [
+    `Probabilidad de éxito: ${pct}`,
+    '',
+    'Score combinado (capas Rules/ML/Neural/CRT)',
+    '+ ubicación Premium/Discount',
+    '+ blend 62/38 con Acuerdo entre capas.',
+  ];
+
+  const hint = probabilityHint(item);
+  if (hint) {
+    lines.push('');
+    lines.push(`Contexto: ${hint}`);
+  }
+
+  const a = parseHitRateAnalysis(item.winrate);
+  const pd = a.factors.find((f) => f.kind === 'pd');
+  const bias = a.factors.find((f) => f.kind === 'bias');
+  const acuerdo = a.factors.find((f) => f.kind === 'acuerdo');
+  if (pd || bias || acuerdo) {
+    lines.push('');
+    lines.push('Factores relevantes:');
+    if (pd) lines.push(`• ${pd.label} — ${explainHitFactor(pd)}`);
+    if (bias) lines.push(`• ${bias.label} — ${explainHitFactor(bias)}`);
+    if (acuerdo) lines.push(`• ${acuerdo.label} — ${explainHitFactor(acuerdo)}`);
+  }
+
+  return lines.join('\n');
+}
+
 /** Etiqueta de capa/score: Combinado → Probabilidad de éxito. */
 export function displayScoreLabel(label: string | null | undefined): string {
   const t = (label || '').trim();

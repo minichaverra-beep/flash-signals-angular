@@ -14,7 +14,8 @@ import {
   ReportViewMode,
   SignalReportViewerComponent,
 } from '../../shared/signal-report-viewer.component';
-import { biasTone, biasLabel, resolveRunBias, hitRateTone } from '../../shared/signal-report.helpers';
+import { biasTone, biasLabel, resolveRunBias, hitRateTone, parseHitRateAnalysis, probabilityHint, hitRateTooltip, probabilityTooltip, explainHitFactor } from '../../shared/signal-report.helpers';
+import type { HitRateAnalysis, HitRateFactor } from '../../shared/signal-report.helpers';
 import {
   computeHistoryMetrics,
   formatMetric,
@@ -465,8 +466,40 @@ export class HistorialComponent implements OnInit, OnDestroy {
     return w || '—';
   }
 
+  /** Desglose avanzado: % + factores bias/PD/acuerdo. */
+  hitRateAnalysis(item: HistoryListItem): HitRateAnalysis {
+    return parseHitRateAnalysis(item.winrate);
+  }
+
   hitRateTone(item: HistoryListItem): string {
     return hitRateTone(item.winrate);
+  }
+
+  /** Tooltip explicativo de la tasa (bias / PD / acuerdo). */
+  hitRateTip(item: HistoryListItem): string {
+    return hitRateTooltip(item.winrate);
+  }
+
+  /** Hint corto bajo Probabilidad (PD · bias). */
+  probHint(item: HistoryListItem): string | null {
+    return probabilityHint(item);
+  }
+
+  /** Tooltip explicativo de Probabilidad de éxito. */
+  probTip(item: HistoryListItem): string {
+    return probabilityTooltip(item);
+  }
+
+  /** Tooltip de un chip de factor. */
+  factorTip(f: HitRateFactor): string {
+    return `${f.label}\n${explainHitFactor(f)}`;
+  }
+
+  factorTone(delta: number | null): string {
+    if (delta == null) return '';
+    if (delta > 0) return 'up';
+    if (delta < 0) return 'down';
+    return '';
   }
 
   itemBias(item: HistoryListItem): string {
@@ -1037,12 +1070,12 @@ export class HistorialComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Aplica v2 (acuerdo + ubicación) a la columna Probabilidad de todo el historial. */
+  /** Aplica v3 (bias + PD + acuerdo) a la columna Probabilidad de todo el historial. */
   recalcAllProbabilidad(): void {
     if (this.recalcBusy) return;
     const ok = confirm(
       '¿Recalcular la columna Probabilidad de TODO el historial?\n\n' +
-        'Aplica: blend Acuerdo entre capas (62/38) + penalización Break en PREMIUM.\n' +
+        'Aplica v3: bias H1/CLI + Premium/Discount + blend Acuerdo (62/38).\n' +
         'También actualiza Tasa de acierto cuando hay datos.\n' +
         'Es idempotente (no duplica el ajuste).'
     );
