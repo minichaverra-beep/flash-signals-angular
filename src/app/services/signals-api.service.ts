@@ -333,7 +333,20 @@ export class SignalsApiService {
       winrate?: string | null;
     }>;
   }> {
-    return this.http.post(`${this.base}/history/recalc-probabilidad`, {
+    return this.http.post<{
+      ok: boolean;
+      version: string;
+      total: number;
+      updated: number;
+      unchanged: number;
+      skipped: number;
+      samples?: Array<{
+        id: number;
+        before: number;
+        after: number;
+        winrate?: string | null;
+      }>;
+    }>(`${this.base}/history/recalc-probabilidad`, {
       force: Boolean(opts.force),
       market: opts.market || null,
     });
