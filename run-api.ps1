@@ -1,27 +1,48 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Arranca la API Express de Flash Signals (puerto 3847).
+  Abre una consola visible y arranca la API Express de Flash Signals (puerto 3847).
 .DESCRIPTION
-  Cambia al directorio del proyecto, asegura dependencias si hace falta,
-  define CURSOR_TRADING_ROOT si no está seteado, y ejecuta `npm run api`.
+  Siempre lanza una ventana nueva de PowerShell titulada "Flash Signals API"
+  para ver logs/debug. Usa -InWindow solo internamente (proceso ya en esa ventana).
+.PARAMETER InWindow
+  Uso interno: ejecuta la API en la consola actual (no vuelve a abrir otra ventana).
 #>
 [CmdletBinding()]
-param()
+param(
+  [switch]$InWindow
+)
 
 $ErrorActionPreference = 'Stop'
 
-# UTF-8 en consola (evita mojibake en mensajes)
+$ProjectRoot = $PSScriptRoot
+if (-not $ProjectRoot) {
+  $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+
+# --- Launcher: siempre abrir consola visible ---
+if (-not $InWindow) {
+  $psExe = Join-Path $PSHOME 'powershell.exe'
+  if (-not (Test-Path -LiteralPath $psExe)) {
+    $psExe = 'powershell.exe'
+  }
+  $argList = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -InWindow"
+  Write-Host "Abriendo consola 'Flash Signals API' (puerto 3847)..." -ForegroundColor Cyan
+  Start-Process -FilePath $psExe -WorkingDirectory $ProjectRoot -ArgumentList $argList
+  exit 0
+}
+
+# --- Trabajo real (dentro de la ventana dedicada) ---
+try {
+  $Host.UI.RawUI.WindowTitle = 'Flash Signals API'
+} catch { }
+
 try {
   chcp 65001 | Out-Null
   [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
   $OutputEncoding = [System.Text.Encoding]::UTF8
 } catch { }
 
-$ProjectRoot = $PSScriptRoot
-if (-not $ProjectRoot) {
-  $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-}
 Set-Location -LiteralPath $ProjectRoot
 
 Write-Host ""
@@ -33,7 +54,10 @@ if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot 'node_modules'))) {
   Write-Host "No hay node_modules en la raíz. Ejecutando: npm install --legacy-peer-deps ..." -ForegroundColor Yellow
   npm install --legacy-peer-deps
   if ($LASTEXITCODE -ne 0) {
-    Write-Error "Falló npm install en la raíz. Revisa Node/npm e inténtalo de nuevo."
+    Write-Host "Falló npm install en la raíz. Revisa Node/npm e inténtalo de nuevo." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Pulsa Enter para cerrar esta ventana..." -ForegroundColor Yellow
+    Read-Host | Out-Null
     exit 1
   }
 }
@@ -46,7 +70,10 @@ if (-not (Test-Path -LiteralPath $serverModules)) {
   try {
     npm install
     if ($LASTEXITCODE -ne 0) {
-      Write-Error "Falló npm install en server/. Revisa e inténtalo de nuevo."
+      Write-Host "Falló npm install en server/. Revisa e inténtalo de nuevo." -ForegroundColor Red
+      Write-Host ""
+      Write-Host "Pulsa Enter para cerrar esta ventana..." -ForegroundColor Yellow
+      Read-Host | Out-Null
       exit 1
     }
   } finally {
@@ -78,4 +105,15 @@ Write-Host "Ctrl+C para detener."
 Write-Host ""
 
 npm run api
-exit $LASTEXITCODE
+$exitCode = $LASTEXITCODE
+if ($null -eq $exitCode) { $exitCode = 0 }
+
+Write-Host ""
+if ($exitCode -ne 0) {
+  Write-Host "La API terminó con error (código $exitCode)." -ForegroundColor Red
+} else {
+  Write-Host "La API se detuvo (código $exitCode)." -ForegroundColor Yellow
+}
+Write-Host "Pulsa Enter para cerrar esta ventana..." -ForegroundColor Yellow
+Read-Host | Out-Null
+exit $exitCode

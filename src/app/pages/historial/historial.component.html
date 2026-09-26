@@ -28,6 +28,18 @@
     </fieldset>
     <div class="toolbar-actions">
       <span class="lock-badge" title="Borrar filas requiere contraseña">🔒 Bloqueo activo</span>
+      <button type="button" class="ghost" (click)="openCalcMarkerDialog()" [disabled]="loading">
+        + Cambio de cálculo
+      </button>
+      <button
+        type="button"
+        class="ghost"
+        (click)="recalcAllProbabilidad()"
+        [disabled]="loading || recalcBusy || !total"
+        title="Recalcula Probabilidad de todas las filas con acuerdo + ubicación"
+      >
+        {{ recalcBusy ? 'Recalculando…' : 'Actualizar Probabilidad' }}
+      </button>
       <button type="button" class="ghost" (click)="load()" [disabled]="loading">
         {{ loading ? 'Cargando…' : 'Actualizar' }}
       </button>
@@ -48,7 +60,7 @@
     <p class="muted loading-pulse">Cargando historial…</p>
   </section>
 
-  <section class="panel empty" *ngIf="!loading && !items.length && !error">
+  <section class="panel empty" *ngIf="!loading && !items.length && !calcMarkers.length && !error">
     <h2>Sin entradas aún</h2>
     <p class="muted hide-on-phone">
       Ejecuta una señal desde <a routerLink="/">Señales</a>. Al terminar el job,
@@ -59,7 +71,7 @@
     </p>
   </section>
 
-  <section class="panel table-panel" *ngIf="items.length">
+  <section class="panel table-panel" *ngIf="items.length || calcMarkers.length">
     <div class="meta-row">
       <p class="muted">{{ total }} entrada{{ total === 1 ? '' : 's' }} · página {{ page }} / {{ totalPages }}</p>
       <p class="muted tiny save-hint" *ngIf="saveHint">{{ saveHint }}</p>
@@ -86,7 +98,47 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let item of items; trackBy: trackById">
+          <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
+            <tr *ngIf="row.kind === 'calc_marker'" class="calc-change-row">
+              <td colspan="14">
+                <div class="calc-change-bar">
+                  <div class="calc-change-main">
+                    <span class="calc-change-badge">Cambio de cálculo</span>
+                    <strong class="calc-change-title">{{ row.marker.title }}</strong>
+                    <span class="muted tiny">{{ absoluteTime(row.marker.createdAt) }}</span>
+                    <span class="pill market sm" *ngIf="row.marker.market">{{ row.marker.market | uppercase }}</span>
+                  </div>
+                  <p class="calc-change-hint muted tiny">
+                    Señales <strong>encima</strong> = cálculo nuevo · debajo = histórico anterior
+                  </p>
+                  <div class="calc-change-comment" *ngIf="editingMarkerId !== row.marker.id">
+                    <pre *ngIf="row.marker.comment" class="calc-change-pre">{{ row.marker.comment }}</pre>
+                    <span class="muted tiny" *ngIf="!row.marker.comment">Sin comentario — pulsa Editar para añadir qué cambió.</span>
+                  </div>
+                  <div class="calc-change-edit" *ngIf="editingMarkerId === row.marker.id">
+                    <textarea
+                      class="hist-input hist-textarea"
+                      rows="3"
+                      [value]="editingMarkerComment"
+                      maxlength="4000"
+                      placeholder="Qué cambió en el cálculo…"
+                      aria-label="Comentario del cambio de cálculo"
+                      (input)="editingMarkerComment = $any($event.target).value"
+                    ></textarea>
+                    <div class="calc-change-actions">
+                      <button type="button" class="ghost sm" (click)="saveMarkerComment(row.marker)">Guardar</button>
+                      <button type="button" class="ghost sm" (click)="cancelEditMarker()">Cancelar</button>
+                    </div>
+                  </div>
+                  <div class="calc-change-actions" *ngIf="editingMarkerId !== row.marker.id">
+                    <button type="button" class="ghost sm" (click)="startEditMarker(row.marker, $event)">Editar comentario</button>
+                    <button type="button" class="ghost sm danger-text" (click)="deleteCalcMarker(row.marker, $event)">Borrar barra</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <ng-container *ngIf="asItem(row) as item">
+            <tr [attr.data-id]="item.id">
             <td>
               <div class="when">
                 <strong>{{ relativeTime(item.createdAt) }}</strong>
@@ -331,12 +383,37 @@
               <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
             </td>
           </tr>
+          </ng-container>
+          </ng-container>
         </tbody>
       </table>
     </div>
 
     <div class="cards mobile">
-      <article class="hist-card" *ngFor="let item of items; trackBy: trackById">
+      <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
+        <article *ngIf="row.kind === 'calc_marker'" class="calc-change-card">
+          <span class="calc-change-badge">Cambio de cálculo</span>
+          <strong>{{ row.marker.title }}</strong>
+          <p class="muted tiny">{{ absoluteTime(row.marker.createdAt) }}</p>
+          <p class="calc-change-hint muted tiny">Encima = cálculo nuevo · debajo = anterior</p>
+          <pre *ngIf="row.marker.comment" class="calc-change-pre">{{ row.marker.comment }}</pre>
+          <div class="calc-change-actions">
+            <button type="button" class="ghost sm" (click)="startEditMarker(row.marker, $event)">Editar</button>
+            <button type="button" class="ghost sm danger-text" (click)="deleteCalcMarker(row.marker, $event)">Borrar</button>
+          </div>
+          <div class="calc-change-edit" *ngIf="editingMarkerId === row.marker.id">
+            <textarea
+              class="hist-input hist-textarea"
+              rows="3"
+              [value]="editingMarkerComment"
+              maxlength="4000"
+              (input)="editingMarkerComment = $any($event.target).value"
+            ></textarea>
+            <button type="button" class="ghost sm" (click)="saveMarkerComment(row.marker)">Guardar</button>
+            <button type="button" class="ghost sm" (click)="cancelEditMarker()">Cancelar</button>
+          </div>
+        </article>
+        <article class="hist-card" *ngIf="asItem(row) as item">
         <header>
           <span class="pill market">{{ item.market | uppercase }}</span>
           <span class="header-badges">
@@ -547,6 +624,7 @@
           <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
         </div>
       </article>
+      </ng-container>
     </div>
 
     <div class="pager" *ngIf="totalPages > 1">
@@ -941,6 +1019,60 @@
     ></button>
     <button type="button" class="ghost lightbox-close" (click)="closeLightbox()">Cerrar</button>
     <img [src]="lightboxUrl" alt="Captura del resultado" />
+  </div>
+
+  <!-- Nueva barra de cambio de cálculo -->
+  <button
+    type="button"
+    class="unlock-backdrop"
+    *ngIf="calcMarkerOpen"
+    aria-label="Cerrar diálogo"
+    (click)="closeCalcMarkerDialog()"
+  ></button>
+  <div
+    class="unlock-dialog calc-marker-dialog"
+    *ngIf="calcMarkerOpen"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Marcar cambio de cálculo"
+  >
+    <p class="eyebrow">Historial · corte de cálculo</p>
+    <h2>Nueva barra de cálculo</h2>
+    <p class="muted">
+      Las señales nuevas quedarán <strong>encima</strong> de esta barra.
+      Debajo quedan las corridas con el cálculo anterior.
+    </p>
+    <label class="annotate-label">
+      Título
+      <input
+        type="text"
+        class="hist-input"
+        maxlength="200"
+        [value]="calcMarkerTitle"
+        [disabled]="calcMarkerBusy"
+        placeholder="Ej. Cálculo v3 — SL estructural"
+        (input)="calcMarkerTitle = $any($event.target).value"
+      />
+    </label>
+    <label class="annotate-label">
+      Comentario (qué cambió)
+      <textarea
+        class="hist-input hist-textarea"
+        rows="4"
+        maxlength="4000"
+        [value]="calcMarkerComment"
+        [disabled]="calcMarkerBusy"
+        placeholder="Describe el cambio de Entry/SL/TP, probabilidad, tasa…"
+        (input)="calcMarkerComment = $any($event.target).value"
+      ></textarea>
+    </label>
+    <p class="msg err" *ngIf="calcMarkerError">{{ calcMarkerError }}</p>
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="closeCalcMarkerDialog()" [disabled]="calcMarkerBusy">Cancelar</button>
+      <button type="button" class="ghost" (click)="submitCalcMarker()" [disabled]="calcMarkerBusy">
+        {{ calcMarkerBusy ? 'Guardando…' : 'Añadir barra' }}
+      </button>
+    </div>
   </div>
 
   <!-- Modo lock: contraseña para borrar -->

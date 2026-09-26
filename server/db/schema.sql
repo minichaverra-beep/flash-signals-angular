@@ -65,3 +65,15 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   id TEXT PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
+
+-- Barras de cambio de cálculo (corte en el grid del historial)
+CREATE TABLE IF NOT EXISTS calc_change_markers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL,
+  title TEXT NOT NULL,
+  comment TEXT,
+  market TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_calc_change_markers_created
+  ON calc_change_markers (created_at DESC);

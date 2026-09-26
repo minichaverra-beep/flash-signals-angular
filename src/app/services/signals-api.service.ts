@@ -279,6 +279,66 @@ export class SignalsApiService {
     }>(`${this.base}/history/confluencias`, body);
   }
 
+  historyCalcMarkersList(market?: Market | ''): Observable<{ markers: CalcChangeMarker[] }> {
+    const params: Record<string, string> = {};
+    if (market) params['market'] = market;
+    return this.http.get<{ markers: CalcChangeMarker[] }>(
+      `${this.base}/history/calc-markers`,
+      { params }
+    );
+  }
+
+  historyCalcMarkerCreate(body: {
+    title: string;
+    comment?: string | null;
+    market?: Market | '' | null;
+  }): Observable<{ ok: boolean; marker: CalcChangeMarker }> {
+    return this.http.post<{ ok: boolean; marker: CalcChangeMarker }>(
+      `${this.base}/history/calc-markers`,
+      body
+    );
+  }
+
+  historyCalcMarkerPatch(
+    id: number,
+    body: { title?: string; comment?: string | null; market?: string | null }
+  ): Observable<{ ok: boolean; marker: CalcChangeMarker }> {
+    return this.http.patch<{ ok: boolean; marker: CalcChangeMarker }>(
+      `${this.base}/history/calc-markers/${id}`,
+      body
+    );
+  }
+
+  historyCalcMarkerDelete(id: number): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(
+      `${this.base}/history/calc-markers/${id}`
+    );
+  }
+
+  /** Recalcula Probabilidad de éxito de todo el historial (v2 acuerdo + ubicación). */
+  historyRecalcProbabilidad(opts: {
+    force?: boolean;
+    market?: Market | '' | null;
+  } = {}): Observable<{
+    ok: boolean;
+    version: string;
+    total: number;
+    updated: number;
+    unchanged: number;
+    skipped: number;
+    samples?: Array<{
+      id: number;
+      before: number;
+      after: number;
+      winrate?: string | null;
+    }>;
+  }> {
+    return this.http.post(`${this.base}/history/recalc-probabilidad`, {
+      force: Boolean(opts.force),
+      market: opts.market || null,
+    });
+  }
+
   /** URL de la captura del resultado (cache-bust con updatedAt opcional). */
   historyResultImageUrl(id: number, bust?: number | string): string {
     const q = bust != null ? `?v=${encodeURIComponent(String(bust))}` : '';
@@ -418,10 +478,21 @@ export interface HistoryTag {
 
 export interface HistoryListResponse {
   items: HistoryListItem[];
+  /** Barras de cambio de cálculo (corte viejo vs nuevo en el grid). */
+  calcMarkers?: CalcChangeMarker[];
   page: number;
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/** Marcador horizontal: señales encima = cálculo nuevo; debajo = anterior. */
+export interface CalcChangeMarker {
+  id: number;
+  createdAt: string;
+  title: string;
+  comment?: string | null;
+  market?: string | null;
 }
 
 export interface HistoryDetail extends HistoryListItem {

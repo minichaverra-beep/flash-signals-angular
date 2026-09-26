@@ -1217,6 +1217,113 @@ app.post('/api/history/confluencias', async (req, res) => {
   }
 });
 
+/** Barras de cambio de cálculo (corte en el grid). Antes de /:id. */
+app.get('/api/history/calc-markers', async (req, res) => {
+  try {
+    const marketQuery = req.query.market;
+    const marketRaw =
+      typeof marketQuery === 'string' ? marketQuery.toLowerCase() : null;
+    let market = null;
+    if (marketRaw) {
+      if (!MARKETS.has(marketRaw)) {
+        return res.status(400).json({ error: MARKET_ERROR });
+      }
+      market = marketRaw;
+    }
+    const markers = await historyStore.listCalcMarkers({ market });
+    res.json({ markers });
+  } catch (err) {
+    console.error('[history] calc-markers list:', err);
+    res.status(500).json({ error: 'No se pudieron leer los marcadores' });
+  }
+});
+
+app.post('/api/history/calc-markers', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const result = await historyStore.createCalcMarker({
+      title: body.title,
+      comment: body.comment,
+      market: body.market,
+      createdAt: body.createdAt ?? body.created_at,
+    });
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error || 'No se pudo crear' });
+    }
+    res.status(201).json({ ok: true, marker: result.marker });
+  } catch (err) {
+    console.error('[history] calc-markers create:', err);
+    res.status(500).json({ error: 'No se pudo crear el marcador' });
+  }
+});
+
+app.patch('/api/history/calc-markers/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const result = await historyStore.updateCalcMarker(id, {
+      title: body.title,
+      comment: body.comment,
+      market: body.market,
+    });
+    if (!result.ok) {
+      const code = /no encontrado/i.test(result.error || '') ? 404 : 400;
+      return res.status(code).json({ error: result.error || 'No se pudo actualizar' });
+    }
+    res.json({ ok: true, marker: result.marker });
+  } catch (err) {
+    console.error('[history] calc-markers patch:', err);
+    res.status(500).json({ error: 'No se pudo actualizar el marcador' });
+  }
+});
+
+app.delete('/api/history/calc-markers/:id', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const result = await historyStore.deleteCalcMarker(id);
+    if (!result.deleted) {
+      return res.status(404).json({ error: 'Marcador no encontrado' });
+    }
+    res.json({ ok: true, deleted: result.deleted });
+  } catch (err) {
+    console.error('[history] calc-markers delete:', err);
+    res.status(500).json({ error: 'No se pudo borrar el marcador' });
+  }
+});
+
+/** Recalcula Probabilidad de éxito de todo el historial (blend acuerdo + ubicación). */
+app.post('/api/history/recalc-probabilidad', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  try {
+    const marketQuery = body.market ?? req.query.market;
+    const marketRaw =
+      typeof marketQuery === 'string' && marketQuery.trim()
+        ? marketQuery.toLowerCase()
+        : null;
+    let market = null;
+    if (marketRaw) {
+      if (!MARKETS.has(marketRaw)) {
+        return res.status(400).json({ error: MARKET_ERROR });
+      }
+      market = marketRaw;
+    }
+    const result = await historyStore.recalcAllProbabilidad({
+      force: Boolean(body.force),
+      market,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[history] recalc-probabilidad:', err);
+    res.status(500).json({ error: 'No se pudo recalcular la probabilidad' });
+  }
+});
+
 app.get('/api/history/:id', async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {

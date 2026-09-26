@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import {
+  CalcChangeMarker,
   HistoryDetail,
   HistoryListItem,
   HistoryResultado,
@@ -20,6 +21,10 @@ import {
   formatPnlMoneyInput,
   type HistoryMetrics,
 } from './historial-metrics';
+import {
+  mergeCalcMarkersIntoRows,
+  type HistDisplayRow,
+} from './historial-calc-markers';
 
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -39,6 +44,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   private removeDocClickClose?: () => void;
 
   items: HistoryListItem[] = [];
+  calcMarkers: CalcChangeMarker[] = [];
+  displayRows: HistDisplayRow<HistoryListItem>[] = [];
   page = 1;
   pageSize = 20;
   total = 0;
@@ -55,6 +62,17 @@ export class HistorialComponent implements OnInit, OnDestroy {
   imageBust = new Map<number, number>();
   saveHint = '';
   dropActive = false;
+
+  /** Diálogo: nueva barra de cambio de cálculo */
+  calcMarkerOpen = false;
+  calcMarkerTitle = '';
+  calcMarkerComment = '';
+  calcMarkerBusy = false;
+  calcMarkerError = '';
+  /** Edición inline de comentario de marcador */
+  editingMarkerId: number | null = null;
+  editingMarkerComment = '';
+  recalcBusy = false;
 
   detail: HistoryDetail | null = null;
   detailLoading = false;
@@ -168,9 +186,11 @@ export class HistorialComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           this.items = res.items;
+          this.calcMarkers = res.calcMarkers ?? [];
           this.total = res.total;
           this.totalPages = res.totalPages;
           this.page = res.page;
+          this.rebuildDisplayRows();
           this.loading = false;
           this.loadMetricsDataset();
         },
@@ -912,6 +932,142 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   chartUrlFor(d: HistoryDetail): string | null {
     return this.detailImageUrl(d);
+  }
+
+  private rebuildDisplayRows(): void {
+    this.displayRows = mergeCalcMarkersIntoRows(this.items, this.calcMarkers, {
+      isLastPage: this.page >= this.totalPages,
+    });
+  }
+
+  trackByRow(_index: number, row: HistDisplayRow<HistoryListItem>): string {
+    return row.key;
+  }
+
+  /** Alias para *ngIf="asItem(row) as item" en el template. */
+  asItem(row: HistDisplayRow<HistoryListItem>): HistoryListItem | null {
+    return row.kind === 'signal' ? row.item : null;
+  }
+
+  openCalcMarkerDialog(): void {
+    this.calcMarkerOpen = true;
+    this.calcMarkerTitle = '';
+    this.calcMarkerComment = '';
+    this.calcMarkerError = '';
+  }
+
+  closeCalcMarkerDialog(): void {
+    if (this.calcMarkerBusy) return;
+    this.calcMarkerOpen = false;
+    this.calcMarkerError = '';
+  }
+
+  submitCalcMarker(): void {
+    const title = this.calcMarkerTitle.trim();
+    if (!title) {
+      this.calcMarkerError = 'Escribe un título del cambio';
+      return;
+    }
+    this.calcMarkerBusy = true;
+    this.calcMarkerError = '';
+    this.api
+      .historyCalcMarkerCreate({
+        title,
+        comment: this.calcMarkerComment.trim() || null,
+        market: this.marketFilter || null,
+      })
+      .subscribe({
+        next: (res) => {
+          this.calcMarkerBusy = false;
+          this.calcMarkerOpen = false;
+          if (res.marker) {
+            this.calcMarkers = [res.marker, ...this.calcMarkers];
+            this.rebuildDisplayRows();
+          }
+          this.saveHint = 'Barra de cálculo añadida — señales nuevas quedarán encima';
+        },
+        error: (err: unknown) => {
+          this.calcMarkerBusy = false;
+          this.calcMarkerError = this.errMsg(err, 'No se pudo crear la barra');
+        },
+      });
+  }
+
+  startEditMarker(marker: CalcChangeMarker, ev?: Event): void {
+    ev?.stopPropagation();
+    this.editingMarkerId = marker.id;
+    this.editingMarkerComment = marker.comment || '';
+  }
+
+  cancelEditMarker(): void {
+    this.editingMarkerId = null;
+    this.editingMarkerComment = '';
+  }
+
+  saveMarkerComment(marker: CalcChangeMarker): void {
+    const comment = this.editingMarkerComment.trim() || null;
+    this.api.historyCalcMarkerPatch(marker.id, { comment }).subscribe({
+      next: (res) => {
+        const updated = res.marker;
+        this.calcMarkers = this.calcMarkers.map((m) =>
+          m.id === updated.id ? updated : m
+        );
+        this.rebuildDisplayRows();
+        this.editingMarkerId = null;
+        this.saveHint = 'Comentario de barra guardado';
+      },
+      error: (err: unknown) => {
+        this.error = this.errMsg(err, 'No se pudo guardar el comentario');
+      },
+    });
+  }
+
+  deleteCalcMarker(marker: CalcChangeMarker, ev?: Event): void {
+    ev?.stopPropagation();
+    if (!confirm(`¿Borrar la barra «${marker.title}»?`)) return;
+    this.api.historyCalcMarkerDelete(marker.id).subscribe({
+      next: () => {
+        this.calcMarkers = this.calcMarkers.filter((m) => m.id !== marker.id);
+        this.rebuildDisplayRows();
+        this.saveHint = 'Barra de cálculo borrada';
+      },
+      error: (err: unknown) => {
+        this.error = this.errMsg(err, 'No se pudo borrar la barra');
+      },
+    });
+  }
+
+  /** Aplica v2 (acuerdo + ubicación) a la columna Probabilidad de todo el historial. */
+  recalcAllProbabilidad(): void {
+    if (this.recalcBusy) return;
+    const ok = confirm(
+      '¿Recalcular la columna Probabilidad de TODO el historial?\n\n' +
+        'Aplica: blend Acuerdo entre capas (62/38) + penalización Break en PREMIUM.\n' +
+        'También actualiza Tasa de acierto cuando hay datos.\n' +
+        'Es idempotente (no duplica el ajuste).'
+    );
+    if (!ok) return;
+    this.recalcBusy = true;
+    this.error = '';
+    this.api
+      .historyRecalcProbabilidad({
+        force: false,
+        market: this.marketFilter || null,
+      })
+      .subscribe({
+        next: (res) => {
+          this.recalcBusy = false;
+          this.saveHint =
+            `Probabilidad actualizada: ${res.updated} filas` +
+            (res.unchanged ? ` · ${res.unchanged} ya al día` : '') +
+            (res.skipped ? ` · ${res.skipped} sin score` : '');
+          this.load(this.page);
+        },
+        error: (err: unknown) => {
+          this.recalcBusy = false;
+          this.error = this.errMsg(err, 'No se pudo recalcular la probabilidad');
+        },
+      });
   }
 
   trackById(_index: number, item: HistoryListItem): number {

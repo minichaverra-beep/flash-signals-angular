@@ -190,6 +190,99 @@ button:disabled {
   min-height: 4.25rem;
 }
 
+.hist-table tbody tr.calc-change-row {
+  min-height: 0;
+}
+
+.hist-table tbody tr.calc-change-row td {
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
+}
+
+.calc-change-bar,
+.calc-change-card {
+  margin: 0.35rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.55rem;
+  border: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--fire) 18%, transparent),
+      color-mix(in srgb, var(--charcoal) 80%, black)
+    );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+.calc-change-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+}
+
+.calc-change-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gold) 90%, white);
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  background: color-mix(in srgb, var(--fire) 22%, transparent);
+}
+
+.calc-change-title {
+  color: color-mix(in srgb, var(--gold) 70%, white);
+  font-size: 0.95rem;
+}
+
+.calc-change-hint {
+  margin: 0.35rem 0 0.45rem;
+}
+
+.calc-change-pre {
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.7rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, #e8e4dc 85%, transparent);
+  background: color-mix(in srgb, black 35%, transparent);
+  border-radius: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 15%, transparent);
+}
+
+.calc-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.calc-change-edit {
+  margin-top: 0.5rem;
+}
+
+.calc-change-card {
+  margin-bottom: 0.75rem;
+}
+
+.pill.market.sm {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.calc-marker-dialog .annotate-label {
+  display: block;
+  margin-top: 0.75rem;
+}
+
 .hist-table thead th {
   background: color-mix(in srgb, var(--charcoal) 70%, black);
   color: color-mix(in srgb, var(--gold) 75%, white);

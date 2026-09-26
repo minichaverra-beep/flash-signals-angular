@@ -289,6 +289,46 @@ function applyHistoryMigrations(e) {
       ['008_history_confluencias', now]
     );
   }
+
+  // 009: barras horizontales de cambio de cálculo (corte viejo vs nuevo en el grid).
+  const has009 = e.get(
+    `SELECT id FROM schema_migrations WHERE id = ?`,
+    ['009_calc_change_markers']
+  );
+  if (!has009) {
+    e.run(`
+      CREATE TABLE IF NOT EXISTS calc_change_markers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        title TEXT NOT NULL,
+        comment TEXT,
+        market TEXT
+      )
+    `);
+    e.run(`
+      CREATE INDEX IF NOT EXISTS idx_calc_change_markers_created
+        ON calc_change_markers (created_at DESC)
+    `);
+    // Seed: cambios de esta sesión (Entry/SL/TP + acuerdo→prob + tasa realista)
+    e.run(
+      `INSERT INTO calc_change_markers (created_at, title, comment, market)
+       VALUES (?, ?, ?, NULL)`,
+      [
+        now,
+        'Cálculo v2 — Entry/SL/TP + acuerdo + tasa',
+        [
+          '• Entry/SL/TP: LONG no ancla SL a resistencia; daytrader ≤60 pips del spot.',
+          '• Probabilidad de éxito: blend 62/38 con Acuerdo entre capas; Break en PREMIUM ×0.72.',
+          '• Tasa de acierto: ya no ~82% fijo; curva por % reglas + ubicación + acuerdo (techo 74%).',
+          'Señales ENCIMA de esta barra usan el cálculo nuevo. Debajo = histórico anterior.',
+        ].join('\n'),
+      ]
+    );
+    e.run(
+      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+      ['009_calc_change_markers', now]
+    );
+  }
   seedDefaultHistoryTags(e, now);
   seedDefaultHistoryConfluencias(e, now);
 }
@@ -926,8 +966,15 @@ async function listHistory(opts = {}) {
     item.tags = tagMap.get(item.id) || [];
     item.confluencias = confMap.get(item.id) || [];
   }
+  let calcMarkers = [];
+  try {
+    calcMarkers = await listCalcMarkers({ market });
+  } catch {
+    calcMarkers = [];
+  }
   return {
     items,
+    calcMarkers,
     page,
     pageSize,
     total: count,
@@ -1186,6 +1233,220 @@ async function clearAll() {
   return { deleted: Number(info.changes || 0) };
 }
 
+function rowToCalcMarker(row) {
+  if (!row) return null;
+  return {
+    id: Number(row.id),
+    createdAt: row.created_at,
+    title: row.title || '',
+    comment: row.comment != null ? String(row.comment) : null,
+    market: row.market || null,
+  };
+}
+
+async function listCalcMarkers(opts = {}) {
+  const e = await getEngine();
+  const market = opts.market ? String(opts.market).toLowerCase() : null;
+  let rows;
+  if (market && ['btc', 'us30', 'xauusd'].includes(market)) {
+    rows = e.all(
+      `SELECT id, created_at, title, comment, market
+       FROM calc_change_markers
+       WHERE market IS NULL OR lower(market) = ?
+       ORDER BY created_at DESC, id DESC`,
+      [market]
+    );
+  } else {
+    rows = e.all(
+      `SELECT id, created_at, title, comment, market
+       FROM calc_change_markers
+       ORDER BY created_at DESC, id DESC`
+    );
+  }
+  return (rows || []).map(rowToCalcMarker);
+}
+
+async function createCalcMarker({ title, comment, market, createdAt } = {}) {
+  const e = await getEngine();
+  const t = String(title || '').trim();
+  if (!t) {
+    return { ok: false, error: 'title requerido' };
+  }
+  if (t.length > 200) {
+    return { ok: false, error: 'title máx. 200 caracteres' };
+  }
+  const c =
+    comment == null || String(comment).trim() === ''
+      ? null
+      : String(comment).trim().slice(0, 4000);
+  let m = null;
+  if (market != null && String(market).trim() !== '') {
+    m = String(market).trim().toLowerCase();
+    if (!['btc', 'us30', 'xauusd'].includes(m)) {
+      return { ok: false, error: 'market inválido (btc|us30|xauusd|null)' };
+    }
+  }
+  const at =
+    createdAt && String(createdAt).trim()
+      ? String(createdAt).trim()
+      : new Date().toISOString();
+  const info = e.run(
+    `INSERT INTO calc_change_markers (created_at, title, comment, market)
+     VALUES (?, ?, ?, ?)`,
+    [at, t, c, m]
+  );
+  const id = Number(info.lastInsertRowid || 0);
+  const row = e.get(
+    `SELECT id, created_at, title, comment, market FROM calc_change_markers WHERE id = ?`,
+    [id]
+  );
+  return { ok: true, marker: rowToCalcMarker(row) };
+}
+
+async function updateCalcMarker(id, patch = {}) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isFinite(n) || n <= 0) {
+    return { ok: false, error: 'id inválido' };
+  }
+  const existing = e.get(`SELECT id FROM calc_change_markers WHERE id = ?`, [n]);
+  if (!existing) {
+    return { ok: false, error: 'marcador no encontrado' };
+  }
+  const sets = [];
+  const params = [];
+  if (Object.prototype.hasOwnProperty.call(patch, 'title')) {
+    const t = String(patch.title || '').trim();
+    if (!t) return { ok: false, error: 'title vacío' };
+    sets.push('title = ?');
+    params.push(t.slice(0, 200));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'comment')) {
+    const c =
+      patch.comment == null || String(patch.comment).trim() === ''
+        ? null
+        : String(patch.comment).trim().slice(0, 4000);
+    sets.push('comment = ?');
+    params.push(c);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'market')) {
+    let m = null;
+    if (patch.market != null && String(patch.market).trim() !== '') {
+      m = String(patch.market).trim().toLowerCase();
+      if (!['btc', 'us30', 'xauusd'].includes(m)) {
+        return { ok: false, error: 'market inválido' };
+      }
+    }
+    sets.push('market = ?');
+    params.push(m);
+  }
+  if (!sets.length) {
+    const row = e.get(
+      `SELECT id, created_at, title, comment, market FROM calc_change_markers WHERE id = ?`,
+      [n]
+    );
+    return { ok: true, marker: rowToCalcMarker(row) };
+  }
+  params.push(n);
+  e.run(`UPDATE calc_change_markers SET ${sets.join(', ')} WHERE id = ?`, params);
+  const row = e.get(
+    `SELECT id, created_at, title, comment, market FROM calc_change_markers WHERE id = ?`,
+    [n]
+  );
+  return { ok: true, marker: rowToCalcMarker(row) };
+}
+
+async function deleteCalcMarker(id) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isFinite(n) || n <= 0) {
+    return { ok: false, deleted: 0, error: 'id inválido' };
+  }
+  const info = e.run(`DELETE FROM calc_change_markers WHERE id = ?`, [n]);
+  return { ok: true, deleted: Number(info.changes || 0) };
+}
+
+/**
+ * Recalcula Probabilidad (score_combined + summary) de todo el historial
+ * con blend acuerdo + penalización ubicación (v2).
+ * @param {{ force?: boolean, market?: string|null }} opts
+ */
+async function recalcAllProbabilidad(opts = {}) {
+  const { recalcSummaryProbabilidad, RECALC_VERSION } = require('./recalc-probabilidad');
+  const e = await getEngine();
+  const force = Boolean(opts.force);
+  const market =
+    opts.market && ['btc', 'us30', 'xauusd'].includes(String(opts.market).toLowerCase())
+      ? String(opts.market).toLowerCase()
+      : null;
+
+  const rows = market
+    ? e.all(
+        `SELECT id, flags_json, summary_json, preview, score_combined
+         FROM signal_history WHERE market = ? ORDER BY id ASC`,
+        [market]
+      )
+    : e.all(
+        `SELECT id, flags_json, summary_json, preview, score_combined
+         FROM signal_history ORDER BY id ASC`
+      );
+
+  let updated = 0;
+  let skipped = 0;
+  let unchanged = 0;
+  const samples = [];
+
+  for (const row of rows || []) {
+    const summary = parseJson(row.summary_json, null);
+    if (!summary || typeof summary !== 'object') {
+      skipped += 1;
+      continue;
+    }
+    // Prefer column if summary missing score
+    if (summary.scoreCombined == null && row.score_combined != null) {
+      summary.scoreCombined = Number(row.score_combined);
+    }
+    const flags = parseJson(row.flags_json, {});
+    const out = recalcSummaryProbabilidad(summary, {
+      preview: row.preview || null,
+      flags,
+      force,
+    });
+    if (out.scoreCombined == null) {
+      skipped += 1;
+      continue;
+    }
+    if (!out.changed && out.summary.scoreRecalcVersion === RECALC_VERSION && !force) {
+      unchanged += 1;
+      continue;
+    }
+    e.run(
+      `UPDATE signal_history SET score_combined = ?, summary_json = ? WHERE id = ?`,
+      [out.scoreCombined, JSON.stringify(out.summary), Number(row.id)]
+    );
+    updated += 1;
+    if (samples.length < 8) {
+      samples.push({
+        id: Number(row.id),
+        before: out.summary.scoreCombinedBeforeRecalc,
+        after: out.scoreCombined,
+        meta: out.summary.scoreRecalcMeta || null,
+        winrate: out.summary.winrate || null,
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    version: RECALC_VERSION,
+    total: (rows || []).length,
+    updated,
+    unchanged,
+    skipped,
+    samples,
+  };
+}
+
 async function init() {
   await getEngine();
   ensureAttachmentsDir();
@@ -1202,6 +1463,11 @@ module.exports = {
   createTag,
   listConfluencias,
   createConfluencia,
+  listCalcMarkers,
+  createCalcMarker,
+  updateCalcMarker,
+  deleteCalcMarker,
+  recalcAllProbabilidad,
   saveResultImage,
   deleteResultImage,
   getResultImageFile,
