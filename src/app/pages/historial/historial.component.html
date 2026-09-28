@@ -75,16 +75,100 @@
     <div class="meta-row">
       <p class="muted">{{ total }} entrada{{ total === 1 ? '' : 's' }} · página {{ page }} / {{ totalPages }}</p>
       <p class="muted tiny save-hint" *ngIf="saveHint">{{ saveHint }}</p>
+      <label class="compact-toggle" title="Resumido: vista tipo historial MT5, solo lo esencial">
+        <input
+          type="checkbox"
+          role="switch"
+          [checked]="compactMode"
+          [attr.aria-checked]="compactMode"
+          (change)="setCompactMode($any($event.target).checked)"
+        />
+        <span class="compact-toggle-track" aria-hidden="true"><span class="compact-toggle-thumb"></span></span>
+        <span class="compact-toggle-label">Resumido</span>
+      </label>
     </div>
 
-    <div class="table-wrap desktop">
+    <div class="table-wrap compact-wrap" *ngIf="compactMode">
+      <table class="mt5-table">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Ticket</th>
+            <th>Símbolo</th>
+            <th>Tipo</th>
+            <th class="num">Precio</th>
+            <th class="num">S / L</th>
+            <th class="num">T / P</th>
+            <th class="num">R:R</th>
+            <th class="num">Prob.</th>
+            <th>Resultado</th>
+            <th class="num">Beneficio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
+            <tr *ngIf="row.kind === 'calc_marker'" class="mt5-marker">
+              <td colspan="11">
+                <span class="calc-change-badge">Cambio de cálculo</span>
+                {{ row.marker.title }}
+                <span class="muted tiny">· {{ absoluteTime(row.marker.createdAt) }}</span>
+              </td>
+            </tr>
+            <ng-container *ngIf="asItem(row) as item">
+              <tr
+                *ngIf="summaryFor(item) as s"
+                class="mt5-row"
+                [class.row-no-tomada]="isNoTomada(item)"
+                tabindex="0"
+                title="Ver detalle"
+                (click)="openDetail(item)"
+                (keydown.enter)="openDetail(item)"
+              >
+                <td class="mono">{{ item.createdAt | date: 'yyyy.MM.dd HH:mm' }}</td>
+                <td class="mono muted">#{{ item.id }}</td>
+                <td><strong>{{ item.market | uppercase }}</strong></td>
+                <td><span class="mt5-type" [attr.data-type]="s.type">{{ s.typeLabel }}</span></td>
+                <td class="num mono">{{ s.price }}</td>
+                <td class="num mono mt5-sl">{{ s.sl }}</td>
+                <td class="num mono mt5-tp">{{ s.tp }}</td>
+                <td class="num mono">{{ s.rr }}</td>
+                <td class="num mono">{{ item.scoreCombined != null ? (item.scoreCombined | number: '1.0-0') + '%' : '—' }}</td>
+                <td><span class="mt5-res" [ngClass]="resultadoClass(item.resultado)">{{ s.resultLabel }}</span></td>
+                <td class="num mono mt5-profit" [attr.data-tone]="s.profitTone">{{ s.profit }}</td>
+              </tr>
+            </ng-container>
+          </ng-container>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="9" class="mt5-foot-stats">
+              Ganadas <strong>{{ pageTotals.ganadas }}</strong> ·
+              Perdidas <strong>{{ pageTotals.perdidas }}</strong> ·
+              No tomadas <strong>{{ pageTotals.noTomadas }}</strong> ·
+              Pendientes <strong>{{ pageTotals.pendientes }}</strong>
+            </td>
+            <td class="mt5-foot-label">Beneficio (página)</td>
+            <td class="num mono mt5-profit" [attr.data-tone]="pageTotals.profitTone">{{ pageTotals.profit }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="table-wrap desktop" *ngIf="!compactMode">
       <table class="hist-table">
         <thead>
           <tr>
             <th>Fecha</th>
             <th>Mercado</th>
             <th>Sesgo</th>
-            <th>Tasa de acierto</th>
+            <th>
+              <button
+                type="button"
+                class="th-tip has-tip"
+                [attr.data-tooltip]="hitRateColumnTip"
+                [attr.aria-label]="hitRateColumnTip"
+              >Tasa de acierto <span class="th-tip-icon" aria-hidden="true">?</span></button>
+            </th>
             <th>Probabilidad</th>
             <th>Estado</th>
             <th>Comentarios</th>
@@ -138,9 +222,10 @@
               </td>
             </tr>
             <ng-container *ngIf="asItem(row) as item">
-            <tr [attr.data-id]="item.id">
+            <tr [attr.data-id]="item.id" [class.row-no-tomada]="isNoTomada(item)">
             <td>
               <div class="when">
+                <span class="no-tomada-badge" *ngIf="isNoTomada(item)">No tomada</span>
                 <strong>{{ relativeTime(item.createdAt) }}</strong>
                 <span class="muted tiny">{{ absoluteTime(item.createdAt) }}</span>
               </div>
@@ -414,7 +499,7 @@
       </table>
     </div>
 
-    <div class="cards mobile">
+    <div class="cards mobile" *ngIf="!compactMode">
       <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
         <article *ngIf="row.kind === 'calc_marker'" class="calc-change-card">
           <span class="calc-change-badge">Cambio de cálculo</span>
@@ -427,9 +512,11 @@
             <button type="button" class="ghost sm danger-text" (click)="deleteCalcMarker(row.marker, $event)">Borrar</button>
           </div>
           <div class="calc-change-edit" *ngIf="editingMarkerId === row.marker.id">
+            <label class="annotate-label" [attr.for]="'calc-marker-edit-m-' + row.marker.id">Comentario del cambio</label>
             <textarea
               class="hist-input hist-textarea"
               rows="3"
+              [attr.id]="'calc-marker-edit-m-' + row.marker.id"
               [value]="editingMarkerComment"
               maxlength="4000"
               (input)="editingMarkerComment = $any($event.target).value"
@@ -438,10 +525,11 @@
             <button type="button" class="ghost sm" (click)="cancelEditMarker()">Cancelar</button>
           </div>
         </article>
-        <article class="hist-card" *ngIf="asItem(row) as item">
+        <article class="hist-card" *ngIf="asItem(row) as item" [class.row-no-tomada]="isNoTomada(item)">
         <header>
           <span class="pill market">{{ item.market | uppercase }}</span>
           <span class="header-badges">
+            <span class="no-tomada-badge" *ngIf="isNoTomada(item)">No tomada</span>
             <span class="badge" [ngClass]="biasClass(itemBias(item))">{{ biasText(itemBias(item)) }}</span>
           </span>
         </header>
@@ -677,10 +765,23 @@
       </ng-container>
     </div>
 
-    <div class="pager" *ngIf="totalPages > 1">
-      <button type="button" class="ghost" [disabled]="page <= 1 || loading" (click)="load(page - 1)">Anterior</button>
-      <button type="button" class="ghost" [disabled]="page >= totalPages || loading" (click)="load(page + 1)">Siguiente</button>
-    </div>
+    <nav class="pager" *ngIf="totalPages > 1" aria-label="Paginación del historial">
+      <button type="button" class="ghost sm" [disabled]="page <= 1 || loading" (click)="load(page - 1)">Anterior</button>
+      <ng-container *ngFor="let p of pageNumbers()">
+        <span class="pager-gap muted" *ngIf="p === null">…</span>
+        <button
+          *ngIf="p !== null"
+          type="button"
+          class="ghost sm pager-num"
+          [class.active]="p === page"
+          [attr.aria-current]="p === page ? 'page' : null"
+          [disabled]="loading || p === page"
+          (click)="load(p)"
+        >{{ p }}</button>
+      </ng-container>
+      <button type="button" class="ghost sm" [disabled]="page >= totalPages || loading" (click)="load(page + 1)">Siguiente</button>
+      <span class="muted tiny pager-info">{{ pageSize }} por página</span>
+    </nav>
   </section>
 
   <!-- Métricas derivadas del historial filtrado -->
@@ -1079,10 +1180,10 @@
     aria-label="Cerrar diálogo"
     (click)="closeCalcMarkerDialog()"
   ></button>
-  <div
+  <dialog
+    open
     class="unlock-dialog calc-marker-dialog"
     *ngIf="calcMarkerOpen"
-    role="dialog"
     aria-modal="true"
     aria-label="Marcar cambio de cálculo"
   >
@@ -1123,7 +1224,7 @@
         {{ calcMarkerBusy ? 'Guardando…' : 'Añadir barra' }}
       </button>
     </div>
-  </div>
+  </dialog>
 
   <!-- Modo lock: contraseña para borrar -->
   <button
@@ -1133,10 +1234,10 @@
     aria-label="Cancelar desbloqueo"
     (click)="cancelUnlock()"
   ></button>
-  <div
+  <dialog
+    open
     class="unlock-dialog"
     *ngIf="unlockOpen"
-    role="dialog"
     aria-modal="true"
     aria-label="Contraseña de bloqueo"
   >
@@ -1163,5 +1264,5 @@
         {{ unlockBusy ? 'Comprobando…' : (unlockKind === 'clear' ? 'Limpiar' : 'Borrar') }}
       </button>
     </div>
-  </div>
+  </dialog>
 </div>

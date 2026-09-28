@@ -159,7 +159,174 @@ button:disabled {
 }
 
 .meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
   margin-bottom: 0.75rem;
+}
+
+/* Toggle «Resumido» */
+.compact-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.82rem;
+}
+
+.compact-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.compact-toggle-track {
+  position: relative;
+  width: 2.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-deep) 90%, black);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.compact-toggle-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transform: translateY(-50%);
+  transition: left 0.15s ease, background 0.15s ease;
+}
+
+.compact-toggle input:checked + .compact-toggle-track {
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+}
+
+.compact-toggle input:checked + .compact-toggle-track .compact-toggle-thumb {
+  left: calc(100% - 1rem);
+  background: var(--gold);
+}
+
+.compact-toggle input:focus-visible + .compact-toggle-track {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Tabla resumida estilo historial MT5 */
+.mt5-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mt5-table th,
+.mt5-table td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.mt5-table th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: color-mix(in srgb, var(--panel-deep) 92%, black);
+}
+
+.mt5-table .num {
+  text-align: right;
+}
+
+.mt5-table .mono {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.mt5-row {
+  cursor: pointer;
+}
+
+.mt5-row:nth-child(even) > td {
+  background: color-mix(in srgb, var(--panel-deep) 40%, transparent);
+}
+
+.mt5-row:hover > td,
+.mt5-row:focus-visible > td {
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  opacity: 1;
+}
+
+.mt5-row:focus-visible {
+  outline: 1px solid var(--gold);
+}
+
+.mt5-type {
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.mt5-type[data-type='buy'] {
+  color: #4c9aff;
+}
+
+.mt5-type[data-type='sell'] {
+  color: var(--fire);
+}
+
+.mt5-sl {
+  color: color-mix(in srgb, var(--fire) 75%, var(--text));
+}
+
+.mt5-tp {
+  color: color-mix(in srgb, var(--ok) 75%, var(--text));
+}
+
+.mt5-res.res-win { color: var(--ok); }
+.mt5-res.res-lose { color: var(--fire); }
+.mt5-res.res-skip,
+.mt5-res.res-empty { color: var(--muted); }
+
+.mt5-profit {
+  font-weight: 600;
+}
+
+.mt5-profit[data-tone='pos'] { color: var(--ok); }
+.mt5-profit[data-tone='neg'] { color: var(--fire); }
+.mt5-profit[data-tone='zero'],
+.mt5-profit[data-tone='empty'] { color: var(--muted); }
+
+.mt5-marker > td {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+  border-top: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
+  border-bottom: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+
+.mt5-table tfoot td {
+  border-bottom: 0;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-deep) 92%, black);
+}
+
+.mt5-foot-stats {
+  color: var(--muted);
+}
+
+.mt5-foot-label {
+  text-align: right;
+  color: var(--muted);
 }
 
 .table-wrap {
@@ -248,7 +415,7 @@ button:disabled {
   margin: 0.35rem 0;
   padding: 0.55rem 0.7rem;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: inherit;
   font-size: 0.82rem;
   line-height: 1.4;
@@ -638,7 +805,7 @@ textarea.hist-textarea-compact {
   color: color-mix(in srgb, var(--muted) 88%, white);
   font-size: 0.7rem;
   line-height: 1.3;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hit-factor[data-kind='pd'] {
@@ -753,7 +920,7 @@ textarea.hist-textarea-compact {
   font-size: 0.82rem;
   line-height: 1.35;
   color: var(--text);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hit-rate[data-tone='ok'] {
@@ -789,7 +956,7 @@ textarea.hist-textarea-compact {
   font-size: 0.82rem;
   line-height: 1.35;
   color: var(--text);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hit-rate-row[data-tone='ok'] .hit-rate-value,
@@ -826,8 +993,99 @@ textarea.hist-textarea-compact {
 
 .pager {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
   margin-top: 1rem;
+}
+
+.pager-num {
+  min-width: 2.1rem;
+  justify-content: center;
+}
+
+.pager-num.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.pager-gap {
+  padding: 0 0.2rem;
+}
+
+.pager-info {
+  margin-left: 0.4rem;
+}
+
+/* Cabecera con tooltip: abre hacia abajo para no cortarse arriba */
+.th-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
+.th-tip::after {
+  top: calc(100% + 0.45rem);
+  bottom: auto;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.th-tip-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  color: var(--gold);
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+/* Fila «No tomada»: atenuada pero 100% editable */
+tr.row-no-tomada > td,
+.hist-card.row-no-tomada {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--muted) 6%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+tr.row-no-tomada > td:not(.comment-cell):not(.resultado-cell):not(.pnl-cell):not(.actions-cell) {
+  opacity: 0.6;
+}
+
+tr.row-no-tomada:hover > td {
+  opacity: 1;
+}
+
+.hist-card.row-no-tomada {
+  border-style: dashed;
+}
+
+.no-tomada-badge {
+  display: inline-block;
+  margin-bottom: 0.2rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--muted) 70%, transparent);
+  color: color-mix(in srgb, var(--muted) 95%, white);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .drawer-backdrop,
@@ -1052,6 +1310,9 @@ textarea.hist-textarea-compact {
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(420px, calc(100vw - 2rem));
+  max-width: none;
+  margin: 0;
+  color: inherit;
   padding: 1.25rem 1.35rem 1.35rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);

@@ -1,7 +1,6 @@
-import type {
-  ChecklistItem,
-  SignalSummary,
-} from '../services/signals-api.service';
+import type { SignalSummary } from '../services/signals-api.service';
+
+export type { ChecklistItem } from '../services/signals-api.service';
 
 export interface KpiRow {
   campo: string;
@@ -121,12 +120,33 @@ export function hasDetalleAdicional(
   return !!(s?.volume || s?.redFlags?.length || preview);
 }
 
+/** Primer «NN%» / «NN,N %» del texto, sin regex con backtracking. */
+export function firstPercent(
+  text: string
+): { value: number; start: number; end: number } | null {
+  let idx = text.indexOf('%');
+  while (idx !== -1) {
+    let j = idx - 1;
+    while (j >= 0 && text[j] === ' ') j--;
+    const numEnd = j + 1;
+    while (j >= 0 && /[\d.,]/.test(text[j])) j--;
+    const numStr = text.slice(j + 1, numEnd).replace(',', '.');
+    const value = Number(numStr);
+    if (/\d/.test(numStr) && Number.isFinite(value)) {
+      return { value, start: j + 1, end: idx + 1 };
+    }
+    idx = text.indexOf('%', idx + 1);
+  }
+  return null;
+}
+
 export function verdictTone(v: string | null | undefined): string {
-  const t = (v || '').toUpperCase();
+  const raw = String(v || '');
+  const t = raw.toUpperCase();
   // Porcentaje (Probabilidad de éxito) — no es un badge wait/stop
-  const pct = String(v || '').match(/^\s*(\d+(?:[.,]\d+)?)\s*%\s*$/);
-  if (pct) {
-    return successProbabilityTone(Number(String(pct[1]).replace(',', '.')));
+  const pct = firstPercent(raw);
+  if (pct && !raw.slice(0, pct.start).trim() && !raw.slice(pct.end).trim()) {
+    return successProbabilityTone(pct.value);
   }
   if (/NO_OPERAR|NO OPERAR|ESPERAR|WAIT/.test(t)) return 'warn';
   if (/SHORT/.test(t) && !/NO_/.test(t)) return 'bearish';
@@ -154,9 +174,9 @@ export function successProbabilityTone(pct: number | null | undefined): string {
  * Extrae el primer % del string; no usa veredictos wait/stop.
  */
 export function hitRateTone(winrate: string | null | undefined): string {
-  const m = String(winrate || '').match(/(\d+(?:[.,]\d+)?)\s*%/);
+  const m = firstPercent(String(winrate || ''));
   if (!m) return '';
-  return successProbabilityTone(Number(String(m[1]).replace(',', '.')));
+  return successProbabilityTone(m.value);
 }
 
 /** Factor individual del desglose de tasa (bias / PD / acuerdo / patrón). */
@@ -201,55 +221,48 @@ export function parseHitRateAnalysis(
     return { pctLabel: '—', pct: null, source: null, factors: [], raw };
   }
 
-  const pctM = raw.match(/~?\s*(\d+(?:[.,]\d+)?)\s*%/);
-  const pct = pctM ? Number(String(pctM[1]).replace(',', '.')) : null;
-  const pctLabel =
-    pct != null && Number.isFinite(pct)
-      ? `~${Math.round(pct)}%`
-      : raw.slice(0, 12);
+  const pctM = firstPercent(raw);
+  const pct = pctM ? pctM.value : null;
+  const pctLabel = pct == null ? raw.slice(0, 12) : `~${Math.round(pct)}%`;
 
-  let rest = raw;
-  if (pctM && pctM.index != null) {
-    rest = raw.slice(pctM.index + pctM[0].length).replace(/^\s*[—–\-]+\s*/, '');
-  }
+  let rest = pctM ? raw.slice(pctM.end).replace(/^\s*[—–-]+\s*/, '') : raw;
 
-  let source: string | null = null;
-  const srcM = rest.match(
-    /hist[oó]rico\s+([^·|;]+?)(?:\s*[·|;]\s*|\s*$)/i
-  );
-  if (srcM) {
-    source = srcM[1].trim();
-    rest = rest.slice(srcM.index! + srcM[0].length);
-  }
+  const src = splitHitRateSource(rest);
+  const source = src.source;
+  rest = src.rest;
 
-  const factors: HitRateFactor[] = [];
-  const chunks = rest
+  const factors: HitRateFactor[] = rest
     .split(/[;|]/)
     .map((c) => c.replace(/^\s*·\s*/, '').trim())
-    .filter(Boolean);
-
-  for (const chunk of chunks) {
-    if (/^hist[oó]rico/i.test(chunk)) continue;
-    const dm = chunk.match(/([+\-−]\s*\d+(?:[.,]\d+)?)\s*(?:\(|$)/);
-    let delta: number | null = null;
-    if (dm) {
-      delta = Number(String(dm[1]).replace(/[−\s]/g, (ch) => (ch === '−' ? '-' : '')).replace(',', '.'));
-      if (!Number.isFinite(delta)) delta = null;
-    } else {
-      const dm2 = chunk.match(/([+\-−]\d+(?:[.,]\d+)?)\s*$/);
-      if (dm2) {
-        delta = Number(String(dm2[1]).replace('−', '-').replace(',', '.'));
-        if (!Number.isFinite(delta)) delta = null;
-      }
-    }
-    factors.push({
+    .filter((c) => c && !/^hist[oó]rico/i.test(c))
+    .map((chunk) => ({
       label: chunk,
-      delta,
+      delta: parseFactorDelta(chunk),
       kind: classifyHitFactor(chunk),
-    });
-  }
+    }));
 
   return { pctLabel, pct, source, factors, raw };
+}
+
+/** «histórico E2 reversión BTC · resto» → fuente + resto tras el separador. */
+function splitHitRateSource(text: string): { source: string | null; rest: string } {
+  const hm = /hist[oó]rico\s/i.exec(text);
+  if (!hm) return { source: null, rest: text };
+  const after = text.slice(hm.index + hm[0].length);
+  const sepIdx = after.search(/[·|;]/);
+  if (sepIdx === -1) return { source: after.trim() || null, rest: '' };
+  return { source: after.slice(0, sepIdx).trim() || null, rest: after.slice(sepIdx + 1) };
+}
+
+/** Delta «-7», «+ 3», «−8 (…)» al final del chunk o antes de un paréntesis. */
+function parseFactorDelta(chunk: string): number | null {
+  for (const m of chunk.matchAll(/[-+−]\s*\d+(?:[.,]\d+)?/g)) {
+    const tail = chunk.slice((m.index ?? 0) + m[0].length).trimStart();
+    if (tail && !tail.startsWith('(')) continue;
+    const n = Number(m[0].replace('−', '-').replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 /** Resumen corto para columna Probabilidad (meta de recalc o tags PD). */
@@ -257,31 +270,38 @@ export function probabilityHint(item: {
   tags?: Array<{ name?: string } | string> | null;
   winrate?: string | null;
 }): string | null {
-  const parts: string[] = [];
-  const tags = item.tags || [];
-  for (const t of tags) {
-    const name = String(typeof t === 'string' ? t : t?.name || '').toUpperCase();
-    if (name === 'PREMIUM' || name === 'DISCOUNT') {
-      parts.push(name);
-      break;
-    }
-  }
   const analysis = parseHitRateAnalysis(item.winrate);
-  const pd = analysis.factors.find((f) => f.kind === 'pd');
-  const bias = analysis.factors.find((f) => f.kind === 'bias');
-  const acuerdo = analysis.factors.find((f) => f.kind === 'acuerdo');
-  if (pd && !parts.length) {
-    const m = pd.label.match(/\b(PREMIUM|DISCOUNT|EQUILIBRIO)\b/i);
-    if (m) parts.push(m[1].toUpperCase());
-  }
-  if (bias) {
-    const m = bias.label.match(/\b(BULLISH|BEARISH|NEUTRAL|CLI\s+\w+)\b/i);
-    if (m) parts.push(m[1].toUpperCase().replace(/\s+/, ' '));
-  } else if (acuerdo) {
-    const m = acuerdo.label.match(/acuerdo\s+(\w+)/i);
-    if (m) parts.push(`acuerdo ${m[1]}`);
-  }
+  const findKind = (k: HitRateFactor['kind']) => analysis.factors.find((f) => f.kind === k);
+  const parts = [
+    pdTagName(item.tags) ?? pdFromFactor(findKind('pd')),
+    biasOrAcuerdoHint(findKind('bias'), findKind('acuerdo')),
+  ].filter((p): p is string => !!p);
   return parts.length ? parts.join(' · ') : null;
+}
+
+function pdTagName(tags: Array<{ name?: string } | string> | null | undefined): string | null {
+  for (const t of tags || []) {
+    const name = String(typeof t === 'string' ? t : t?.name || '').toUpperCase();
+    if (name === 'PREMIUM' || name === 'DISCOUNT') return name;
+  }
+  return null;
+}
+
+function pdFromFactor(pd: HitRateFactor | undefined): string | null {
+  const m = pd ? /\b(PREMIUM|DISCOUNT|EQUILIBRIO)\b/i.exec(pd.label) : null;
+  return m ? m[1].toUpperCase() : null;
+}
+
+function biasOrAcuerdoHint(
+  bias: HitRateFactor | undefined,
+  acuerdo: HitRateFactor | undefined
+): string | null {
+  if (bias) {
+    const m = /\b(BULLISH|BEARISH|NEUTRAL|CLI\s+\w+)\b/i.exec(bias.label);
+    return m ? m[1].toUpperCase().replace(/\s+/, ' ') : null;
+  }
+  const m = acuerdo ? /acuerdo\s+(\w+)/i.exec(acuerdo.label) : null;
+  return m ? `acuerdo ${m[1]}` : null;
 }
 
 const KIND_TITLE: Record<HitRateFactor['kind'], string> = {
@@ -293,91 +313,87 @@ const KIND_TITLE: Record<HitRateFactor['kind'], string> = {
   other: 'Factor',
 };
 
+/** «+3» / «-7» o null. */
+function formatDelta(delta: number | null): string | null {
+  if (delta == null) return null;
+  return delta > 0 ? `+${delta}` : String(delta);
+}
+
+function withDelta(text: string, delta: string | null): string {
+  return delta ? `${text} Ajuste ${delta} pts.` : text;
+}
+
+type FactorRule = [RegExp, string];
+
+/** Primera regla cuyo patrón coincide → texto + ajuste; si ninguna, fallback. */
+function explainByRules(
+  t: string,
+  delta: string | null,
+  rules: FactorRule[],
+  fallback: string
+): string {
+  const hit = rules.find(([re]) => re.test(t));
+  return withDelta(hit ? hit[1] : fallback, delta);
+}
+
+function explainPd(t: string, raw: number | null, delta: string | null): string {
+  if (/chase|vs zona|(premium|discount)[^-]*-/.test(t) || (raw != null && raw < 0)) {
+    return withDelta('Zona en contra (ICT: long en discount / short en premium).', delta);
+  }
+  if (/a favor|\+/.test(t) || (raw != null && raw > 0)) {
+    return withDelta('Zona a favor del setup.', delta);
+  }
+  if (t.includes('equilibrio')) return 'Precio en equilibrio: sin ajuste por ubicación.';
+  return withDelta('Ubicación Premium/Discount.', delta);
+}
+
+function explainBias(t: string, raw: number | null, delta: string | null): string {
+  if (/a favor|alinead/.test(t) || (raw != null && raw > 0)) {
+    return withDelta('Bias alineado con la dirección del trade.', delta);
+  }
+  if (/vs |conflicto|contra/.test(t) || (raw != null && raw < 0)) {
+    return withDelta('Bias en conflicto con la dirección.', delta);
+  }
+  if (t.includes('neutral')) return 'H1 neutral: no suma ni resta por bias.';
+  return withDelta('Sesgo direccional.', delta);
+}
+
+const ACUERDO_RULES: FactorRule[] = [
+  [/alta/, 'Capas alineadas (acuerdo ALTA).'],
+  [/baja|nula/, 'Poco acuerdo entre capas.'],
+  [/media/, 'Acuerdo medio entre capas.'],
+];
+
+const PATRON_RULES: FactorRule[] = [
+  [/win/, 'Galería: patrón ganador similar.'],
+  [/loss/, 'Galería: patrón perdedor similar.'],
+  [/mixtos/, 'Galería mixta WIN/LOSS.'],
+];
+
+function explainReglas(t: string, label: string): string {
+  if (t.includes('reglas')) return 'Base de la curva: % de reglas E1/E2 cumplidas.';
+  if (/fusi[oó]n|ancla/.test(t)) return 'Ancla suave hacia la Probabilidad de éxito (fusión).';
+  return label;
+}
+
 /** Explicación corta de un factor del desglose (para tooltip). */
 export function explainHitFactor(factor: HitRateFactor): string {
   const t = factor.label.toLowerCase();
-  const delta =
-    factor.delta != null
-      ? factor.delta > 0
-        ? `+${factor.delta}`
-        : String(factor.delta)
-      : null;
-
-  if (factor.kind === 'pd') {
-    if (/chase|vs zona|premium.*-|discount.*-/.test(t) || (factor.delta != null && factor.delta < 0)) {
-      return (
-        `Zona en contra (ICT: long en discount / short en premium).` +
-        (delta ? ` Ajuste ${delta} pts.` : '')
-      );
-    }
-    if (/a favor|\+/.test(t) || (factor.delta != null && factor.delta > 0)) {
-      return (
-        `Zona a favor del setup.` +
-        (delta ? ` Ajuste ${delta} pts.` : '')
-      );
-    }
-    if (/equilibrio/.test(t)) {
-      return 'Precio en equilibrio: sin ajuste por ubicación.';
-    }
-    return `Ubicación Premium/Discount.${delta ? ` Ajuste ${delta} pts.` : ''}`;
+  const delta = formatDelta(factor.delta);
+  switch (factor.kind) {
+    case 'pd':
+      return explainPd(t, factor.delta, delta);
+    case 'bias':
+      return explainBias(t, factor.delta, delta);
+    case 'acuerdo':
+      return explainByRules(t, delta, ACUERDO_RULES, 'Acuerdo entre capas.');
+    case 'patron':
+      return explainByRules(t, delta, PATRON_RULES, 'Patrón histórico similar.');
+    case 'reglas':
+      return explainReglas(t, factor.label);
+    default:
+      return delta ? `${factor.label} (${delta})` : factor.label;
   }
-
-  if (factor.kind === 'bias') {
-    if (/a favor|alinead/.test(t) || (factor.delta != null && factor.delta > 0)) {
-      return (
-        `Bias alineado con la dirección del trade.` +
-        (delta ? ` Ajuste ${delta} pts.` : '')
-      );
-    }
-    if (/vs |conflicto|contra/.test(t) || (factor.delta != null && factor.delta < 0)) {
-      return (
-        `Bias en conflicto con la dirección.` +
-        (delta ? ` Ajuste ${delta} pts.` : '')
-      );
-    }
-    if (/neutral/.test(t)) {
-      return 'H1 neutral: no suma ni resta por bias.';
-    }
-    return `Sesgo direccional.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-  }
-
-  if (factor.kind === 'acuerdo') {
-    if (/alta/.test(t)) {
-      return `Capas alineadas (acuerdo ALTA).${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    if (/baja|nula/.test(t)) {
-      return `Poco acuerdo entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    if (/media/.test(t)) {
-      return `Acuerdo medio entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    return `Acuerdo entre capas.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-  }
-
-  if (factor.kind === 'patron') {
-    if (/win/.test(t)) {
-      return `Galería: patrón ganador similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    if (/loss/.test(t)) {
-      return `Galería: patrón perdedor similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    if (/mixtos/.test(t)) {
-      return `Galería mixta WIN/LOSS.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-    }
-    return `Patrón histórico similar.${delta ? ` Ajuste ${delta} pts.` : ''}`;
-  }
-
-  if (factor.kind === 'reglas') {
-    if (/reglas/.test(t)) {
-      return 'Base de la curva: % de reglas E1/E2 cumplidas.';
-    }
-    if (/fusi[oó]n|ancla/.test(t)) {
-      return 'Ancla suave hacia la Probabilidad de éxito (fusión).';
-    }
-    return factor.label;
-  }
-
-  return factor.label + (delta ? ` (${delta})` : '');
 }
 
 /**
@@ -389,27 +405,57 @@ export function hitRateTooltip(winrate: string | null | undefined): string {
   if (!a.raw || a.pct == null) {
     return a.raw && a.raw !== '—' ? a.raw : 'Sin tasa de acierto estimada.';
   }
-  const lines: string[] = [
-    `Tasa de acierto estimada: ${a.pctLabel}`,
-  ];
-  if (a.source) {
-    lines.push(`Fuente: histórico ${a.source}`);
-  }
-  lines.push('');
-  lines.push('Desglose (bias · Premium/Discount · acuerdo):');
-  if (!a.factors.length) {
-    lines.push('• Sin factores adicionales parseados.');
-  } else {
-    for (const f of a.factors) {
-      const title = KIND_TITLE[f.kind];
-      lines.push(`• ${title}: ${f.label}`);
-      lines.push(`  ${explainHitFactor(f)}`);
-    }
-  }
-  lines.push('');
-  lines.push('No es un oráculo: estima calidad del setup.');
-  return lines.join('\n');
+  const pct = a.pct;
+  const factorLines = a.factors.length
+    ? a.factors.flatMap((f) => [
+        `• ${KIND_TITLE[f.kind]}: ${f.label}`,
+        `  ${explainHitFactor(f)}`,
+      ])
+    : ['• Solo base histórica del setup (sin ajustes).'];
+  return [
+    `Tasa de acierto estimada: ${a.pctLabel} — ${hitRateBandLabel(pct)}`,
+    `≈ ${Math.round(pct / 10)} de cada 10 setups como este llegaron a TP antes que a SL.`,
+    ...(a.source ? [`Fuente: histórico ${a.source}`] : []),
+    '',
+    'Cómo se llegó al %:',
+    ...factorLines,
+    '',
+    `Con R:R 1:2 el equilibrio es ~34%. Esperanza ≈ ${formatExpectancyR(pct)} por trade.`,
+    'Rango realista 48–74%. No es la Probabilidad de ESTA señal.',
+  ].join('\n');
 }
+
+/** Lectura cualitativa de la tasa (48–74% es el rango realista del motor). */
+export function hitRateBandLabel(pct: number): string {
+  if (pct >= 65) return 'setup sólido';
+  if (pct >= 55) return 'setup aceptable';
+  return 'setup débil';
+}
+
+/** Esperanza en R con R:R 1:2: p·2 − (1−p)·1. */
+export function formatExpectancyR(pct: number): string {
+  const p = pct / 100;
+  const e = Math.round((p * 2 - (1 - p)) * 100) / 100;
+  return `${e >= 0 ? '+' : ''}${e.toFixed(2)}R`;
+}
+
+/** Tooltip de la cabecera de columna «Tasa de acierto». */
+export const HIT_RATE_COLUMN_TOOLTIP = [
+  'Tasa de acierto = % histórico estimado de setups parecidos que tocaron TP antes que SL.',
+  '',
+  'Se calcula así:',
+  '• Base: % de reglas E1/E2 cumplidas (curva histórica del setup).',
+  '• Ajuste por ubicación Premium/Discount (long en discount / short en premium suman; al revés restan).',
+  '• Ajuste por acuerdo entre capas (ALTA suma, BAJA/NULA resta).',
+  '• Ajuste por bias H1 y por patrones WIN/LOSS similares de la galería.',
+  '• Acotada a 48–74% para no inflarla.',
+  '',
+  'Lectura: <55% débil · 55–64% aceptable · ≥65% sólido.',
+  'Con R:R 1:2 basta ~34% para no perder dinero.',
+  '',
+  'Diferencia con Probabilidad: la Tasa mide el TIPO de setup (histórico);',
+  'la Probabilidad puntúa ESTA señal concreta (capas + ubicación).',
+].join('\n');
 
 /**
  * Tooltip para Probabilidad de éxito (score combinado + contexto PD/bias).
@@ -434,21 +480,18 @@ export function probabilityTooltip(item: {
   ];
 
   const hint = probabilityHint(item);
-  if (hint) {
-    lines.push('');
-    lines.push(`Contexto: ${hint}`);
-  }
+  if (hint) lines.push('', `Contexto: ${hint}`);
 
   const a = parseHitRateAnalysis(item.winrate);
-  const pd = a.factors.find((f) => f.kind === 'pd');
-  const bias = a.factors.find((f) => f.kind === 'bias');
-  const acuerdo = a.factors.find((f) => f.kind === 'acuerdo');
-  if (pd || bias || acuerdo) {
-    lines.push('');
-    lines.push('Factores relevantes:');
-    if (pd) lines.push(`• ${pd.label} — ${explainHitFactor(pd)}`);
-    if (bias) lines.push(`• ${bias.label} — ${explainHitFactor(bias)}`);
-    if (acuerdo) lines.push(`• ${acuerdo.label} — ${explainHitFactor(acuerdo)}`);
+  const relevant = (['pd', 'bias', 'acuerdo'] as const)
+    .map((k) => a.factors.find((f) => f.kind === k))
+    .filter((f): f is HitRateFactor => !!f);
+  if (relevant.length) {
+    lines.push(
+      '',
+      'Factores relevantes:',
+      ...relevant.map((f) => `• ${f.label} — ${explainHitFactor(f)}`)
+    );
   }
 
   return lines.join('\n');
@@ -565,7 +608,7 @@ export interface InvestorRiskCard {
 
 function parseFirstNumber(raw: string | null | undefined): number | null {
   if (!raw) return null;
-  const m = String(raw).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  const m = /-?\d+(?:\.\d+)?/.exec(String(raw).replace(',', '.'));
   if (!m) return null;
   const n = Number(m[0]);
   return Number.isFinite(n) ? n : null;
@@ -575,19 +618,25 @@ function parseFirstNumber(raw: string | null | undefined): number | null {
 export function parseRewardMultiple(rr: string | null | undefined): number | null {
   if (!rr) return null;
   const t = String(rr).trim().toLowerCase().replace(',', '.');
-  const ratio = t.match(/(\d+(?:\.\d+)?)\s*[:/a]\s*(\d+(?:\.\d+)?)/i);
+  const ratio = splitRatio(t);
   if (ratio) {
-    const a = Number(ratio[1]);
-    const b = Number(ratio[2]);
-    if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return null;
+    const [a, b] = ratio;
+    if (a === 0) return null;
     // "1:2" = arriesgo 1 para ganar 2 → múltiplo 2
     // Si viene "2:1" raro, tomamos max/min para no invertir mal si a>b
     return b >= a ? b / a : a / b;
   }
-  const single = t.match(/(\d+(?:\.\d+)?)/);
-  if (!single) return null;
-  const n = Number(single[1]);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const n = parseFirstNumber(t);
+  return n != null && n > 0 ? n : null;
+}
+
+/** «1:2», «1/3», «1 a 3» → [1, 2]; null si no hay dos números. */
+function splitRatio(t: string): [number, number] | null {
+  const parts = t.split(/[:/]|(?<=\d)\s*a\s*(?=\d)/);
+  if (parts.length < 2) return null;
+  const a = parseFirstNumber(parts[0]);
+  const b = parseFirstNumber(parts[1]);
+  return a != null && b != null ? [Math.abs(a), Math.abs(b)] : null;
 }
 
 function heatFromRewardMultiple(mult: number): { heat: RiskHeat; barPct: number; label: string } {
@@ -728,9 +777,7 @@ export function investorRiskCard(s: SignalSummary | null): InvestorRiskCard {
     barPct = h.barPct;
     heatLabel = h.label;
   } else if (riskNumber != null) {
-    heat = 'warm';
     barPct = 55;
-    heatLabel = 'Templado';
   }
 
   const title = riskRaw ? `Riesgo ${riskRaw}` : 'Riesgo del plan';
@@ -849,5 +896,3 @@ export function volMarkerPct(
   const max = volAxisMax(s);
   return Math.max(0, Math.min(100, (value / max) * 100));
 }
-
-export type { ChecklistItem };

@@ -23,6 +23,9 @@ import {
   probabilityHint,
   hitRateTooltip,
   probabilityTooltip,
+  hitRateBandLabel,
+  formatExpectancyR,
+  HIT_RATE_COLUMN_TOOLTIP,
 } from './signal-report.helpers.ts';
 
 describe('signal-report.helpers', () => {
@@ -151,6 +154,27 @@ describe('signal-report.helpers', () => {
     assert.match(tip, /Tasa de acierto/);
     assert.match(tip, /Premium \/ Discount|DISCOUNT/);
     assert.match(tip, /Acuerdo|acuerdo/i);
+  });
+
+  it('hitRateTooltip explica significado, banda, esperanza y diferencia con Probabilidad', () => {
+    const tip = hitRateTooltip('~60% — histórico E1 BTC · LONG en DISCOUNT +4');
+    assert.match(tip, /6 de cada 10/);
+    assert.match(tip, /setup aceptable/);
+    assert.match(tip, /\+0\.80R/);
+    assert.match(tip, /No es la Probabilidad/);
+  });
+
+  it('hitRateBandLabel y formatExpectancyR', () => {
+    assert.equal(hitRateBandLabel(50), 'setup débil');
+    assert.equal(hitRateBandLabel(55), 'setup aceptable');
+    assert.equal(hitRateBandLabel(70), 'setup sólido');
+    assert.equal(formatExpectancyR(48), '+0.44R');
+    assert.equal(formatExpectancyR(30), '-0.10R');
+  });
+
+  it('HIT_RATE_COLUMN_TOOLTIP describe cálculo y rango', () => {
+    assert.match(HIT_RATE_COLUMN_TOOLTIP, /48–74%/);
+    assert.match(HIT_RATE_COLUMN_TOOLTIP, /Premium\/Discount/);
   });
 
   it('probabilityTooltip resume score y contexto', () => {

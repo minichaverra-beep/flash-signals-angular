@@ -95,7 +95,7 @@ export interface SignalSummary {
 }
 
 export interface JobStatus {
-  status: 'idle' | 'running' | 'done' | 'error' | string;
+  status: 'idle' | 'running' | 'done' | 'error' | (string & Record<never, never>);
   kind?: string;
   startedAt?: string;
   finishedAt?: string;
@@ -458,6 +458,10 @@ export interface HistoryListItem {
   winrate?: string | null;
   /** R:R del plan (summary.planDetails.rr), si existe en el snapshot. */
   plannedRr?: string | null;
+  /** Niveles del plan (summary.planDetails) para la vista resumida. */
+  plannedEntry?: number | null;
+  plannedSl?: number | null;
+  plannedTp?: number | null;
   scoreCombined?: number | null;
   entry?: string | null;
   error?: string | null;
@@ -569,7 +573,7 @@ export interface ArtifactItem {
   ext: string;
   size: number;
   mtime: string;
-  kind: ArtifactKind | string;
+  kind: ArtifactKind | (string & Record<never, never>);
   /** Nombre de display (meta local); por defecto = name del archivo. */
   displayName?: string;
   categoryId?: number | null;

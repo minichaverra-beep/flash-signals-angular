@@ -14,7 +14,7 @@ import {
   ReportViewMode,
   SignalReportViewerComponent,
 } from '../../shared/signal-report-viewer.component';
-import { biasTone, biasLabel, resolveRunBias, hitRateTone, parseHitRateAnalysis, probabilityHint, hitRateTooltip, probabilityTooltip, explainHitFactor } from '../../shared/signal-report.helpers';
+import { biasTone, biasLabel, resolveRunBias, hitRateTone, parseHitRateAnalysis, probabilityHint, hitRateTooltip, probabilityTooltip, explainHitFactor, HIT_RATE_COLUMN_TOOLTIP } from '../../shared/signal-report.helpers';
 import type { HitRateAnalysis, HitRateFactor } from '../../shared/signal-report.helpers';
 import {
   computeHistoryMetrics,
@@ -26,6 +26,22 @@ import {
   mergeCalcMarkersIntoRows,
   type HistDisplayRow,
 } from './historial-calc-markers';
+import {
+  summaryRow,
+  summaryTotals,
+  type SummaryRow,
+  type SummaryTotals,
+} from './historial-summary';
+
+const COMPACT_MODE_KEY = 'historial.compactMode';
+
+function readCompactMode(): boolean {
+  try {
+    return localStorage.getItem(COMPACT_MODE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -48,9 +64,13 @@ export class HistorialComponent implements OnInit, OnDestroy {
   calcMarkers: CalcChangeMarker[] = [];
   displayRows: HistDisplayRow<HistoryListItem>[] = [];
   page = 1;
-  pageSize = 20;
+  pageSize = 5;
   total = 0;
   totalPages = 1;
+  readonly hitRateColumnTip = HIT_RATE_COLUMN_TOOLTIP;
+  /** Vista «Resumido» (estilo historial MT5) vs detallada editable. */
+  compactMode = readCompactMode();
+  pageTotals: SummaryTotals = summaryTotals([]);
   marketFilter: Market | '' = '';
   loading = false;
   error = '';
@@ -515,6 +535,25 @@ export class HistorialComponent implements OnInit, OnDestroy {
     return biasLabel(value);
   }
 
+  isNoTomada(item: HistoryListItem): boolean {
+    return item.resultado === 'no_tomada';
+  }
+
+  /** Números de página con elipsis: 1 … 4 5 6 … 20 */
+  pageNumbers(): Array<number | null> {
+    const total = this.totalPages;
+    const cur = this.page;
+    const set = new Set<number>([1, total, cur - 1, cur, cur + 1]);
+    const pages = [...set].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+    const out: Array<number | null> = [];
+    for (const p of pages) {
+      const prev = out.at(-1) ?? null;
+      if (prev != null && p - prev > 1) out.push(null);
+      out.push(p);
+    }
+    return out;
+  }
+
   resultadoClass(value: string | null | undefined): string {
     if (value === 'ganada') return 'res-win';
     if (value === 'perdida') return 'res-lose';
@@ -681,6 +720,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
         tags: updated.tags ?? [],
         confluencias: updated.confluencias ?? [],
       };
+      this.rebuildDisplayRows();
     }
     const mIdx = this.metricsItems.findIndex((i) => i.id === id);
     if (mIdx >= 0) {
@@ -971,6 +1011,22 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.displayRows = mergeCalcMarkersIntoRows(this.items, this.calcMarkers, {
       isLastPage: this.page >= this.totalPages,
     });
+    this.pageTotals = summaryTotals(this.items);
+  }
+
+  setCompactMode(on: boolean): void {
+    this.compactMode = on;
+    this.tagPickerOpenId = null;
+    this.confluencePickerOpenId = null;
+    try {
+      localStorage.setItem(COMPACT_MODE_KEY, on ? '1' : '0');
+    } catch {
+      /* storage no disponible: solo en memoria */
+    }
+  }
+
+  summaryFor(item: HistoryListItem): SummaryRow {
+    return summaryRow(item);
   }
 
   trackByRow(_index: number, row: HistDisplayRow<HistoryListItem>): string {

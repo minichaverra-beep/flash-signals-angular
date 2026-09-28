@@ -132,6 +132,26 @@ async function openSqlJs() {
 }
 
 /**
+ * Migración que solo añade columnas a signal_history (si faltan) y se registra.
+ * @param {Array<[string, string]>} columns [nombre, tipo SQL]
+ */
+function applyAddColumnsMigration(e, migrationId, now, columns) {
+  const done = e.get(`SELECT id FROM schema_migrations WHERE id = ?`, [migrationId]);
+  if (done) return;
+  const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
+  const names = new Set(cols.map((c) => String(c.name)));
+  for (const [name, type] of columns) {
+    if (!names.has(name)) {
+      e.run(`ALTER TABLE signal_history ADD COLUMN ${name} ${type}`);
+    }
+  }
+  e.run(
+    `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+    [migrationId, now]
+  );
+}
+
+/**
  * Migraciones incrementales (CREATE IF NOT EXISTS no altera tablas viejas).
  */
 function applyHistoryMigrations(e) {
@@ -141,59 +161,15 @@ function applyHistoryMigrations(e) {
     ['001_init', now]
   );
 
-  const has002 = e.get(
-    `SELECT id FROM schema_migrations WHERE id = ?`,
-    ['002_history_comment_resultado']
-  );
-  if (!has002) {
-    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
-    const names = new Set(cols.map((c) => String(c.name)));
-    if (!names.has('comment')) {
-      e.run(`ALTER TABLE signal_history ADD COLUMN comment TEXT`);
-    }
-    if (!names.has('resultado')) {
-      e.run(`ALTER TABLE signal_history ADD COLUMN resultado TEXT`);
-    }
-    e.run(
-      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
-      ['002_history_comment_resultado', now]
-    );
-  }
-
-  const has003 = e.get(
-    `SELECT id FROM schema_migrations WHERE id = ?`,
-    ['003_history_result_image']
-  );
-  if (!has003) {
-    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
-    const names = new Set(cols.map((c) => String(c.name)));
-    if (!names.has('result_image_name')) {
-      e.run(`ALTER TABLE signal_history ADD COLUMN result_image_name TEXT`);
-    }
-    if (!names.has('result_image_mime')) {
-      e.run(`ALTER TABLE signal_history ADD COLUMN result_image_mime TEXT`);
-    }
-    e.run(
-      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
-      ['003_history_result_image', now]
-    );
-  }
-
-  const has004 = e.get(
-    `SELECT id FROM schema_migrations WHERE id = ?`,
-    ['004_history_pnl_usd']
-  );
-  if (!has004) {
-    const cols = e.all(`PRAGMA table_info(signal_history)`) || [];
-    const names = new Set(cols.map((c) => String(c.name)));
-    if (!names.has('pnl_usd')) {
-      e.run(`ALTER TABLE signal_history ADD COLUMN pnl_usd REAL`);
-    }
-    e.run(
-      `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
-      ['004_history_pnl_usd', now]
-    );
-  }
+  applyAddColumnsMigration(e, '002_history_comment_resultado', now, [
+    ['comment', 'TEXT'],
+    ['resultado', 'TEXT'],
+  ]);
+  applyAddColumnsMigration(e, '003_history_result_image', now, [
+    ['result_image_name', 'TEXT'],
+    ['result_image_mime', 'TEXT'],
+  ]);
+  applyAddColumnsMigration(e, '004_history_pnl_usd', now, [['pnl_usd', 'REAL']]);
 
   // 005: documenta valor canónico 'no_tomada' en resultado (TEXT; sin ALTER).
   e.run(
@@ -775,21 +751,41 @@ function resolveBias(flags, summaryBias) {
   return null;
 }
 
+/** Nivel de precio del plan → number finito o null. */
+function readPlanLevel(raw) {
+  if (raw == null || raw === '') return null;
+  const n = Number(String(raw).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** String recortado o null si vacío / nullish. */
+function trimOrNull(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s || null;
+}
+
+/** String original (sin recortar) o null si solo espacios. */
+function textOrNull(raw) {
+  return trimOrNull(raw) == null ? null : String(raw);
+}
+
+function readResultado(raw) {
+  if (raw == null) return null;
+  const s = String(raw).toLowerCase();
+  return RESULTADO_OK.has(s) ? s : null;
+}
+
+function readScore(raw) {
+  return raw != null && raw !== '' ? Number(raw) : null;
+}
+
 function rowToListItem(row) {
   if (!row) return null;
   const flags = parseJson(row.flags_json, {});
-  const summaryBias =
-    row.summary_bias != null && String(row.summary_bias).trim()
-      ? String(row.summary_bias).trim()
-      : null;
-  const winrate =
-    row.summary_winrate != null && String(row.summary_winrate).trim()
-      ? String(row.summary_winrate).trim()
-      : null;
-  const plannedRr =
-    row.summary_planned_rr != null && String(row.summary_planned_rr).trim()
-      ? String(row.summary_planned_rr).trim()
-      : null;
+  const summaryBias = trimOrNull(row.summary_bias);
+  const winrate = trimOrNull(row.summary_winrate);
+  const plannedRr = trimOrNull(row.summary_planned_rr);
   return {
     id: Number(row.id),
     createdAt: row.created_at,
@@ -799,10 +795,7 @@ function rowToListItem(row) {
     tier: row.tier,
     status: row.status,
     verdict: row.verdict || null,
-    scoreCombined:
-      row.score_combined != null && row.score_combined !== ''
-        ? Number(row.score_combined)
-        : null,
+    scoreCombined: readScore(row.score_combined),
     entry: row.entry || null,
     error: row.error || null,
     flags,
@@ -811,32 +804,20 @@ function rowToListItem(row) {
     winrate,
     /** R:R del plan (summary.planDetails.rr) para métricas del historial. */
     plannedRr,
-    comment: row.comment != null && String(row.comment).trim()
-      ? String(row.comment)
-      : null,
+    /** Niveles del plan (summary.planDetails) para la vista resumida tipo MT5. */
+    plannedEntry: readPlanLevel(row.summary_planned_entry),
+    plannedSl: readPlanLevel(row.summary_planned_sl),
+    plannedTp: readPlanLevel(row.summary_planned_tp),
+    comment: textOrNull(row.comment),
     /** Motivo de entrada/salida (nullable; editable desde /historial). */
-    motivoEntradaSalida:
-      row.motivo_entrada_salida != null && String(row.motivo_entrada_salida).trim()
-        ? String(row.motivo_entrada_salida)
-        : null,
-    resultado:
-      row.resultado != null && RESULTADO_OK.has(String(row.resultado).toLowerCase())
-        ? String(row.resultado).toLowerCase()
-        : null,
+    motivoEntradaSalida: textOrNull(row.motivo_entrada_salida),
+    resultado: readResultado(row.resultado),
     /** PnL real en USD (nullable; editable desde /historial). */
     pnlUsd: readPnlUsd(row),
-    hasResultImage: Boolean(
-      row.result_image_name != null && String(row.result_image_name).trim()
-    ),
-    resultImageMime:
-      row.result_image_mime != null && String(row.result_image_mime).trim()
-        ? String(row.result_image_mime).trim()
-        : null,
+    hasResultImage: trimOrNull(row.result_image_name) != null,
+    resultImageMime: trimOrNull(row.result_image_mime),
     /** Ruta del chart anotado del detalle (si la corrida lo generó). */
-    chartPath:
-      row.chart_path != null && String(row.chart_path).trim()
-        ? String(row.chart_path).trim()
-        : null,
+    chartPath: trimOrNull(row.chart_path),
     tags: Array.isArray(row._tags) ? row._tags : [],
     confluencias: Array.isArray(row._confluencias) ? row._confluencias : [],
   };
@@ -851,6 +832,10 @@ function rowToDetail(row) {
     summary_winrate: summary?.winrate ?? row.summary_winrate ?? null,
     summary_planned_rr:
       summary?.planDetails?.rr ?? row.summary_planned_rr ?? null,
+    summary_planned_entry:
+      summary?.planDetails?.entry ?? row.summary_planned_entry ?? null,
+    summary_planned_sl: summary?.planDetails?.sl ?? row.summary_planned_sl ?? null,
+    summary_planned_tp: summary?.planDetails?.tp ?? row.summary_planned_tp ?? null,
   });
   return {
     ...base,
@@ -933,7 +918,10 @@ async function listHistory(opts = {}) {
               chart_path,
               json_extract(summary_json, '$.bias') AS summary_bias,
               json_extract(summary_json, '$.winrate') AS summary_winrate,
-              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr
+              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
+              json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
+              json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
+              json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
        FROM signal_history
        WHERE market = ?
        ORDER BY created_at DESC, id DESC
@@ -949,7 +937,10 @@ async function listHistory(opts = {}) {
               chart_path,
               json_extract(summary_json, '$.bias') AS summary_bias,
               json_extract(summary_json, '$.winrate') AS summary_winrate,
-              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr
+              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
+              json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
+              json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
+              json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
        FROM signal_history
        ORDER BY created_at DESC, id DESC
        LIMIT ? OFFSET ?`,
@@ -1025,6 +1016,48 @@ async function deleteById(id) {
  * @param {{ comment?: string|null, motivoEntradaSalida?: string|null, motivo_entrada_salida?: string|null, resultado?: string|null, pnlUsd?: number|string|null, pnl_usd?: number|string|null, pnlMoney?: number|string|null, tagIds?: number[], confluenceIds?: number[], confluenciaIds?: number[] }} patch
  * @returns {Promise<{ ok: boolean, item?: object, error?: string }>}
  */
+/** Primer alias presente en el patch → { present, value }. */
+function pickAlias(patch, keys) {
+  const key = keys.find((k) => Object.hasOwn(patch, k));
+  return key ? { present: true, value: patch[key] } : { present: false, value: undefined };
+}
+
+/**
+ * SET de columnas escalares (comment / motivo / resultado / pnl).
+ * @returns {{ sets: string[], params: any[], error?: string }}
+ */
+function annotationPatchSets(patch) {
+  const sets = [];
+  const params = [];
+  if (Object.hasOwn(patch, 'comment')) {
+    sets.push('comment = ?');
+    params.push(normalizeComment(patch.comment));
+  }
+  const motivo = pickAlias(patch, ['motivoEntradaSalida', 'motivo_entrada_salida']);
+  if (motivo.present) {
+    sets.push('motivo_entrada_salida = ?');
+    params.push(normalizeComment(motivo.value));
+  }
+  if (Object.hasOwn(patch, 'resultado')) {
+    const r = normalizeResultado(patch.resultado);
+    if (r === undefined) {
+      return { sets, params, error: 'resultado inválido (usa ganada|perdida|no_tomada|vacío)' };
+    }
+    sets.push('resultado = ?');
+    params.push(r);
+  }
+  const pnl = pickAlias(patch, ['pnlUsd', 'pnl_usd', 'pnlMoney']);
+  if (pnl.present) {
+    const p = normalizePnlUsd(pnl.value);
+    if (p === undefined) {
+      return { sets, params, error: 'pnlUsd inválido (usa número, p.ej. 125.5 o -40)' };
+    }
+    sets.push('pnl_usd = ?');
+    params.push(p);
+  }
+  return { sets, params };
+}
+
 async function updateAnnotation(id, patch = {}) {
   const e = await getEngine();
   const n = Number(id);
@@ -1038,43 +1071,9 @@ async function updateAnnotation(id, patch = {}) {
 
   const hasOwn = (key) => Object.hasOwn(patch, key);
 
-  const sets = [];
-  const params = [];
-  if (hasOwn('comment')) {
-    sets.push('comment = ?');
-    params.push(normalizeComment(patch.comment));
-  }
-  const hasMotivo = hasOwn('motivoEntradaSalida') || hasOwn('motivo_entrada_salida');
-  if (hasMotivo) {
-    const raw = hasOwn('motivoEntradaSalida')
-      ? patch.motivoEntradaSalida
-      : patch.motivo_entrada_salida;
-    sets.push('motivo_entrada_salida = ?');
-    params.push(normalizeComment(raw));
-  }
-  if (hasOwn('resultado')) {
-    const r = normalizeResultado(patch.resultado);
-    if (r === undefined) {
-      return {
-        ok: false,
-        error: 'resultado inválido (usa ganada|perdida|no_tomada|vacío)',
-      };
-    }
-    sets.push('resultado = ?');
-    params.push(r);
-  }
-  const hasPnl = hasOwn('pnlUsd') || hasOwn('pnl_usd') || hasOwn('pnlMoney');
-  if (hasPnl) {
-    let raw = patch.pnlMoney;
-    if (hasOwn('pnlUsd')) raw = patch.pnlUsd;
-    else if (hasOwn('pnl_usd')) raw = patch.pnl_usd;
-    const p = normalizePnlUsd(raw);
-    if (p === undefined) {
-      return { ok: false, error: 'pnlUsd inválido (usa número, p.ej. 125.5 o -40)' };
-    }
-    sets.push('pnl_usd = ?');
-    params.push(p);
-  }
+  const parsed = annotationPatchSets(patch);
+  if (parsed.error) return { ok: false, error: parsed.error };
+  const { sets, params } = parsed;
 
   const hasTags = hasOwn('tagIds');
   if (hasTags) {
@@ -1303,6 +1302,34 @@ async function createCalcMarker({ title, comment, market, createdAt } = {}) {
   return { ok: true, marker: rowToCalcMarker(row) };
 }
 
+/**
+ * SET parciales de un marcador (title / comment / market).
+ * @returns {{ sets: string[], params: any[], error?: string }}
+ */
+function calcMarkerPatchSets(patch) {
+  const sets = [];
+  const params = [];
+  if (Object.hasOwn(patch, 'title')) {
+    const t = String(patch.title || '').trim();
+    if (!t) return { sets, params, error: 'title vacío' };
+    sets.push('title = ?');
+    params.push(t.slice(0, 200));
+  }
+  if (Object.hasOwn(patch, 'comment')) {
+    sets.push('comment = ?');
+    params.push(trimOrNull(patch.comment)?.slice(0, 4000) ?? null);
+  }
+  if (Object.hasOwn(patch, 'market')) {
+    const m = trimOrNull(patch.market)?.toLowerCase() ?? null;
+    if (m && !['btc', 'us30', 'xauusd'].includes(m)) {
+      return { sets, params, error: 'market inválido' };
+    }
+    sets.push('market = ?');
+    params.push(m);
+  }
+  return { sets, params };
+}
+
 async function updateCalcMarker(id, patch = {}) {
   const e = await getEngine();
   const n = Number(id);
@@ -1313,33 +1340,9 @@ async function updateCalcMarker(id, patch = {}) {
   if (!existing) {
     return { ok: false, error: 'marcador no encontrado' };
   }
-  const sets = [];
-  const params = [];
-  if (Object.prototype.hasOwnProperty.call(patch, 'title')) {
-    const t = String(patch.title || '').trim();
-    if (!t) return { ok: false, error: 'title vacío' };
-    sets.push('title = ?');
-    params.push(t.slice(0, 200));
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, 'comment')) {
-    const c =
-      patch.comment == null || String(patch.comment).trim() === ''
-        ? null
-        : String(patch.comment).trim().slice(0, 4000);
-    sets.push('comment = ?');
-    params.push(c);
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, 'market')) {
-    let m = null;
-    if (patch.market != null && String(patch.market).trim() !== '') {
-      m = String(patch.market).trim().toLowerCase();
-      if (!['btc', 'us30', 'xauusd'].includes(m)) {
-        return { ok: false, error: 'market inválido' };
-      }
-    }
-    sets.push('market = ?');
-    params.push(m);
-  }
+  const parsed = calcMarkerPatchSets(patch);
+  if (parsed.error) return { ok: false, error: parsed.error };
+  const { sets, params } = parsed;
   if (!sets.length) {
     const row = e.get(
       `SELECT id, created_at, title, comment, market FROM calc_change_markers WHERE id = ?`,
@@ -1391,59 +1394,59 @@ async function recalcAllProbabilidad(opts = {}) {
          FROM signal_history ORDER BY id ASC`
       );
 
-  let updated = 0;
-  let skipped = 0;
-  let unchanged = 0;
+  const counts = { updated: 0, unchanged: 0, skipped: 0 };
   const samples = [];
+  const ctx = { e, force, recalcSummaryProbabilidad, RECALC_VERSION };
 
   for (const row of rows || []) {
-    const summary = parseJson(row.summary_json, null);
-    if (!summary || typeof summary !== 'object') {
-      skipped += 1;
-      continue;
-    }
-    // Prefer column if summary missing score
-    if (summary.scoreCombined == null && row.score_combined != null) {
-      summary.scoreCombined = Number(row.score_combined);
-    }
-    const flags = parseJson(row.flags_json, {});
-    const out = recalcSummaryProbabilidad(summary, {
-      preview: row.preview || null,
-      flags,
-      force,
-    });
-    if (out.scoreCombined == null) {
-      skipped += 1;
-      continue;
-    }
-    if (!out.changed && out.summary.scoreRecalcVersion === RECALC_VERSION && !force) {
-      unchanged += 1;
-      continue;
-    }
-    e.run(
-      `UPDATE signal_history SET score_combined = ?, summary_json = ? WHERE id = ?`,
-      [out.scoreCombined, JSON.stringify(out.summary), Number(row.id)]
-    );
-    updated += 1;
-    if (samples.length < 8) {
-      samples.push({
-        id: Number(row.id),
-        before: out.summary.scoreCombinedBeforeRecalc,
-        after: out.scoreCombined,
-        meta: out.summary.scoreRecalcMeta || null,
-        winrate: out.summary.winrate || null,
-      });
-    }
+    const res = recalcHistoryRow(ctx, row);
+    counts[res.status] += 1;
+    if (res.sample && samples.length < 8) samples.push(res.sample);
   }
 
   return {
     ok: true,
     version: RECALC_VERSION,
     total: (rows || []).length,
-    updated,
-    unchanged,
-    skipped,
+    ...counts,
     samples,
+  };
+}
+
+/**
+ * Recalcula una fila del historial.
+ * @returns {{ status: 'updated'|'unchanged'|'skipped', sample?: object }}
+ */
+function recalcHistoryRow(ctx, row) {
+  const { e, force, recalcSummaryProbabilidad, RECALC_VERSION } = ctx;
+  const summary = parseJson(row.summary_json, null);
+  if (!summary || typeof summary !== 'object') return { status: 'skipped' };
+  // Prefer column if summary missing score
+  if (summary.scoreCombined == null && row.score_combined != null) {
+    summary.scoreCombined = Number(row.score_combined);
+  }
+  const out = recalcSummaryProbabilidad(summary, {
+    preview: row.preview || null,
+    flags: parseJson(row.flags_json, {}),
+    force,
+  });
+  if (out.scoreCombined == null) return { status: 'skipped' };
+  if (!out.changed && out.summary.scoreRecalcVersion === RECALC_VERSION && !force) {
+    return { status: 'unchanged' };
+  }
+  e.run(
+    `UPDATE signal_history SET score_combined = ?, summary_json = ? WHERE id = ?`,
+    [out.scoreCombined, JSON.stringify(out.summary), Number(row.id)]
+  );
+  return {
+    status: 'updated',
+    sample: {
+      id: Number(row.id),
+      before: out.summary.scoreCombinedBeforeRecalc,
+      after: out.scoreCombined,
+      meta: out.summary.scoreRecalcMeta || null,
+      winrate: out.summary.winrate || null,
+    },
   };
 }
 
