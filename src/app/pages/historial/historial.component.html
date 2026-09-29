@@ -86,6 +86,52 @@
         <span class="compact-toggle-track" aria-hidden="true"><span class="compact-toggle-thumb"></span></span>
         <span class="compact-toggle-label">Resumido</span>
       </label>
+      <div class="export-bar" *ngIf="compactMode" role="group" aria-label="Exportar vista resumida">
+        <span class="export-bar-label">Exportar</span>
+        <div class="export-scope" role="radiogroup" aria-label="Alcance de la exportación">
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="exportScope === 'pagina'"
+            [class.active]="exportScope === 'pagina'"
+            [disabled]="!!exportBusy"
+            (click)="setExportScope('pagina')"
+            title="Solo las filas visibles de esta página"
+          >Página {{ page }} <span class="count">{{ items.length }}</span></button>
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="exportScope === 'todo'"
+            [class.active]="exportScope === 'todo'"
+            [disabled]="!!exportBusy"
+            (click)="setExportScope('todo')"
+            title="Todas las páginas del filtro actual"
+          >Todas <span class="count">{{ total }}</span></button>
+        </div>
+        <span class="export-divider" aria-hidden="true"></span>
+        <button
+          type="button"
+          class="export-btn excel"
+          (click)="requestExport('excel')"
+          [disabled]="!canExport()"
+          [attr.title]="exportTooltip()"
+          [attr.aria-busy]="exportBusy === 'excel'"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6M8.5 12.5l4 5M12.5 12.5l-4 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>{{ exportBusy === 'excel' ? 'Generando…' : 'Excel' }}</span>
+        </button>
+        <button
+          type="button"
+          class="export-btn pdf"
+          (click)="requestExport('pdf')"
+          [disabled]="!canExport()"
+          [attr.title]="exportTooltip()"
+          [attr.aria-busy]="exportBusy === 'pdf'"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 2v6h6M12 11v6m-2.5-2.5L12 17l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>{{ exportBusy === 'pdf' ? 'Generando…' : 'PDF' }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="table-wrap compact-wrap" *ngIf="compactMode">
@@ -765,7 +811,8 @@
       </ng-container>
     </div>
 
-    <nav class="pager" *ngIf="totalPages > 1" aria-label="Paginación del historial">
+    <nav class="pager" *ngIf="total > 0" aria-label="Paginación del historial">
+      <ng-container *ngIf="totalPages > 1">
       <button type="button" class="ghost sm" [disabled]="page <= 1 || loading" (click)="load(page - 1)">Anterior</button>
       <ng-container *ngFor="let p of pageNumbers()">
         <span class="pager-gap muted" *ngIf="p === null">…</span>
@@ -780,7 +827,18 @@
         >{{ p }}</button>
       </ng-container>
       <button type="button" class="ghost sm" [disabled]="page >= totalPages || loading" (click)="load(page + 1)">Siguiente</button>
-      <span class="muted tiny pager-info">{{ pageSize }} por página</span>
+      </ng-container>
+      <label class="muted tiny pager-info">
+        <select
+          class="pager-size"
+          [disabled]="loading"
+          (change)="onPageSizeChange($event)"
+          aria-label="Entradas por página"
+        >
+          <option *ngFor="let n of pageSizeOptions" [value]="n" [selected]="n === pageSize">{{ n }}</option>
+        </select>
+        por página
+      </label>
     </nav>
   </section>
 
@@ -1262,6 +1320,43 @@
       <button type="button" class="ghost" (click)="cancelUnlock()" [disabled]="unlockBusy">Cancelar</button>
       <button type="button" class="danger" (click)="confirmUnlock()" [disabled]="unlockBusy">
         {{ unlockBusy ? 'Comprobando…' : (unlockKind === 'clear' ? 'Limpiar' : 'Borrar') }}
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Confirmación de exportación -->
+  <button
+    type="button"
+    class="unlock-backdrop"
+    *ngIf="exportConfirm"
+    aria-label="Cancelar exportación"
+    (click)="cancelExport()"
+  ></button>
+  <dialog
+    open
+    class="unlock-dialog export-confirm-dialog"
+    [class.pdf]="exportConfirm === 'pdf'"
+    *ngIf="exportConfirm as fmt"
+    aria-modal="true"
+    aria-label="Confirmar exportación"
+  >
+    <p class="eyebrow">Exportar · Resumido</p>
+    <h2>¿Descargar {{ fmt === 'excel' ? 'Excel' : 'PDF' }}?</h2>
+    <p class="muted">Se generará el reporte con la tabla, métricas y análisis del alcance seleccionado.</p>
+    <dl class="export-confirm-list">
+      <dt>Alcance</dt>
+      <dd>{{ exportScopeLabel() }}</dd>
+      <dt>Señales</dt>
+      <dd>{{ exportCount() }}</dd>
+      <dt>Mercado</dt>
+      <dd>{{ exportMarketLabel() }}</dd>
+      <dt>Archivo</dt>
+      <dd class="file">{{ exportFileNamePreview(fmt) }}</dd>
+    </dl>
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="cancelExport()">Cancelar</button>
+      <button type="button" class="export-confirm-btn" (click)="confirmExport()" autofocus>
+        Descargar {{ fmt === 'excel' ? 'Excel' : 'PDF' }}
       </button>
     </div>
   </dialog>

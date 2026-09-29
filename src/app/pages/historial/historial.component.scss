@@ -104,6 +104,138 @@ h2 {
   padding: 0.35rem 0.7rem;
 }
 
+/* Exportar (solo vista Resumido) — junto al toggle, encima de la tabla */
+.export-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem;
+  padding-left: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-deep) 70%, transparent);
+  animation: export-in 0.18s ease;
+}
+
+@keyframes export-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.export-bar-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.export-scope {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel-deep) 90%, black);
+  border: 1px solid color-mix(in srgb, var(--gold) 15%, transparent);
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover:not(:disabled):not(.active) {
+      color: var(--text);
+    }
+
+    &.active {
+      background: color-mix(in srgb, var(--fire) 22%, var(--panel-deep));
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fire) 45%, transparent);
+    }
+  }
+
+  .count {
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.68rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
+    color: color-mix(in srgb, var(--gold) 80%, white);
+  }
+}
+
+.export-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.2rem 0.1rem;
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+}
+
+.export-btn {
+  --tone: var(--gold);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  padding: 0.38rem 0.75rem;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  color: color-mix(in srgb, var(--tone) 55%, white);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+
+  &.excel {
+    --tone: #3ecf8e;
+  }
+
+  &.pdf {
+    --tone: #ff8c00;
+  }
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--tone) 22%, transparent);
+    border-color: var(--tone);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  &[aria-busy='true'] {
+    cursor: progress;
+  }
+}
+
+@media (max-width: 720px) {
+  .export-bar {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .export-bar-label {
+    display: none;
+  }
+}
+
 .danger {
   border-color: color-mix(in srgb, var(--err) 55%, transparent);
   color: #ffc9c9;
@@ -1016,7 +1148,30 @@ textarea.hist-textarea-compact {
 }
 
 .pager-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-left: 0.4rem;
+}
+
+.pager-size {
+  font: inherit;
+  color: var(--text);
+  background: #160e0e;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.pager-size:focus {
+  outline: 2px solid color-mix(in srgb, var(--teal) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.pager-size:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 /* Cabecera con tooltip: abre hacia abajo para no cortarse arriba */
@@ -1337,6 +1492,58 @@ tr.row-no-tomada:hover > td {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.export-confirm-dialog {
+  --tone: #3ecf8e;
+  border-color: color-mix(in srgb, var(--tone) 40%, transparent);
+}
+
+.export-confirm-dialog.pdf {
+  --tone: #ff8c00;
+}
+
+.export-confirm-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 0.9rem;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
+  background: color-mix(in srgb, var(--tone) 6%, transparent);
+  font-size: 0.85rem;
+}
+
+.export-confirm-list dt {
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  align-self: center;
+}
+
+.export-confirm-list dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.export-confirm-list dd.file {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.export-confirm-btn {
+  border: 1px solid color-mix(in srgb, var(--tone) 60%, transparent);
+  background: color-mix(in srgb, var(--tone) 22%, transparent);
+  color: var(--tone);
+  font-weight: 700;
+}
+
+.export-confirm-btn:hover {
+  background: color-mix(in srgb, var(--tone) 32%, transparent);
 }
 
 @media (max-width: 720px) {

@@ -29,9 +29,30 @@ import {
 import {
   summaryRow,
   summaryTotals,
+  summaryTradeType,
   type SummaryRow,
   type SummaryTotals,
 } from './historial-summary';
+import {
+  buildExportBundle,
+  exportFileName,
+  type ExportBundle,
+  type ExportRowHelpers,
+} from './historial-export';
+
+export type ExportFormat = 'excel' | 'pdf';
+/** Página visible (según «por página») o todas las páginas del filtro. */
+export type ExportScope = 'pagina' | 'todo';
+
+const EXPORT_SCOPE_KEY = 'historial.exportScope';
+
+function readExportScope(): ExportScope {
+  try {
+    return localStorage.getItem(EXPORT_SCOPE_KEY) === 'todo' ? 'todo' : 'pagina';
+  } catch {
+    return 'pagina';
+  }
+}
 
 const COMPACT_MODE_KEY = 'historial.compactMode';
 
@@ -40,6 +61,18 @@ function readCompactMode(): boolean {
     return localStorage.getItem(COMPACT_MODE_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+const PAGE_SIZE_KEY = 'historial.pageSize';
+const PAGE_SIZE_OPTIONS = [5, 10, 15] as const;
+
+function readPageSize(): number {
+  try {
+    const n = Number(localStorage.getItem(PAGE_SIZE_KEY));
+    return (PAGE_SIZE_OPTIONS as readonly number[]).includes(n) ? n : PAGE_SIZE_OPTIONS[0];
+  } catch {
+    return PAGE_SIZE_OPTIONS[0];
   }
 }
 
@@ -64,7 +97,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   calcMarkers: CalcChangeMarker[] = [];
   displayRows: HistDisplayRow<HistoryListItem>[] = [];
   page = 1;
-  pageSize = 5;
+  pageSize = readPageSize();
+  readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   total = 0;
   totalPages = 1;
   readonly hitRateColumnTip = HIT_RATE_COLUMN_TOOLTIP;
@@ -107,6 +141,12 @@ export class HistorialComponent implements OnInit, OnDestroy {
   metricsItems: HistoryListItem[] = [];
   metrics: HistoryMetrics | null = null;
   metricsLoading = false;
+
+  /** Formato que se está generando (deshabilita ambos botones de exportar). */
+  exportBusy: ExportFormat | null = null;
+  exportScope: ExportScope = readExportScope();
+  /** Formato pendiente de confirmar en el diálogo de exportación. */
+  exportConfirm: ExportFormat | null = null;
 
   /** Diálogo de desbloqueo para borrar (modo lock). */
   unlockOpen = false;
@@ -162,6 +202,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   onDocumentEscape(): void {
+    if (this.exportConfirm) {
+      this.cancelExport();
+      return;
+    }
     if (this.unlockOpen) {
       this.cancelUnlock();
       return;
@@ -1025,8 +1069,124 @@ export class HistorialComponent implements OnInit, OnDestroy {
     }
   }
 
+  onPageSizeChange(ev: Event): void {
+    const n = Number((ev.target as HTMLSelectElement).value);
+    if (!n || n === this.pageSize) return;
+    this.pageSize = n;
+    try {
+      localStorage.setItem(PAGE_SIZE_KEY, String(n));
+    } catch {
+      /* storage no disponible: solo en memoria */
+    }
+    this.load(1);
+  }
+
   summaryFor(item: HistoryListItem): SummaryRow {
     return summaryRow(item);
+  }
+
+  /** Exporta la página visible o todo el filtro, en el modo del interruptor Resumido. */
+  canExport(): boolean {
+    if (this.exportBusy || !this.compactMode) return false;
+    if (this.exportScope === 'pagina') return !this.loading && this.items.length > 0;
+    return !this.metricsLoading && !!this.metrics && this.metricsItems.length > 0;
+  }
+
+  setExportScope(scope: ExportScope): void {
+    this.exportScope = scope;
+    try {
+      localStorage.setItem(EXPORT_SCOPE_KEY, this.exportScope);
+    } catch {
+      /* storage no disponible: solo en memoria */
+    }
+  }
+
+  exportScopeLabel(): string {
+    return this.exportScope === 'pagina'
+      ? `Página ${this.page} de ${this.totalPages} · ${this.pageSize} por página`
+      : 'Todas las páginas';
+  }
+
+  exportTooltip(): string {
+    if (this.exportScope === 'todo' && this.metricsLoading) return 'Cargando todas las páginas del filtro…';
+    return `${this.exportScopeLabel()} · ${this.exportCount()} señales · mercado ${this.exportMarketLabel()} + métricas y análisis`;
+  }
+
+  exportCount(): number {
+    return this.exportScope === 'pagina' ? this.items.length : this.metricsItems.length;
+  }
+
+  exportMarketLabel(): string {
+    return this.markets.find((m) => m.id === this.marketFilter)?.label ?? 'Todos';
+  }
+
+  exportFileNamePreview(format: ExportFormat): string {
+    return exportFileName(
+      'resumido',
+      this.exportMarketLabel(),
+      format === 'excel' ? 'xlsx' : 'pdf',
+      new Date(),
+      this.exportScope === 'pagina' ? `p${this.page}` : '',
+    );
+  }
+
+  requestExport(format: ExportFormat): void {
+    if (!this.canExport()) return;
+    this.exportConfirm = format;
+  }
+
+  cancelExport(): void {
+    this.exportConfirm = null;
+  }
+
+  confirmExport(): void {
+    const format = this.exportConfirm;
+    this.exportConfirm = null;
+    if (format) void this.exportHistory(format);
+  }
+
+  async exportHistory(format: ExportFormat): Promise<void> {
+    if (!this.canExport()) return;
+    this.exportBusy = format;
+    this.error = '';
+    this.saveHint = format === 'excel' ? 'Generando Excel…' : 'Generando PDF…';
+    try {
+      const bundle = this.buildExportBundle();
+      const writers = await import('./historial-export.writers');
+      if (format === 'excel') await writers.exportHistoryExcel(bundle);
+      else await writers.exportHistoryPdf(bundle);
+      this.saveHint = format === 'excel' ? 'Excel descargado' : 'PDF descargado';
+      setTimeout(() => {
+        if (this.saveHint.endsWith('descargado')) this.saveHint = '';
+      }, 2000);
+    } catch (err: unknown) {
+      console.error('[historial] exportación:', err);
+      this.saveHint = '';
+      this.error = this.errMsg(err, `No se pudo generar el ${format === 'excel' ? 'Excel' : 'PDF'}`);
+    } finally {
+      this.exportBusy = null;
+    }
+  }
+
+  private buildExportBundle(): ExportBundle {
+    const helpers: ExportRowHelpers = {
+      tradeType: (item) => summaryTradeType(item),
+      biasText: (item) => this.biasText(this.itemBias(item as HistoryListItem)),
+      hitRate: (item) => {
+        const ha = parseHitRateAnalysis(item.winrate);
+        return [ha.pctLabel, ha.source].filter(Boolean).join(' · ') || '—';
+      },
+    };
+    const pageScope = this.exportScope === 'pagina';
+    const rows = pageScope ? this.items : this.metricsItems;
+    return buildExportBundle(rows, {
+      mode: 'resumido',
+      marketLabel: this.exportMarketLabel(),
+      metrics: pageScope ? computeHistoryMetrics(rows) : (this.metrics as HistoryMetrics),
+      helpers,
+      scopeLabel: this.exportScopeLabel(),
+      fileTag: pageScope ? `p${this.page}` : '',
+    });
   }
 
   trackByRow(_index: number, row: HistDisplayRow<HistoryListItem>): string {

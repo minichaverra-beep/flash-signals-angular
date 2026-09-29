@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<html lang="es" class="no-js">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRT · Candle Range Theory · Flash Signals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>document.documentElement.classList.replace("no-js", "has-js");</script>
+  <style>
+    :root {
+      /* Flash Signals — fire & shadow */
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --violet: #c4a8ff;
+
+      --bg: #120c0c;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --stroke-strong: color-mix(in srgb, var(--gold) 45%, #4e3636);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --muted-2: #b8a8a8;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --violet-dim: rgba(196, 168, 255, 0.14);
+
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+      --shell: 1100px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--violet) 12%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+
+    .shell { max-width: var(--shell); margin: 0 auto; padding: 28px 22px 72px; }
+
+    /* —— Hero —— */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 30px 30px 22px;
+      margin-bottom: 18px;
+      box-shadow: var(--glow);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--violet));
+    }
+
+    .eyebrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: var(--bg-soft);
+      color: var(--muted);
+    }
+
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.violet { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 40%, transparent); background: var(--violet-dim); }
+
+    h1 {
+      font-family: var(--display);
+      font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 66ch; line-height: 1.55; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+
+    @media (max-width: 720px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .hero { padding: 22px 18px 18px; }
+    }
+
+    .stat {
+      background: color-mix(in srgb, var(--bg-card) 88%, black);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+
+    .stat .val { font-family: var(--display); font-size: 1.2rem; font-weight: 600; letter-spacing: 0.03em; margin-bottom: 4px; }
+    .stat .lbl { font-size: 0.72rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    .stat.fire .val { color: var(--fire); }
+    .stat.err .val { color: #ff8a8a; }
+    .stat.ok .val { color: var(--ok); }
+    .stat.teal .val { color: #7ec8c9; }
+    .stat.violet .val { color: var(--violet); }
+
+    .disclaimer {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--warn-dim);
+      border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+      color: #ffe2a8;
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    /* —— Nav / TOC —— */
+    .tabs-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--stroke);
+      margin: 0 -22px 22px;
+      padding: 12px 22px;
+    }
+
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; max-width: var(--shell); margin: 0 auto; }
+
+    .tab {
+      appearance: none;
+      border: 1px solid var(--stroke);
+      background: var(--bg-elev);
+      color: var(--muted);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+
+    .tab:hover { color: var(--text); border-color: var(--stroke-strong); }
+
+    .tab.active,
+    .tab:focus-visible {
+      background: linear-gradient(135deg, #ff8c00 0%, #cd1818 100%);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: var(--glow);
+      outline: none;
+    }
+
+    .tab.new::after {
+      content: "NEW";
+      margin-left: 6px;
+      font-size: 0.6rem;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--violet-dim);
+      color: var(--violet);
+    }
+
+    /* Sin JS: todas las secciones visibles + TOC como anclas */
+    .no-js .panel {
+      display: block !important;
+      margin-bottom: 36px;
+      padding-top: 8px;
+      border-top: 1px solid var(--stroke);
+    }
+
+    .no-js .panel:first-of-type { border-top: none; padding-top: 0; }
+
+    .has-js .panel { display: none; animation: fade 0.2s ease; }
+    .has-js .panel.active { display: block; }
+
+    .no-js .js-only-hint { display: none; }
+
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    h2 { font-family: var(--display); font-size: 1.4rem; letter-spacing: 0.03em; text-transform: uppercase; margin-bottom: 8px; }
+
+    h3 {
+      font-family: var(--display);
+      font-size: 1.05rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 26px 0 12px;
+      color: var(--fire);
+    }
+
+    .section-lead { color: var(--muted); font-size: 0.92rem; margin-bottom: 18px; max-width: 72ch; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+
+    @media (max-width: 860px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px;
+    }
+
+    .card.a { border-top: 3px solid var(--ok); }
+    .card.b { border-top: 3px solid var(--err); }
+    .card.accent { border-top: 3px solid var(--teal); }
+    .card.amber-top { border-top: 3px solid var(--fire); }
+    .card.violet-top { border-top: 3px solid var(--violet); }
+
+    .card-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card p, .card li { font-size: 0.9rem; color: var(--muted); line-height: 1.55; }
+    .card ul { padding-left: 1.15rem; margin-top: 8px; }
+    .card li { margin-bottom: 6px; }
+    .card strong { color: var(--text); }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .badge.up { background: var(--ok-dim); color: var(--ok); }
+    .badge.down { background: var(--err-dim); color: #ff8a8a; }
+    .badge.neu { background: var(--violet-dim); color: var(--violet); }
+    .badge.fire { background: var(--fire-dim); color: var(--fire); }
+
+    /* —— Tables —— */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      margin: 12px 0 22px;
+      background: var(--bg-elev);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 520px; }
+
+    th {
+      text-align: left;
+      padding: 12px 14px;
+      background: var(--bg-soft);
+      color: var(--gold);
+      font-weight: 600;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--stroke);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid color-mix(in srgb, var(--stroke) 70%, transparent);
+      vertical-align: top;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    td strong { color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: color-mix(in srgb, var(--fire) 6%, transparent); }
+
+    .tone-a td:first-child,
+    .tone-b td:first-child,
+    .tone-info td:first-child,
+    .tone-warn td:first-child,
+    .tone-violet td:first-child {
+      border-left: 3px solid transparent;
+      padding-left: 12px;
+    }
+
+    .tone-a td:first-child { border-left-color: var(--ok); }
+    .tone-b td:first-child { border-left-color: var(--err); }
+    .tone-info td:first-child { border-left-color: var(--teal); }
+    .tone-warn td:first-child { border-left-color: var(--fire); }
+    .tone-violet td:first-child { border-left-color: var(--violet); }
+
+    .callout {
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 16px 0;
+      font-size: 0.9rem;
+      border: 1px solid var(--stroke);
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .callout.info { background: var(--info-dim); border-color: color-mix(in srgb, var(--teal) 45%, transparent); }
+    .callout.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .callout.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+    .callout.danger { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 40%, transparent); }
+    .callout.violet { background: var(--violet-dim); border-color: color-mix(in srgb, var(--violet) 40%, transparent); }
+
+    .callout li strong,
+    .callout p strong { color: var(--text); }
+
+    .callout > strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text);
+      font-family: var(--display);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+
+    /* Details / colapsables */
+    details.fold {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      margin: 12px 0;
+      overflow: hidden;
+    }
+
+    details.fold > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      font-size: 0.92rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      user-select: none;
+    }
+
+    details.fold > summary::-webkit-details-marker { display: none; }
+
+    details.fold > summary::after {
+      content: "+";
+      font-family: var(--mono);
+      color: var(--fire);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    details.fold[open] > summary::after { content: "−"; }
+    details.fold > summary:hover { background: color-mix(in srgb, var(--fire) 8%, transparent); }
+
+    details.fold .fold-body { padding: 0 16px 16px; border-top: 1px solid var(--stroke); padding-top: 14px; }
+
+    .flow { display: flex; flex-direction: column; gap: 0; margin: 16px 0; }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .flow-step strong { color: var(--text); }
+
+    .flow-arrow { text-align: center; color: var(--fire); font-size: 1.15rem; padding: 2px 0; line-height: 1; }
+
+    .steps { display: grid; gap: 8px; margin: 14px 0; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      align-items: start;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #ff8c00, #cd1818);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--glow);
+    }
+
+    .step strong { display: block; font-size: 0.9rem; color: var(--text); }
+    .step span { font-size: 0.82rem; color: var(--muted); }
+
+    /* Diagramas SVG */
+    .diagram {
+      background: var(--bg-elev);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 12px;
+      margin-top: 10px;
+    }
+
+    .diagram svg { display: block; width: 100%; height: auto; }
+    .diagram figcaption { font-size: 0.78rem; color: var(--muted-2); margin-top: 8px; text-align: center; }
+
+    /* Scorecard */
+    .score-list { list-style: none; display: grid; gap: 8px; margin: 14px 0; }
+
+    .score-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .score-item:hover { border-color: var(--stroke-strong); }
+    .score-item.checked {
+      border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+      background: var(--ok-dim);
+      color: var(--text);
+    }
+
+    .score-item input { margin-top: 3px; accent-color: var(--ok); width: 16px; height: 16px; }
+    .score-item .n { font-family: var(--mono); font-size: 0.75rem; color: var(--fire); min-width: 1.5rem; }
+
+    .score-bar-wrap {
+      margin: 16px 0;
+      background: var(--bg-soft);
+      border-radius: 999px;
+      height: 12px;
+      overflow: hidden;
+      border: 1px solid var(--stroke);
+    }
+
+    .score-bar { height: 100%; width: 0%; background: var(--err); transition: width 0.25s, background 0.25s; }
+
+    .score-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .score-meta .pass { color: var(--ok); font-weight: 700; }
+    .score-meta .fail { color: #ff8a8a; font-weight: 700; }
+    .score-meta .mid { color: var(--warn); font-weight: 700; }
+
+    /* Decisor Reverse vs Break */
+    .decisor { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+
+    @media (max-width: 860px) {
+      .decisor { grid-template-columns: 1fr; }
+    }
+
+    .decisor .col-title {
+      font-family: var(--display);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .decisor .col-title .count { font-family: var(--mono); font-size: 0.85rem; }
+    .decisor .rev .col-title { color: var(--ok); }
+    .decisor .brk .col-title { color: var(--violet); }
+
+    .decisor label {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      font-size: 0.86rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .decisor .rev input { accent-color: var(--ok); margin-top: 3px; }
+    .decisor .brk input { accent-color: var(--violet); margin-top: 3px; }
+    .decisor label:hover { border-color: var(--stroke-strong); }
+
+    .tug {
+      display: flex;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--stroke);
+      background: var(--bg-soft);
+      margin: 10px 0 6px;
+    }
+
+    .tug .l { background: linear-gradient(90deg, var(--ok), #7dffc0); width: 50%; transition: width 0.25s; }
+    .tug .r { background: linear-gradient(90deg, #9b7dff, var(--violet)); flex: 1; }
+
+    .decisor-verdict {
+      font-family: var(--display);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 1.05rem;
+      text-align: center;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--stroke);
+      background: var(--bg-card);
+    }
+
+    pre.tpl {
+      background: var(--bg-elev);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      line-height: 1.65;
+    }
+
+    .footer-meta {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--stroke);
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .footer-meta code { font-family: var(--mono); color: #7ec8c9; font-size: 0.75rem; }
+
+    .tag-code {
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      background: var(--bg-soft);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #7ec8c9;
+      white-space: nowrap;
+    }
+
+    /* Calculadora de expectativa */
+    .calc {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 14px 0;
+    }
+
+    @media (max-width: 860px) {
+      .calc { grid-template-columns: 1fr 1fr; }
+    }
+
+    .calc label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.74rem;
+      color: var(--muted-2);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .calc input {
+      font: inherit;
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      color: var(--text);
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 9px 10px;
+      text-transform: none;
+    }
+
+    .calc input:focus { outline: none; border-color: var(--fire); box-shadow: var(--glow); }
+
+    /* Árbol de decisión */
+    .tree { display: grid; gap: 8px; margin: 14px 0; }
+
+    .tree-node {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 640px) {
+      .tree-node { grid-template-columns: 1fr; }
+    }
+
+    .tree-node strong { color: var(--text); }
+    .tree-node .yes, .tree-node .no {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .tree-node .yes { background: var(--ok-dim); color: var(--ok); }
+    .tree-node .no { background: var(--err-dim); color: #ff8a8a; }
+
+    .src-list { list-style: none; display: grid; gap: 8px; margin: 12px 0; }
+
+    .src-list li {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 0.86rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .src-list li em { color: var(--text); }
+    .src-list .why { display: block; font-size: 0.78rem; color: var(--muted-2); margin-top: 4px; }
+
+    .glossary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+
+    @media (max-width: 860px) {
+      .glossary { grid-template-columns: 1fr; }
+    }
+
+    .glossary div {
+      background: var(--bg-card);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+
+    .glossary dt { font-weight: 700; color: var(--fire); font-family: var(--mono); font-size: 0.82rem; }
+    .glossary dd { margin-top: 3px; }
+
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 8px;
+      background: var(--fire);
+      color: #111;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      z-index: 100;
+    }
+
+    .skip-link:focus { left: 12px; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <div class="shell">
+    <header class="hero">
+      <div class="eyebrow">
+        <span class="chip fire">Flash Signals</span>
+        <span class="chip violet">CRT · Candle Range Theory</span>
+        <span class="chip">BTC · US30 · XAUUSD</span>
+        <span class="chip ok">v2.0 · Investigación ampliada</span>
+      </div>
+      <h1>CRT — Candle Range Theory</h1>
+      <p class="hero-sub">
+        Cada vela de temporalidad alta es un rango con liquidez en sus extremos. CRT lee cómo el precio
+        barre uno de esos extremos y decide: <strong>revertir</strong> al lado opuesto o <strong>romper</strong> y expandir.
+      </p>
+      <div class="stats">
+        <div class="stat fire"><div class="val">C1 · C2 · C3</div><div class="lbl">Rango · manipulación · distribución</div></div>
+        <div class="stat teal"><div class="val">HTF → LTF</div><div class="lbl">Rango arriba, entrada abajo</div></div>
+        <div class="stat ok"><div class="val">Reverse</div><div class="lbl">Sweep + cierre dentro</div></div>
+        <div class="stat violet"><div class="val">Break</div><div class="lbl">Cierre fuera + desplazamiento</div></div>
+      </div>
+      <div class="disclaimer">
+        No es consejo financiero. CRT es un marco de lectura de liquidez, no una señal automática. Exige contexto HTF y confirmación LTF.
+      </div>
+    </header>
+
+    <nav class="tabs-wrap" aria-label="Tabla de contenidos">
+      <div class="tabs" role="tablist">
+        <a class="tab active" href="#resumen" data-tab="resumen" role="tab">Resumen</a>
+        <a class="tab" href="#origen" data-tab="origen" role="tab">Origen</a>
+        <a class="tab" href="#modelo" data-tab="modelo" role="tab">Modelo 3 velas</a>
+        <a class="tab" href="#micro" data-tab="micro" role="tab">Microestructura</a>
+        <a class="tab" href="#timeframes" data-tab="timeframes" role="tab">Timeframes</a>
+        <a class="tab" href="#entrada" data-tab="entrada" role="tab">Entrada</a>
+        <a class="tab" href="#gestion" data-tab="gestion" role="tab">Gestión</a>
+        <a class="tab" href="#casos" data-tab="casos" role="tab">Casos</a>
+        <a class="tab" href="#backtest" data-tab="backtest" role="tab">Backtest</a>
+        <a class="tab" href="#score" data-tab="score" role="tab">Scorecard</a>
+        <a class="tab new" href="#reverse-break" data-tab="reverse-break" role="tab">Reverse vs Break</a>
+        <a class="tab" href="#investigacion" data-tab="investigacion" role="tab">Investigación</a>
+      </div>
+    </nav>
+
+    <div id="contenido">
+    <!-- RESUMEN -->
+    <section id="resumen" class="panel active" role="tabpanel">
+      <h2>Resumen ejecutivo</h2>
+      <p class="section-lead">CRT reduce el mercado a una idea: el precio viaja de un pool de liquidez a otro, y los extremos de una vela HTF son esos pools.</p>
+
+      <div class="grid-3">
+        <div class="card amber-top">
+          <div class="card-title">Rango (C1)</div>
+          <p>Vela HTF de referencia. Su <strong>high</strong> y su <strong>low</strong> marcan dónde descansan stops y órdenes pendientes. El <strong>50%</strong> es el equilibrio.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">Manipulación (C2)</div>
+          <p>La vela siguiente <strong>barre</strong> un extremo de C1 (toma liquidez). Lo importante es <strong>dónde cierra</strong>: dentro o fuera del rango.</p>
+        </div>
+        <div class="card a">
+          <div class="card-title">Distribución (C3)</div>
+          <p>La expansión real. Si C2 cerró dentro → viaja al extremo opuesto (reverse). Si cerró fuera con fuerza → continúa (break).</p>
+        </div>
+      </div>
+
+      <div class="callout ok">
+        <strong>Regla de oro</strong>
+        El wick que barre no decide nada; decide el <em>cierre del cuerpo</em> de C2 respecto al rango de C1, leído con el sesgo HTF.
+      </div>
+
+      <h3>Niveles clave de cada rango</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nivel</th><th>Qué representa</th><th>Uso operativo</th></tr></thead>
+          <tbody>
+            <tr class="tone-b"><td><strong>CRT High</strong></td><td>Buy-side liquidity (stops de shorts, buy stops)</td><td>Target en reverse alcista · zona de sweep en reverse bajista</td></tr>
+            <tr class="tone-warn"><td><strong>CRT 50%</strong></td><td>Equilibrio del rango</td><td>Primer TP parcial · divide premium / discount</td></tr>
+            <tr class="tone-a"><td><strong>CRT Low</strong></td><td>Sell-side liquidity (stops de longs, sell stops)</td><td>Target en reverse bajista · zona de sweep en reverse alcista</td></tr>
+            <tr class="tone-info"><td><strong>Open C2</strong></td><td>Punto de referencia de la manipulación</td><td>Filtro: longs bajo el open en día alcista (Judas swing)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ORIGEN -->
+    <section id="origen" class="panel" role="tabpanel">
+      <h2>Origen y fundamentos</h2>
+      <p class="section-lead">
+        CRT no es una idea nueva: es la síntesis de conceptos con décadas de historia (trampas de ruptura,
+        teoría de subastas, caza de stops) aplicada al rango de una sola vela de temporalidad alta.
+      </p>
+
+      <h3>Genealogía del concepto</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Época</th><th>Autor / escuela</th><th>Concepto</th><th>Qué hereda CRT</th></tr></thead>
+          <tbody>
+            <tr class="tone-info"><td><strong>1930s</strong></td><td>Richard D. Wyckoff</td><td><em>Spring</em> y <em>upthrust</em>: falsa ruptura del rango de acumulación / distribución</td><td>El sweep de C2 que cierra dentro = spring (low) o upthrust (high)</td></tr>
+            <tr class="tone-violet"><td><strong>1980s</strong></td><td>J. Peter Steidlmayer (CBOT) · Market Profile</td><td>Teoría de subasta: el precio explora hasta encontrar rechazo o aceptación</td><td>La lógica reverse (rechazo) vs break (aceptación)</td></tr>
+            <tr class="tone-warn"><td><strong>1995</strong></td><td>Linda Raschke &amp; Larry Connors · <em>Street Smarts</em></td><td><em>Turtle Soup</em>: operar en contra de rupturas fallidas de máximos/mínimos de 20 días</td><td>El reverse es un turtle soup aplicado a una vela HTF</td></tr>
+            <tr class="tone-a"><td><strong>2010s</strong></td><td>ICT (Michael J. Huddleston)</td><td><em>Power of 3</em> (acumulación, manipulación, distribución), Judas swing, liquidez buy-side / sell-side</td><td>El esquema C1 / C2 / C3 y el vocabulario de liquidez</td></tr>
+            <tr class="tone-b"><td><strong>~2023–2024</strong></td><td>Comunidad CRT en redes sociales</td><td>Formalización sobre el rango de una vela HTF + anidado multi-timeframe</td><td>El nombre y la regla "el rango lo define la vela, no tú"</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Cuatro premisas</h3>
+      <div class="grid-2">
+        <div class="card amber-top">
+          <div class="card-title">1 · El precio busca liquidez</div>
+          <p>Los órdenes grandes necesitan contraparte. Esa contraparte está concentrada donde hay stops y órdenes pendientes: <strong>justo detrás de máximos y mínimos visibles</strong>.</p>
+        </div>
+        <div class="card accent">
+          <div class="card-title">2 · Cada vela HTF es una subasta</div>
+          <p>Una vela diaria es una subasta completa de 24 h con su rango de exploración. Sus extremos son los límites donde el mercado encontró rechazo.</p>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">3 · Fractalidad</div>
+          <p>El mismo patrón aparece en mensual, semanal, diario, H4 y H1. Un C3 diario puede contener varios CRT de H1 completos dentro de él.</p>
+        </div>
+        <div class="card a">
+          <div class="card-title">4 · El tiempo importa</div>
+          <p>La manipulación y la distribución tienden a ocurrir en ventanas concretas (Londres, apertura NY). Un sweep fuera de horario tiene menos peso.</p>
+        </div>
+      </div>
+
+      <h3>Qué aporta CRT frente a sus antecesores</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Aporte</th><th>Por qué importa</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Objetividad del rango</strong></td><td>El rango es el high/low de una vela cerrada. No se dibuja a mano, así que dos traders marcan los mismos niveles.</td></tr>
+            <tr><td><strong>Anidado HTF → LTF</strong></td><td>Conecta contexto (vela diaria) con ejecución (M15) en una sola lectura.</td></tr>
+            <tr><td><strong>Targets predefinidos</strong></td><td>50% y extremo opuesto salen del propio rango; no dependen de opinión.</td></tr>
+            <tr><td><strong>Invalidación clara</strong></td><td>El extremo del wick del sweep es el punto donde la tesis deja de ser válida.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <strong>Críticas legítimas (no ignorarlas)</strong>
+        <ul style="padding-left:1.1rem;margin-top:6px">
+          <li><strong>No hay estudios académicos que validen CRT como tal.</strong> Hay evidencia sobre piezas (stops agrupados, rupturas fallidas, momentum), no sobre el modelo completo.</li>
+          <li><strong>Narrativa a posteriori:</strong> en un gráfico pasado siempre hay un sweep que "explica" el movimiento. Eso no prueba poder predictivo.</li>
+          <li><strong>"Liquidez" no observable:</strong> en FX/CFD spot no ves el libro de órdenes real. La liquidez es una inferencia, no un dato.</li>
+          <li><strong>Sesgo de supervivencia en redes:</strong> se publican los CRT que funcionaron. Los que fallaron no aparecen.</li>
+          <li><strong>Mucho contenido comercial:</strong> cursos y mentorías con reglas vagas que no se pueden backtestear.</li>
+        </ul>
+        <p style="margin-top:8px">La respuesta correcta a estas críticas no es descartar CRT, sino <strong>definir reglas objetivas y medirlas</strong> (ver pestaña Backtest).</p>
+      </div>
+    </section>
+
+    <!-- MODELO -->
+    <section id="modelo" class="panel" role="tabpanel">
+      <h2>Modelo de 3 velas</h2>
+      <p class="section-lead">Las dos salidas posibles de un mismo rango. Mismo C1, distinto cierre de C2, resultado opuesto.</p>
+
+      <div class="grid-2">
+        <figure class="diagram">
+          <svg viewBox="0 0 320 210" role="img" aria-label="Diagrama CRT reverse alcista">
+            <line x1="20" y1="60" x2="300" y2="60" stroke="#ffd700" stroke-dasharray="5 4" stroke-opacity="0.6" />
+            <line x1="20" y1="100" x2="300" y2="100" stroke="#ffd700" stroke-dasharray="2 5" stroke-opacity="0.35" />
+            <line x1="20" y1="140" x2="300" y2="140" stroke="#ffd700" stroke-dasharray="5 4" stroke-opacity="0.6" />
+            <text x="302" y="57" fill="#ffd700" font-size="9" text-anchor="end">CRT High</text>
+            <text x="302" y="97" fill="#b8a8a8" font-size="9" text-anchor="end">50%</text>
+            <text x="302" y="153" fill="#ffd700" font-size="9" text-anchor="end">CRT Low</text>
+            <!-- C1 -->
+            <line x1="70" y1="60" x2="70" y2="140" stroke="#f07178" stroke-width="2" />
+            <rect x="58" y="72" width="24" height="56" fill="#f07178" rx="2" />
+            <text x="70" y="192" fill="#d3d3d3" font-size="11" text-anchor="middle">C1</text>
+            <!-- C2 sweep low, close inside -->
+            <line x1="150" y1="104" x2="150" y2="172" stroke="#f07178" stroke-width="2" />
+            <rect x="138" y="110" width="24" height="22" fill="#f07178" rx="2" />
+            <circle cx="150" cy="172" r="5" fill="none" stroke="#ff8c00" stroke-width="1.5" />
+            <text x="150" y="192" fill="#d3d3d3" font-size="11" text-anchor="middle">C2</text>
+            <text x="112" y="176" fill="#ff8c00" font-size="9">sweep</text>
+            <!-- C3 expansion up -->
+            <line x1="230" y1="54" x2="230" y2="136" stroke="#3ecf8e" stroke-width="2" />
+            <rect x="218" y="62" width="24" height="68" fill="#3ecf8e" rx="2" />
+            <text x="230" y="192" fill="#d3d3d3" font-size="11" text-anchor="middle">C3</text>
+            <text x="160" y="30" fill="#3ecf8e" font-size="12" text-anchor="middle" font-weight="700">REVERSE ↑</text>
+          </svg>
+          <figcaption>C2 barre el low y <strong>cierra dentro</strong> → C3 viaja al CRT High.</figcaption>
+        </figure>
+
+        <figure class="diagram">
+          <svg viewBox="0 0 320 210" role="img" aria-label="Diagrama CRT break bajista">
+            <line x1="20" y1="60" x2="300" y2="60" stroke="#ffd700" stroke-dasharray="5 4" stroke-opacity="0.6" />
+            <line x1="20" y1="100" x2="300" y2="100" stroke="#ffd700" stroke-dasharray="2 5" stroke-opacity="0.35" />
+            <line x1="20" y1="140" x2="300" y2="140" stroke="#ffd700" stroke-dasharray="5 4" stroke-opacity="0.6" />
+            <text x="302" y="57" fill="#ffd700" font-size="9" text-anchor="end">CRT High</text>
+            <text x="302" y="97" fill="#b8a8a8" font-size="9" text-anchor="end">50%</text>
+            <text x="22" y="136" fill="#ffd700" font-size="9">CRT Low</text>
+            <!-- C1 -->
+            <line x1="70" y1="60" x2="70" y2="140" stroke="#f07178" stroke-width="2" />
+            <rect x="58" y="72" width="24" height="56" fill="#f07178" rx="2" />
+            <text x="70" y="200" fill="#d3d3d3" font-size="11" text-anchor="middle">C1</text>
+            <!-- C2 close below -->
+            <line x1="150" y1="92" x2="150" y2="172" stroke="#f07178" stroke-width="2" />
+            <rect x="138" y="98" width="24" height="68" fill="#f07178" rx="2" />
+            <text x="150" y="200" fill="#d3d3d3" font-size="11" text-anchor="middle">C2</text>
+            <!-- C3 retest + continuation -->
+            <line x1="230" y1="138" x2="230" y2="192" stroke="#f07178" stroke-width="2" />
+            <rect x="218" y="150" width="24" height="36" fill="#f07178" rx="2" />
+            <circle cx="230" cy="138" r="5" fill="none" stroke="#c4a8ff" stroke-width="1.5" />
+            <text x="244" y="132" fill="#c4a8ff" font-size="9">retest</text>
+            <text x="230" y="200" fill="#d3d3d3" font-size="11" text-anchor="middle" dx="22">C3</text>
+            <text x="160" y="30" fill="#c4a8ff" font-size="12" text-anchor="middle" font-weight="700">BREAK ↓</text>
+          </svg>
+          <figcaption>C2 <strong>cierra fuera</strong> con desplazamiento → CRT Low pasa a resistencia, C3 continúa.</figcaption>
+        </figure>
+      </div>
+
+      <h3>Anatomía paso a paso (reverse alcista)</h3>
+      <div class="flow">
+        <div class="flow-step"><strong>C1</strong> forma el rango HTF · marca High, Low y 50%</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><strong>C2</strong> abre, hace Judas swing bajo el CRT Low y toma sell-side liquidity</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">C2 <strong>cierra de vuelta dentro</strong> del rango · en LTF aparece MSS / CISD alcista</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><strong>C3</strong> distribuye: 50% primero, luego CRT High (buy-side liquidity)</div>
+      </div>
+
+      <details class="fold">
+        <summary>Variantes del modelo</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Variante</th><th>Descripción</th><th>Nota</th></tr></thead>
+              <tbody>
+                <tr><td><strong>CRT clásico (3 velas)</strong></td><td>C1 rango · C2 sweep · C3 expansión</td><td>El más limpio y fácil de validar</td></tr>
+                <tr><td><strong>CRT multi-vela</strong></td><td>El rango lo forman varias velas (consolidación)</td><td>Usar high/low del bloque completo</td></tr>
+                <tr><td><strong>Sweep + expansión en C2</strong></td><td>C2 barre un lado y cierra cerca del opuesto</td><td>La entrada ya pasó; esperar el siguiente rango</td></tr>
+                <tr><td><strong>Inside bar C2</strong></td><td>C2 no toca ningún extremo</td><td>No hay CRT; el rango se extiende a C1+C2</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- MICROESTRUCTURA -->
+    <section id="micro" class="panel" role="tabpanel">
+      <h2>Microestructura: por qué funciona (cuando funciona)</h2>
+      <p class="section-lead">
+        CRT se apoya en cómo se distribuyen las órdenes alrededor de máximos y mínimos. Entender el mecanismo
+        te permite saber cuándo el patrón tiene sentido y cuándo es solo una forma bonita en el gráfico.
+      </p>
+
+      <h3>Dónde están las órdenes</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Zona</th><th>Órdenes acumuladas</th><th>Quién las pone</th></tr></thead>
+          <tbody>
+            <tr class="tone-b"><td><strong>Justo sobre el CRT High</strong></td><td>Buy stops (stop loss de shorts) + buy stops de entrada en ruptura</td><td>Vendedores protegiéndose y traders de breakout</td></tr>
+            <tr class="tone-warn"><td><strong>En el High / Low exacto</strong></td><td>Take profits y órdenes límite</td><td>Traders que salen en el nivel visible</td></tr>
+            <tr class="tone-a"><td><strong>Justo bajo el CRT Low</strong></td><td>Sell stops (stop loss de longs) + sell stops de entrada en ruptura</td><td>Compradores protegiéndose y traders de breakdown</td></tr>
+            <tr class="tone-info"><td><strong>Números redondos cercanos</strong></td><td>Concentración extra de stops y TPs</td><td>Todos (sesgo humano hacia números redondos)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <strong>Evidencia</strong>
+        Carol Osler (Journal of Finance, 2003) mostró con datos reales de órdenes de un banco que los <em>stop loss</em> se agrupan justo más allá de los números redondos y los <em>take profit</em> justo en ellos.
+        En un segundo trabajo (Journal of International Money and Finance, 2005) documentó que cuando esos stops se disparan pueden generar <em>cascadas de precio</em>: movimientos rápidos que se autoalimentan.
+        Es la base empírica más sólida para la idea de "pools de liquidez" que usa CRT.
+      </div>
+
+      <h3>Dos mecanismos opuestos tras el sweep</h3>
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Absorción → Reverse <span class="badge up">Hipótesis</span></div>
+          <ul>
+            <li>Un participante grande quiere <strong>comprar</strong> mucho sin mover el precio en su contra.</li>
+            <li>Necesita vendedores. Los sell stops bajo el low son vendedores forzados.</li>
+            <li>El precio baja, dispara los stops, el grande los <strong>absorbe</strong> con órdenes límite.</li>
+            <li>Una vez consumida la oferta, no queda presión vendedora → el precio vuelve dentro y viaja al lado opuesto.</li>
+          </ul>
+          <p style="margin-top:8px"><strong>Huella:</strong> wick largo, volumen alto en el sweep, cierre dentro, sin continuación.</p>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">Cascada → Break <span class="badge neu">Hipótesis</span></div>
+          <ul>
+            <li>Los stops disparados generan órdenes de mercado en la misma dirección.</li>
+            <li>Si <strong>no hay absorción</strong> al otro lado, el precio acelera (cascada, Osler 2005).</li>
+            <li>Nuevos participantes informados entran a favor (noticia, flujo macro).</li>
+            <li>El precio <strong>acepta</strong> fuera del rango: pasa tiempo y volumen ahí.</li>
+          </ul>
+          <p style="margin-top:8px"><strong>Huella:</strong> cuerpo grande, FVG, cierres consecutivos fuera, retest que aguanta.</p>
+        </div>
+      </div>
+
+      <h3>Traducción a teoría de subastas (Market Profile)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Concepto de subasta</th><th>Significado</th><th>Equivalente CRT</th></tr></thead>
+          <tbody>
+            <tr class="tone-a"><td><strong>Actividad responsiva</strong></td><td>Participantes que reaccionan contra un precio que consideran injusto (fuera de valor)</td><td>Reverse: el sweep encuentra respuesta contraria</td></tr>
+            <tr class="tone-violet"><td><strong>Actividad iniciativa</strong></td><td>Participantes que empujan el precio hacia un nuevo valor</td><td>Break: el sweep es el inicio de una nueva zona de valor</td></tr>
+            <tr class="tone-a"><td><strong>Rechazo / exceso</strong></td><td>Cola larga, pocos prints en el extremo: la subasta terminó ahí</td><td>Wick largo de C2 fuera del rango</td></tr>
+            <tr class="tone-violet"><td><strong>Aceptación</strong></td><td>Tiempo y volumen negociados fuera del valor previo</td><td>Varios cierres LTF fuera del rango + retest que respeta</td></tr>
+            <tr class="tone-warn"><td><strong>Subasta fallida</strong></td><td>El precio rompe pero no atrae participación y vuelve</td><td>Break fallido → reverse de alta probabilidad</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Particularidades por activo</h3>
+      <div class="grid-3">
+        <div class="card amber-top">
+          <div class="card-title">US30 <span class="badge fire">Índice</span></div>
+          <ul>
+            <li>La apertura cash (09:30 NY) concentra la mayor liquidez del día.</li>
+            <li>El CFD sigue al futuro YM: usa el volumen del futuro como referencia.</li>
+            <li>Los gaps de apertura crean rangos que CRT puede usar (gap = C1 incompleta).</li>
+            <li>Días de earnings de componentes grandes distorsionan los rangos.</li>
+          </ul>
+        </div>
+        <div class="card accent">
+          <div class="card-title">XAUUSD <span class="badge neu">Metal</span></div>
+          <ul>
+            <li>Londres (03:00–05:00 NY) suele fijar el sweep; NY distribuye con datos macro.</li>
+            <li>Rollover 17:00 NY: spreads se abren y generan wicks falsos. Ignorar sweeps ahí.</li>
+            <li>El futuro COMEX (GC) da el volumen real para validar absorción.</li>
+            <li>Muy sensible a DXY y real yields: confirma el sesgo con ellos.</li>
+          </ul>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">BTC <span class="badge up">Cripto</span></div>
+          <ul>
+            <li>La liquidez más visible son las <strong>liquidaciones</strong> de posiciones apalancadas (mapas de liquidación).</li>
+            <li>Cascadas de liquidación = break violento; su final suele marcar reverse.</li>
+            <li>Fin de semana: menos liquidez, rangos poco fiables; el lunes el CME puede dejar gap.</li>
+            <li>Funding y open interest ayudan a saber qué lado está sobrecargado.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <strong>Limitación del CFD</strong>
+        En CFDs el "volumen" es número de ticks del bróker, no volumen real. Para validar absorción o aceptación, mira el futuro equivalente (YM para US30, GC para oro) o el volumen agregado de exchanges para BTC.
+      </div>
+    </section>
+
+    <!-- TIMEFRAMES -->
+    <section id="timeframes" class="panel" role="tabpanel">
+      <h2>Alineación de timeframes</h2>
+      <p class="section-lead">El rango se define en HTF, la entrada se ejecuta en LTF. Nunca al revés.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Perfil</th><th>Rango (C1)</th><th>Entrada (LTF)</th><th>Duración típica</th></tr></thead>
+          <tbody>
+            <tr class="tone-violet"><td><strong>Swing macro</strong></td><td>Mensual</td><td>Diario / H4</td><td>Semanas</td></tr>
+            <tr class="tone-info"><td><strong>Swing</strong></td><td>Semanal</td><td>H4 / H1</td><td>Días</td></tr>
+            <tr class="tone-a"><td><strong>Intradía</strong></td><td>Diario</td><td>H1 / M15</td><td>Sesión</td></tr>
+            <tr class="tone-warn"><td><strong>Scalp</strong></td><td>H4</td><td>M15 / M5</td><td>Horas</td></tr>
+            <tr><td><strong>Micro</strong></td><td>H1</td><td>M5 / M1</td><td>Minutos</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Velas H4 clave (hora NY)</h3>
+      <div class="grid-3">
+        <div class="card accent">
+          <div class="card-title">01:00 <span class="badge neu">Asia → Londres</span></div>
+          <p>Rango de Asia. La vela de las 05:00 suele barrerlo durante Londres.</p>
+        </div>
+        <div class="card amber-top">
+          <div class="card-title">05:00 <span class="badge fire">Londres</span></div>
+          <p>Manipulación típica del día. Su sweep marca muchas veces el high/low diario.</p>
+        </div>
+        <div class="card a">
+          <div class="card-title">09:00 <span class="badge up">NY</span></div>
+          <p>Distribución. La vela de NY entrega la expansión (C3) o revierte Londres.</p>
+        </div>
+      </div>
+
+      <h3>Anidado fractal: CRT dentro de CRT</h3>
+      <div class="flow">
+        <div class="flow-step"><strong>Semanal:</strong> la vela de la semana pasada es C1. Esta semana (C2) barre su low el martes.</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><strong>Diario:</strong> el martes es a la vez C2 semanal y un CRT diario propio (lunes = C1, martes = C2 que barre y cierra dentro).</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><strong>H4 / H1:</strong> dentro del martes, la vela H4 de 05:00 barre el rango de Asia y cierra dentro. Aquí se ejecuta.</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step">Tres temporalidades dicen lo mismo → setup de máxima calidad. <strong>Target:</strong> escalonado (50% H4 → High diario → High semanal).</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Combinación</th><th>Lectura</th><th>Acción</th></tr></thead>
+          <tbody>
+            <tr class="tone-a"><td>HTF reverse + LTF reverse en la misma dirección</td><td>Alineación completa</td><td>Size 1.0× · dejar runner</td></tr>
+            <tr class="tone-info"><td>HTF break + LTF reverse a favor del break (sweep del pullback)</td><td>Continuación con entrada refinada</td><td>Size 1.0× · target proyección HTF</td></tr>
+            <tr class="tone-warn"><td>HTF sin señal + LTF CRT limpio</td><td>Solo intradía, sin contexto</td><td>Size 0.5× · target solo 50% / extremo LTF</td></tr>
+            <tr class="tone-b"><td>HTF en una dirección + LTF en la contraria</td><td>Conflicto: el LTF suele perder</td><td>No operar, o scalp mínimo hasta el 50%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <strong>Por activo</strong>
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit">US30:</strong> las velas H4 09:00 y H1 09:30–10:30 son las más limpias.
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit">XAUUSD:</strong> Londres 03:00–05:00 manipula, NY distribuye.
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit">BTC:</strong> 24/7; usar Diario UTC y velas H4 alineadas a NY; los fines de semana los rangos son poco fiables.
+      </div>
+    </section>
+
+    <!-- ENTRADA -->
+    <section id="entrada" class="panel" role="tabpanel">
+      <h2>Modelo de entrada</h2>
+      <p class="section-lead">Secuencia fija. Si falta un paso, no hay trade.</p>
+
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div><strong>Sesgo HTF</strong><span>Dirección del draw on liquidity en el TF superior al rango</span></div></div>
+        <div class="step"><div class="step-num">2</div><div><strong>Marcar C1</strong><span>High, Low, 50% de la vela HTF de referencia</span></div></div>
+        <div class="step"><div class="step-num">3</div><div><strong>Esperar sweep en C2</strong><span>Toma de un extremo, idealmente en killzone</span></div></div>
+        <div class="step"><div class="step-num">4</div><div><strong>Leer el cierre</strong><span>¿Dentro (reverse) o fuera con desplazamiento (break)?</span></div></div>
+        <div class="step"><div class="step-num">5</div><div><strong>Confirmación LTF</strong><span>MSS / CISD + FVG u order block de entrada</span></div></div>
+        <div class="step"><div class="step-num">6</div><div><strong>Ejecutar</strong><span>Entrada en el FVG, stop tras el extremo del sweep, TP en 50% y extremo opuesto</span></div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Confirmaciones válidas <span class="badge up">Sí</span></div>
+          <ul>
+            <li><strong>MSS</strong>: ruptura del último swing LTF tras el sweep</li>
+            <li><strong>CISD</strong>: cierre por encima/debajo del open de la secuencia de velas opuestas</li>
+            <li><strong>FVG</strong> creado en el desplazamiento</li>
+            <li><strong>SMT</strong>: divergencia entre activos correlacionados (US30 vs NAS, XAU vs XAG)</li>
+          </ul>
+        </div>
+        <div class="card b">
+          <div class="card-title">No son confirmación <span class="badge down">No</span></div>
+          <ul>
+            <li>Solo el wick tocando el extremo</li>
+            <li>Un indicador cruzando (RSI, MACD) sin estructura</li>
+            <li>Entrar en mitad del rango sin sweep previo</li>
+            <li>Rango HTF todavía abierto (C1 sin cerrar)</li>
+          </ul>
+        </div>
+      </div>
+
+      <details class="fold">
+        <summary>Tipos de entrada</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Entrada</th><th>Trigger</th><th>Pros</th><th>Contras</th></tr></thead>
+              <tbody>
+                <tr class="tone-a"><td><strong>Agresiva</strong></td><td>Primer cierre LTF de vuelta dentro del rango</td><td>Mejor R:R</td><td>Más stops falsos</td></tr>
+                <tr class="tone-info"><td><strong>Estándar</strong></td><td>Retroceso al FVG tras MSS</td><td>Equilibrio R:R / tasa</td><td>A veces no retrocede</td></tr>
+                <tr class="tone-warn"><td><strong>Conservadora</strong></td><td>Cierre de C2 HTF confirmado + retest</td><td>Mayor tasa de acierto</td><td>R:R menor, entra tarde</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- GESTIÓN -->
+    <section id="gestion" class="panel" role="tabpanel">
+      <h2>Gestión del trade</h2>
+      <p class="section-lead">Stops, targets y sizing. El rango ya te da los niveles; no los inventes.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Elemento</th><th>Reverse</th><th>Break</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Stop</strong></td><td>Detrás del extremo del wick del sweep (+ buffer spread)</td><td>Dentro del rango, tras el swing del retest</td></tr>
+            <tr><td><strong>TP1</strong></td><td>CRT 50% · cerrar 50% y stop a BE</td><td>Primer pool de liquidez externo</td></tr>
+            <tr><td><strong>TP2</strong></td><td>Extremo opuesto del rango</td><td>Proyección del rango (1× altura de C1)</td></tr>
+            <tr><td><strong>Runner</strong></td><td>Liquidez HTF más allá del extremo opuesto</td><td>Siguiente PD array HTF</td></tr>
+            <tr><td><strong>R:R mínimo</strong></td><td>1:2 al extremo opuesto</td><td>1:2 a la proyección</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Sizing</h3>
+      <div class="stats" style="margin-top:0">
+        <div class="stat ok"><div class="val">1.0×</div><div class="lbl">Setup A+ (score ≥8)</div></div>
+        <div class="stat teal"><div class="val">0.5×</div><div class="lbl">Score 7 o contra sesgo</div></div>
+        <div class="stat fire"><div class="val">0.6×</div><div class="lbl">f_corr US30 + BTC</div></div>
+        <div class="stat err"><div class="val">0×</div><div class="lbl">Score &lt;7 o noticia roja</div></div>
+      </div>
+
+      <div class="callout warn" style="margin-top:14px">
+        <strong>Fórmula</strong>
+        <code style="font-family:var(--mono);font-size:0.82rem;color:var(--gold)">size_efectivo = size_plan × f_score × f_corr</code><br />
+        f_score: 1.0 (≥8) · 0.5 (7) · 0 (&lt;7) · f_corr: 1.0 un activo · 0.6 dos correlacionados
+      </div>
+
+      <details class="fold">
+        <summary>Invalidaciones</summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0">
+            <table>
+              <thead><tr><th>Evento</th><th>Acción</th></tr></thead>
+              <tbody>
+                <tr><td>Reverse: C2 HTF cierra fuera del rango</td><td>Cancelar reverse; evaluar break</td></tr>
+                <tr><td>Break: precio vuelve y cierra dentro del rango</td><td>Cancelar break; puede ser un reverse tardío</td></tr>
+                <tr><td>Se barren los dos extremos (outside bar)</td><td>Rango sin dirección; flat y esperar nuevo C1</td></tr>
+                <tr><td>Noticia de alto impacto dentro de C2</td><td>No operar el sweep; dejar que cierre la vela</td></tr>
+                <tr><td>El 50% no se alcanza en la sesión esperada</td><td>Reducir a la mitad o salir en BE</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <div class="callout danger">
+        <strong>Errores comunes</strong>
+        Marcar el rango en una vela que no ha cerrado · Operar el sweep sin sesgo HTF · Confundir cualquier wick con un sweep ·
+        Poner el stop en el extremo del rango en vez de tras el wick · Operar rangos de fin de semana en BTC ·
+        Forzar reverse cuando la vela cerró claramente fuera.
+      </div>
+
+      <h3>Plantilla bitácora</h3>
+      <pre class="tpl">Fecha / activo:
+TF rango (C1) / TF entrada:
+Sesgo HTF + draw on liquidity:
+CRT High / 50% / Low:
+Sweep: lado + hora (killzone):
+Cierre C2: dentro (reverse) / fuera (break):
+Confirmación LTF (MSS / CISD / FVG / SMT):
+Entrada / stop / TP1 / TP2:
+Size × f_score × f_corr:
+Resultado + lección:</pre>
+    </section>
+
+    <!-- CASOS -->
+    <section id="casos" class="panel" role="tabpanel">
+      <h2>Casos prácticos</h2>
+      <p class="section-lead">
+        Ejemplos <strong style="color:var(--text)">hipotéticos con precios ilustrativos</strong> para practicar la lectura. No son operaciones reales;
+        sirven para ver el razonamiento completo, incluido un caso que sale mal.
+      </p>
+
+      <details class="fold" open>
+        <summary>Caso 1 · US30 · Reverse alcista intradía <span class="badge up">+2.96R</span></summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0 0 12px">
+            <table>
+              <thead><tr><th>Paso</th><th>Dato</th><th>Lectura</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Sesgo HTF</strong></td><td>Semanal alcista, precio en discount del rango semanal</td><td>Buscar longs</td></tr>
+                <tr><td><strong>C1 (diario ayer)</strong></td><td>High 42,850 · Low 42,380 · 50% 42,615</td><td>Rango de 470 pts</td></tr>
+                <tr><td><strong>C2 (hoy, H4 05:00)</strong></td><td>Barre hasta 42,330 y el H4 cierra en 42,420</td><td>Sweep de 50 pts, cierre dentro → candidato reverse</td></tr>
+                <tr><td><strong>Confirmación M15</strong></td><td>MSS sobre 42,470 · FVG 42,440–42,455</td><td>Cambio de estructura confirmado</td></tr>
+                <tr><td><strong>Entrada / stop</strong></td><td>42,450 / 42,315 (135 pts de riesgo)</td><td>Stop tras el wick + buffer</td></tr>
+                <tr><td><strong>TP1 / TP2</strong></td><td>42,615 (+1.22R) / 42,850 (+2.96R)</td><td>50% y CRT High</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="color:var(--muted);font-size:0.9rem"><strong style="color:var(--text)">Por qué funciona:</strong> sweep contra el sesgo (Judas), en discount, en Londres, cierre dentro y MSS. Cinco factores reverse, ninguno break.</p>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>Caso 2 · XAUUSD · Break bajista con dato macro <span class="badge neu">+2.4R</span></summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0 0 12px">
+            <table>
+              <thead><tr><th>Paso</th><th>Dato</th><th>Lectura</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Sesgo HTF</strong></td><td>Diario bajista, DXY y real yields subiendo</td><td>Buscar shorts</td></tr>
+                <tr><td><strong>C1 (H4 05:00)</strong></td><td>High 4,012 · Low 3,996 · 50% 4,004</td><td>Rango de 16 USD, compresión en Londres</td></tr>
+                <tr><td><strong>C2 (H4 09:00, CPI)</strong></td><td>Cierra en 3,984 con FVG en 3,990–3,994</td><td>Cierre fuera + desplazamiento → break</td></tr>
+                <tr><td><strong>Retest M15</strong></td><td>Sube a 3,993, rechaza, CRT Low actúa como resistencia</td><td>Aceptación confirmada</td></tr>
+                <tr><td><strong>Entrada / stop</strong></td><td>3,992 / 4,001 (9 USD de riesgo)</td><td>Stop dentro del rango, tras el retest</td></tr>
+                <tr><td><strong>TP1 / TP2</strong></td><td>3,980 (+1.33R, proyección 1×) / 3,970 (+2.4R, low del día anterior)</td><td>Proyección y liquidez externa</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="color:var(--muted);font-size:0.9rem"><strong style="color:var(--text)">Por qué es break y no reverse:</strong> a favor del sesgo, C1 era compresión, dato macro como catalizador, cierre de cuerpo fuera con FVG y retest que aguanta.</p>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>Caso 3 · BTC · Reverse de fin de semana que falla <span class="badge down">−1R</span></summary>
+        <div class="fold-body">
+          <div class="table-wrap" style="margin:0 0 12px">
+            <table>
+              <thead><tr><th>Paso</th><th>Dato</th><th>Lectura</th></tr></thead>
+              <tbody>
+                <tr><td><strong>C1 (sábado)</strong></td><td>High 98,400 · Low 96,900</td><td>Rango de fin de semana</td></tr>
+                <tr><td><strong>C2 (domingo)</strong></td><td>Barre hasta 96,600 y cierra en 97,100</td><td>Parece reverse de manual</td></tr>
+                <tr><td><strong>Entrada / stop</strong></td><td>97,200 / 96,450</td><td>Riesgo 750 USD</td></tr>
+                <tr><td><strong>Lunes</strong></td><td>Apertura de EE. UU. con flujo vendedor; baja a 95,800</td><td>Stop ejecutado: −1R</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout danger" style="margin:0">
+            <strong>Lecciones</strong>
+            Rango de fin de semana con poca liquidez · Sin sesgo HTF escrito · Sin killzone · El lunes el mercado "real" redefine el rango.
+            El patrón estaba, el <em>contexto</em> no. En el scorecard habría sacado 4/10.
+          </div>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>Caso 4 · US30 · Reverse que se convierte en break (flip) <span class="badge fire">−0.5R → +1.5R</span></summary>
+        <div class="fold-body">
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:10px">
+            C1 H1 barrida por arriba y C2 cierra dentro → short reverse con 0.5× de size. C3 abre, vuelve a subir y
+            <strong style="color:var(--text)">cierra fuera con un cuerpo grande y FVG</strong>. El reverse queda invalidado: se cierra en −0.5R.
+            En el retest del CRT High (ahora soporte) se toma el break a favor, con 0.5× de size, y llega a la proyección con +4R sobre esa mitad (+2R).
+            Resultado neto: −0.5R + 2R = <strong style="color:var(--text)">+1.5R</strong>.
+          </p>
+          <div class="callout ok" style="margin:0">
+            <strong>Lección</strong>
+            Un reverse invalidado por aceptación fuera del rango es información, no un fracaso. El mercado te dijo qué lado tiene la iniciativa.
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- BACKTEST -->
+    <section id="backtest" class="panel" role="tabpanel">
+      <h2>Validar CRT con datos</h2>
+      <p class="section-lead">
+        Como no hay estudios que validen CRT directamente, la única forma honesta de usarlo es medir tu versión con reglas objetivas.
+        Si una regla no se puede escribir de forma que dos personas la marquen igual, no se puede backtestear.
+      </p>
+
+      <h3>Protocolo en 7 pasos</h3>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div><strong>Escribir reglas objetivas</strong><span>Definiciones numéricas de sweep, cierre, desplazamiento y confirmación (tabla abajo)</span></div></div>
+        <div class="step"><div class="step-num">2</div><div><strong>Separar modelos</strong><span>Reverse y break se miden por separado; nunca mezclar resultados</span></div></div>
+        <div class="step"><div class="step-num">3</div><div><strong>Muestra suficiente</strong><span>Mínimo 100 trades por modelo y activo antes de sacar conclusiones</span></div></div>
+        <div class="step"><div class="step-num">4</div><div><strong>In-sample / out-of-sample</strong><span>Ajustar reglas en el 70% de los datos; validar en el 30% restante sin tocar nada</span></div></div>
+        <div class="step"><div class="step-num">5</div><div><strong>Costes reales</strong><span>Incluir spread, comisión y deslizamiento (sobre todo en noticias y rollover)</span></div></div>
+        <div class="step"><div class="step-num">6</div><div><strong>Segmentar</strong><span>Resultados por activo, sesión, día de la semana y régimen (tendencia / rango)</span></div></div>
+        <div class="step"><div class="step-num">7</div><div><strong>Forward test</strong><span>1–3 meses en demo o size mínimo antes de size completo</span></div></div>
+      </div>
+
+      <h3>Definiciones objetivas sugeridas</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Concepto</th><th>Definición medible (punto de partida)</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Sweep</strong></td><td>C2 supera el extremo de C1 en al menos 1 tick y como máximo un 30% del rango de C1</td></tr>
+            <tr><td><strong>Cierre dentro</strong></td><td>El cuerpo de C2 cierra entre el High y el Low de C1</td></tr>
+            <tr><td><strong>Cierre fuera</strong></td><td>El cuerpo de C2 cierra más allá del extremo en al menos un 10% del rango de C1</td></tr>
+            <tr><td><strong>Desplazamiento</strong></td><td>Vela LTF con cuerpo ≥ 1.5× el cuerpo medio de las últimas 10 velas</td></tr>
+            <tr><td><strong>FVG</strong></td><td>El low de la vela 3 queda por encima del high de la vela 1 (o al revés para bajista)</td></tr>
+            <tr><td><strong>MSS</strong></td><td>Cierre LTF más allá del último swing high/low de 3 velas tras el sweep</td></tr>
+            <tr><td><strong>Killzone</strong></td><td>Londres 02:00–05:00 NY · NY 07:00–10:00 NY</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Métricas que importan</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Métrica</th><th>Fórmula / definición</th><th>Umbral razonable</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Expectativa (R)</strong></td><td>WR × ganancia media − (1 − WR) × pérdida media</td><td>&gt; +0.2R por trade tras costes</td></tr>
+            <tr><td><strong>Profit factor</strong></td><td>Suma de ganancias / suma de pérdidas</td><td>&gt; 1.3</td></tr>
+            <tr><td><strong>Max drawdown</strong></td><td>Mayor caída de pico a valle en R</td><td>Tolerable para tu cuenta (p. ej. &lt; 10R)</td></tr>
+            <tr><td><strong>Racha perdedora</strong></td><td>Máximo de pérdidas consecutivas</td><td>Conocerla antes de operar real</td></tr>
+            <tr><td><strong>MAE / MFE</strong></td><td>Máxima excursión adversa / favorable de cada trade</td><td>Sirve para ajustar stop y TP</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Calculadora de expectativa</h3>
+      <div class="calc" id="calc">
+        <label>Win rate (%)<input type="number" id="c-wr" value="45" min="0" max="100" step="1" /></label>
+        <label>Ganancia media (R)<input type="number" id="c-win" value="2" min="0" step="0.1" /></label>
+        <label>Pérdida media (R)<input type="number" id="c-loss" value="1" min="0.1" step="0.1" /></label>
+        <label>Trades / mes<input type="number" id="c-n" value="20" min="1" step="1" /></label>
+      </div>
+      <div class="stats" style="margin-top:0">
+        <div class="stat ok"><div class="val" id="o-exp">—</div><div class="lbl">Expectativa por trade</div></div>
+        <div class="stat teal"><div class="val" id="o-be">—</div><div class="lbl">Win rate de breakeven</div></div>
+        <div class="stat fire"><div class="val" id="o-month">—</div><div class="lbl">R esperado al mes</div></div>
+        <div class="stat violet"><div class="val" id="o-pf">—</div><div class="lbl">Profit factor</div></div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:18px">
+        <table>
+          <thead><tr><th>R:R del trade</th><th>1:1</th><th>1:1.5</th><th>1:2</th><th>1:3</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Win rate mínimo (sin costes)</strong></td><td>50%</td><td>40%</td><td>33.3%</td><td>25%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <strong>Sesgos que invalidan un backtest de CRT</strong>
+        <ul style="padding-left:1.1rem;margin-top:6px">
+          <li><strong>Look-ahead:</strong> marcar C1 antes de que cierre, o decidir "reverse" viendo ya el C3.</li>
+          <li><strong>Etiquetado a posteriori:</strong> llamar "sweep" solo a los que funcionaron.</li>
+          <li><strong>Sobreajuste:</strong> añadir filtros hasta que el histórico salga perfecto (y falle en vivo).</li>
+          <li><strong>Muestra pequeña:</strong> 20 trades buenos no prueban nada; la varianza domina.</li>
+          <li><strong>Ignorar costes:</strong> en XAU y US30 el spread en noticias puede comerse el edge entero.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SCORECARD -->
+    <section id="score" class="panel" role="tabpanel">
+      <h2>Scorecard pre-trade</h2>
+      <p class="section-lead">Marca cada check. Mínimo <strong style="color:var(--text)">7/10</strong> para operar. Persistencia local en este navegador <span class="js-only-hint">(requiere scripts en el preview)</span>.</p>
+
+      <div class="score-meta">
+        <span>Score: <strong id="score-num">0</strong> / 10</span>
+        <span id="score-verdict" class="fail">NO TRADE</span>
+      </div>
+      <div class="score-bar-wrap"><div class="score-bar" id="score-bar"></div></div>
+
+      <ul class="score-list" id="score-list">
+        <li class="score-item"><input type="checkbox" /><span class="n">01</span><span>¿Sesgo HTF definido por escrito?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">02</span><span>¿C1 está cerrada y marcada (High / 50% / Low)?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">03</span><span>¿El sweep ocurrió en killzone (Londres / NY)?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">04</span><span>¿Clasifiqué reverse o break según el cierre de C2?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">05</span><span>¿Hay MSS / CISD en LTF?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">06</span><span>¿Entrada en FVG / OB, no a mercado en medio del rango?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">07</span><span>¿Stop tras el wick del sweep y R:R ≥ 1:2?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">08</span><span>¿Sin noticia roja en la ventana del trade?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">09</span><span>¿Size ajustado por score y correlación?</span></li>
+        <li class="score-item"><input type="checkbox" /><span class="n">10</span><span>¿Invalidación escrita?</span></li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>&lt;7 → no trade</strong>
+        Anota score y modelo (reverse / break) en bitácora / historial Flash Signals con tag
+        <span class="tag-code">CRT_REVERSE</span> o <span class="tag-code">CRT_BREAK</span>.
+      </div>
+    </section>
+
+    <!-- REVERSE VS BREAK -->
+    <section id="reverse-break" class="panel" role="tabpanel">
+      <h2>Reverse vs Break: ¿cuándo usar cada uno?</h2>
+      <p class="section-lead">
+        El mismo sweep puede acabar en reversión o en continuación. La diferencia está en el contexto: sesgo HTF,
+        ubicación en premium / discount, calidad del cierre y momento del día.
+      </p>
+
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Reverse <span class="badge up">Turtle soup</span></div>
+          <p>El sweep es una <strong>trampa</strong>: toma liquidez y el precio vuelve a viajar al extremo opuesto.</p>
+          <ul>
+            <li>C2 barre con wick y <strong>el cuerpo cierra dentro</strong> del rango</li>
+            <li>El sweep ocurre en zona HTF <strong>premium</strong> (para shorts) o <strong>discount</strong> (para longs)</li>
+            <li>El sweep va <strong>contra</strong> el draw on liquidity HTF</li>
+            <li>Hay SMT divergence o agotamiento de momentum</li>
+          </ul>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">Break <span class="badge neu">Continuación</span></div>
+          <p>El sweep es <strong>intención real</strong>: el precio acepta fuera del rango y expande.</p>
+          <ul>
+            <li>C2 <strong>cierra fuera</strong> con cuerpo grande y desplazamiento</li>
+            <li>La ruptura va <strong>a favor</strong> del draw on liquidity HTF</li>
+            <li>Deja un <strong>FVG</strong> fuera del rango y el extremo roto se respeta en el retest</li>
+            <li>Hay más liquidez obvia más allá (equal highs/lows, PD array HTF)</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Tabla de decisión</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Factor</th><th>Favorece Reverse</th><th>Favorece Break</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Sesgo HTF</strong></td><td>Sweep en contra del sesgo (Judas swing)</td><td>Ruptura a favor del sesgo</td></tr>
+            <tr><td><strong>Ubicación</strong></td><td>Extremo en premium (high) o discount (low) HTF</td><td>Rango en equilibrio, con espacio hasta el siguiente PD array</td></tr>
+            <tr><td><strong>Cierre de C2</strong></td><td>Wick largo, cuerpo dentro del rango</td><td>Cuerpo cierra fuera, wick corto en la dirección de ruptura</td></tr>
+            <tr><td><strong>Desplazamiento</strong></td><td>Sweep lento, velas solapadas, sin FVG fuera</td><td>Velas grandes, FVG fuera del rango</td></tr>
+            <tr><td><strong>Retest</strong></td><td>Vuelve dentro y no lo recupera</td><td>El extremo roto actúa como soporte / resistencia</td></tr>
+            <tr><td><strong>Liquidez objetivo</strong></td><td>El extremo opuesto está limpio (equal highs/lows sin tocar)</td><td>Hay pools más grandes fuera del rango</td></tr>
+            <tr><td><strong>Horario</strong></td><td>Sweep en Londres (05:00 H4) o apertura NY: manipulación</td><td>Ruptura en NY con volumen tras la manipulación de Londres</td></tr>
+            <tr><td><strong>SMT</strong></td><td>Un activo barre y el correlacionado no (divergencia)</td><td>Ambos activos rompen juntos</td></tr>
+            <tr><td><strong>Noticias</strong></td><td>Sweep antes del dato que se revierte tras la publicación</td><td>El dato impulsa y el precio acepta fuera del rango</td></tr>
+            <tr><td><strong>Tipo de rango</strong></td><td>C1 grande, expansiva (ya distribuyó)</td><td>C1 pequeña / compresión (inside bars): acumula energía</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Por régimen de mercado</h3>
+      <div class="grid-3">
+        <div class="card a">
+          <div class="card-title">Rango lateral <span class="badge up">Reverse</span></div>
+          <p>Los extremos del rango HTF se respetan. Cada sweep es una oportunidad de volver al lado opuesto. El reverse tiene la mejor tasa de acierto.</p>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">Tendencia fuerte <span class="badge neu">Break</span></div>
+          <p>Los retrocesos son cortos y los extremos se rompen a favor. Hacer reverse contra la tendencia es pelear el flujo: solo break o reverse a favor (sweep del pullback).</p>
+        </div>
+        <div class="card amber-top">
+          <div class="card-title">Fin de tendencia <span class="badge fire">Reverse HTF</span></div>
+          <p>Sweep de un máximo/mínimo mayor en premium/discount extremo con SMT. Es el reverse de mayor R:R, pero exige confirmación HTF (MSS en H4/Diario).</p>
+        </div>
+      </div>
+
+      <div class="callout violet">
+        <strong>El truco: reverse a favor de tendencia</strong>
+        En tendencia alcista, el mejor CRT no es romper el high: es el <em>sweep del low</em> del rango de pullback que cierra dentro. Es un reverse técnicamente, pero alineado con el sesgo HTF. Combina lo mejor de ambos: trampa de liquidez + flujo a favor.
+      </div>
+
+      <h3>Regla de aceptación vs rechazo</h3>
+      <p class="section-lead">El concepto que más separa reverse de break viene de la teoría de subastas: ¿el precio <em>acepta</em> fuera del rango o lo <em>rechaza</em>?</p>
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">Rechazo → Reverse</div>
+          <ul>
+            <li>El precio vuelve dentro del rango en las <strong>primeras 1–3 velas LTF</strong> tras el sweep.</li>
+            <li>Ningún cuerpo LTF cierra lejos del extremo; solo wicks.</li>
+            <li>El volumen se dispara en el sweep y cae después (absorción).</li>
+            <li>Queda un "exceso": cola larga sin retorno posterior.</li>
+          </ul>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">Aceptación → Break</div>
+          <ul>
+            <li><strong>Dos o más cierres LTF consecutivos</strong> fuera del rango.</li>
+            <li>El precio pasa al menos <strong>1/4 de la duración de C2</strong> fuera (p. ej. 1 h en una vela H4).</li>
+            <li>El retest al extremo roto se rechaza (flip de soporte / resistencia).</li>
+            <li>El volumen se mantiene alto fuera del rango.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Filtros cuantitativos (para calibrar en backtest)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Métrica</th><th>Reverse si…</th><th>Break si…</th><th>Zona gris</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Wick del sweep / rango de C2</strong></td><td>≥ 50%</td><td>≤ 25%</td><td>25–50%</td></tr>
+            <tr><td><strong>Profundidad del sweep / rango C1</strong></td><td>≤ 25%</td><td>&gt; 40%</td><td>25–40%</td></tr>
+            <tr><td><strong>Cierre de C2</strong></td><td>Dentro, idealmente pasado el 25% del rango</td><td>Fuera, ≥ 10% del rango más allá</td><td>Justo en el extremo</td></tr>
+            <tr><td><strong>Cuerpo C2 vs ATR(14) del TF</strong></td><td>&lt; 0.8× ATR</td><td>&gt; 1.2× ATR</td><td>0.8–1.2×</td></tr>
+            <tr><td><strong>Velas LTF fuera del rango</strong></td><td>≤ 3</td><td>≥ 4 con cierres</td><td>—</td></tr>
+            <tr><td><strong>Rango C1 vs ADR (rango medio diario)</strong></td><td>C1 ≥ 1× ADR (ya expandió)</td><td>C1 ≤ 0.6× ADR (compresión)</td><td>0.6–1×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <strong>Estos umbrales son puntos de partida</strong>
+        No vienen de un estudio publicado: son valores razonables para empezar a medir. Ajústalos por activo con tu backtest (pestaña Backtest) y documenta los que uses.
+      </div>
+
+      <h3>Árbol de decisión</h3>
+      <div class="tree">
+        <div class="tree-node"><span><strong>1.</strong> ¿C1 está cerrada y el sweep ocurrió en killzone?</span><span class="yes">Sí → 2</span><span class="no">No → no operar</span></div>
+        <div class="tree-node"><span><strong>2.</strong> ¿El cuerpo de C2 cerró fuera del rango con desplazamiento?</span><span class="yes">Sí → 3</span><span class="no">No → 4</span></div>
+        <div class="tree-node"><span><strong>3.</strong> ¿La ruptura va a favor del sesgo HTF y el retest aguanta?</span><span class="yes">Sí → BREAK</span><span class="no">No → esperar (posible break fallido)</span></div>
+        <div class="tree-node"><span><strong>4.</strong> ¿El extremo barrido está en premium/discount HTF?</span><span class="yes">Sí → 5</span><span class="no">No → size 0.5× o pasar</span></div>
+        <div class="tree-node"><span><strong>5.</strong> ¿Hay MSS / CISD en LTF (y mejor aún, SMT)?</span><span class="yes">Sí → REVERSE</span><span class="no">No → esperar confirmación</span></div>
+      </div>
+
+      <h3>Playbook de flip (cuando el modelo falla)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Situación</th><th>Señal de fallo</th><th>Acción</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr class="tone-violet"><td><strong>Reverse falla</strong></td><td>C3 vuelve a romper y cierra fuera con cuerpo grande y FVG</td><td>Cerrar reverse. Buscar break en el retest con 0.5×</td><td>El precio aceptó fuera: la iniciativa cambió de lado</td></tr>
+            <tr class="tone-a"><td><strong>Break falla</strong></td><td>El precio vuelve y cierra dentro del rango tras la ruptura</td><td>Cerrar break. Reverse hacia el extremo opuesto</td><td>Subasta fallida: los traders de breakout quedan atrapados y sus stops alimentan el movimiento (turtle soup clásico)</td></tr>
+            <tr class="tone-b"><td><strong>Ambos extremos barridos</strong></td><td>Outside bar: C2 toma High y Low</td><td>Flat. Nuevo C1 = C2</td><td>No hay información direccional; el rango se amplió</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Tendencias por activo y sesión</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Activo</th><th>Reverse suele funcionar mejor</th><th>Break suele funcionar mejor</th></tr></thead>
+          <tbody>
+            <tr><td><strong>US30</strong></td><td>Sweep pre-apertura / primeros 15 min de NY en días sin dato</td><td>Días tendenciales tras la apertura cash, con dato macro o earnings</td></tr>
+            <tr><td><strong>XAUUSD</strong></td><td>Sweep de Asia durante Londres</td><td>NY con CPI, NFP, FOMC o movimiento fuerte de DXY</td></tr>
+            <tr><td><strong>BTC</strong></td><td>Final de cascadas de liquidación con funding extremo</td><td>Sesión de EE. UU. con flujo de ETF, open interest subiendo</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">
+        <strong>Hipótesis para verificar</strong>
+        Estas tendencias son observaciones comunes entre traders, no resultados estadísticos publicados. Úsalas como hipótesis en tu backtest segmentado por sesión.
+      </div>
+
+      <h3>Qué dice la evidencia relacionada</h3>
+      <div class="grid-2">
+        <div class="card a">
+          <div class="card-title">A favor del reverse</div>
+          <ul>
+            <li><strong>Reversión a corto plazo</strong> (Jegadeesh 1990; Lehmann 1990): los movimientos extremos de corto plazo tienden a corregir parcialmente.</li>
+            <li><strong>Rupturas fallidas</strong> (Raschke &amp; Connors 1995): base del turtle soup.</li>
+            <li><strong>Stops agrupados</strong> (Osler 2003): explican por qué el precio "va a buscar" los extremos antes de girar.</li>
+          </ul>
+        </div>
+        <div class="card violet-top">
+          <div class="card-title">A favor del break</div>
+          <ul>
+            <li><strong>Momentum de series temporales</strong> (Moskowitz, Ooi &amp; Pedersen 2012): las tendencias persisten en futuros de muchas clases de activo.</li>
+            <li><strong>Momentum intradía</strong> (Gao, Han, Li &amp; Zhou 2018): la dirección de la primera media hora predice la última en el S&amp;P 500.</li>
+            <li><strong>Cascadas de stops</strong> (Osler 2005): el disparo de stops puede acelerar el precio en la dirección de la ruptura.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout violet">
+        <strong>Conclusión honesta</strong>
+        La evidencia apoya <em>los dos</em> comportamientos según el régimen: reversión en mercados laterales y horizontes cortos, continuación en tendencias.
+        Por eso CRT no puede ser "siempre reverse": el filtro de régimen y sesgo HTF es lo que decide.
+      </div>
+
+      <h3>Cuándo no usar ninguno</h3>
+      <div class="callout danger">
+        <strong>No trade</strong>
+        Minutos previos a un dato de alto impacto · Rollover (17:00 NY) · Festivos y fines de semana (BTC) · Rango C1 minúsculo (&lt; 0.3× ADR) ·
+        Outside bar · Tres o más sweeps fallidos seguidos en el mismo activo (el mercado está en modo aleatorio) ·
+        Después de alcanzar tu pérdida diaria máxima.
+      </div>
+
+      <h3>Decisor interactivo</h3>
+      <p class="section-lead">Marca lo que ves en el gráfico. La barra se inclina hacia el modelo con más evidencia <span class="js-only-hint">(requiere scripts)</span>.</p>
+
+      <div class="decisor" id="decisor">
+        <div class="rev">
+          <div class="col-title">Reverse <span class="count" id="rev-count">0 / 6</span></div>
+          <label><input type="checkbox" data-side="rev" /> El cuerpo de C2 cerró dentro del rango</label>
+          <label><input type="checkbox" data-side="rev" /> El sweep fue contra el sesgo HTF</label>
+          <label><input type="checkbox" data-side="rev" /> El extremo barrido está en premium / discount HTF</label>
+          <label><input type="checkbox" data-side="rev" /> Hay SMT divergence con el activo correlacionado</label>
+          <label><input type="checkbox" data-side="rev" /> El sweep fue lento, sin FVG fuera del rango</label>
+          <label><input type="checkbox" data-side="rev" /> El sweep ocurrió en manipulación (Londres / apertura NY)</label>
+        </div>
+        <div class="brk">
+          <div class="col-title">Break <span class="count" id="brk-count">0 / 6</span></div>
+          <label><input type="checkbox" data-side="brk" /> El cuerpo de C2 cerró fuera del rango</label>
+          <label><input type="checkbox" data-side="brk" /> La ruptura va a favor del sesgo HTF</label>
+          <label><input type="checkbox" data-side="brk" /> Hubo desplazamiento con FVG fuera del rango</label>
+          <label><input type="checkbox" data-side="brk" /> El retest respetó el extremo roto</label>
+          <label><input type="checkbox" data-side="brk" /> Hay liquidez mayor más allá (EQH/EQL, PD array)</label>
+          <label><input type="checkbox" data-side="brk" /> C1 era compresión / inside bar</label>
+        </div>
+      </div>
+
+      <div class="tug" aria-hidden="true"><div class="l" id="tug-l"></div><div class="r"></div></div>
+      <div class="decisor-verdict" id="decisor-verdict">Marca checks para decidir</div>
+
+      <div class="callout danger" style="margin-top:18px">
+        <strong>Zona gris: no operar</strong>
+        Si los dos lados tienen puntuación parecida (diferencia ≤1) o ninguno llega a 3, el mercado no ha decidido. Espera el cierre de la siguiente vela HTF o un nuevo C1.
+      </div>
+
+      <div class="callout ok">
+        <strong>Síntesis</strong>
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--ok)">Reverse:</strong>
+        rango lateral, extremo en premium/discount, cuerpo cierra dentro, SMT, manipulación de Londres → target al extremo opuesto.<br /><br />
+        <strong style="display:inline;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:inherit;color:var(--violet)">Break:</strong>
+        tendencia a favor, cierre fuera con desplazamiento, FVG, retest respetado, liquidez mayor más allá → target a la proyección.<br /><br />
+        El edge no es el sweep: es leer <em>qué hizo el cuerpo</em> después, con el sesgo HTF de filtro.
+      </div>
+
+    </section>
+
+    <!-- INVESTIGACIÓN -->
+    <section id="investigacion" class="panel" role="tabpanel">
+      <h2>Investigación y fuentes</h2>
+      <p class="section-lead">
+        Qué fuentes respaldan cada pieza de CRT y qué tan sólida es cada una. Distinguir evidencia académica de material de practicantes
+        es clave en un tema con tanto marketing alrededor.
+      </p>
+
+      <h3>Mapa de evidencia</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pieza de CRT</th><th>Fuente</th><th>Tipo</th><th>Solidez</th></tr></thead>
+          <tbody>
+            <tr class="tone-a"><td><strong>Stops agrupados tras extremos</strong></td><td>Osler 2003, 2005</td><td>Académica, datos de órdenes reales (FX)</td><td><span class="badge up">Alta</span></td></tr>
+            <tr class="tone-a"><td><strong>Continuación en tendencia (break)</strong></td><td>Moskowitz, Ooi &amp; Pedersen 2012 · Gao et al. 2018</td><td>Académica, múltiples mercados</td><td><span class="badge up">Alta</span></td></tr>
+            <tr class="tone-a"><td><strong>Reversión de corto plazo (reverse)</strong></td><td>Jegadeesh 1990 · Lehmann 1990</td><td>Académica (acciones, horizontes semanales/mensuales)</td><td><span class="badge up">Media-alta</span></td></tr>
+            <tr class="tone-info"><td><strong>Patrones técnicos con información</strong></td><td>Lo, Mamaysky &amp; Wang 2000</td><td>Académica</td><td><span class="badge neu">Media</span></td></tr>
+            <tr class="tone-warn"><td><strong>Rupturas fallidas (turtle soup)</strong></td><td>Raschke &amp; Connors 1995</td><td>Practicante, reglas testeables</td><td><span class="badge fire">Media</span></td></tr>
+            <tr class="tone-warn"><td><strong>Aceptación / rechazo</strong></td><td>Steidlmayer · Dalton</td><td>Practicante (marco teórico)</td><td><span class="badge fire">Media</span></td></tr>
+            <tr class="tone-b"><td><strong>Power of 3, Judas swing, killzones</strong></td><td>ICT</td><td>Practicante, material público no académico</td><td><span class="badge down">Baja-media</span></td></tr>
+            <tr class="tone-b"><td><strong>Modelo CRT completo</strong></td><td>Comunidad en redes</td><td>Sin validación publicada</td><td><span class="badge down">Sin evidencia directa</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Bibliografía académica</h3>
+      <ul class="src-list">
+        <li>Osler, C. L. (2003). <em>Currency Orders and Exchange Rate Dynamics: An Explanation for the Predictive Success of Technical Analysis.</em> Journal of Finance, 58(5).
+          <span class="why">Stops y take profits se agrupan alrededor de números redondos: base de los "pools de liquidez".</span></li>
+        <li>Osler, C. L. (2005). <em>Stop-loss orders and price cascades in currency markets.</em> Journal of International Money and Finance, 24(2).
+          <span class="why">El disparo de stops genera movimientos que se autoalimentan: mecanismo del break.</span></li>
+        <li>Lo, A. W., Mamaysky, H. &amp; Wang, J. (2000). <em>Foundations of Technical Analysis: Computational Algorithms, Statistical Inference, and Empirical Implementation.</em> Journal of Finance, 55(4).
+          <span class="why">Algunos patrones técnicos definidos algorítmicamente aportan información incremental.</span></li>
+        <li>Moskowitz, T. J., Ooi, Y. H. &amp; Pedersen, L. H. (2012). <em>Time series momentum.</em> Journal of Financial Economics, 104(2).
+          <span class="why">Las tendencias persisten en futuros de índices, divisas, commodities y bonos: soporte del break.</span></li>
+        <li>Gao, L., Han, Y., Li, S. Z. &amp; Zhou, G. (2018). <em>Market intraday momentum.</em> Journal of Financial Economics, 129(2).
+          <span class="why">La primera media hora predice la última en el S&amp;P 500: continuación intradía.</span></li>
+        <li>Jegadeesh, N. (1990). <em>Evidence of predictable behavior of security returns.</em> Journal of Finance, 45(3). · Lehmann, B. N. (1990). <em>Fads, martingales, and market efficiency.</em> Quarterly Journal of Economics, 105(1).
+          <span class="why">Reversión de corto plazo en acciones: soporte (indirecto) del reverse.</span></li>
+        <li>Harris, L. (2003). <em>Trading and Exchanges: Market Microstructure for Practitioners.</em> Oxford University Press.
+          <span class="why">Referencia general sobre tipos de órdenes, proveedores de liquidez y cómo se forma el precio.</span></li>
+      </ul>
+
+      <h3>Libros de practicantes</h3>
+      <ul class="src-list">
+        <li>Raschke, L. B. &amp; Connors, L. A. (1995). <em>Street Smarts: High Probability Short-Term Trading Strategies.</em>
+          <span class="why">Turtle Soup: el antecesor más directo del CRT reverse.</span></li>
+        <li>Dalton, J. F., Jones, E. T. &amp; Dalton, R. B. <em>Mind Over Markets</em> (1990; ed. actualizada 2013).
+          <span class="why">Teoría de subastas: actividad responsiva vs iniciativa, aceptación vs rechazo.</span></li>
+        <li>Crabel, T. (1990). <em>Day Trading with Short Term Price Patterns and Opening Range Breakout.</em>
+          <span class="why">Rupturas de rango de apertura y compresión (inside days) antes de expansiones: soporte del break desde rangos pequeños.</span></li>
+        <li>Pruden, H. (2007). <em>The Three Skills of Top Trading.</em>
+          <span class="why">Método Wyckoff moderno: springs y upthrusts como falsas rupturas.</span></li>
+        <li>Bulkowski, T. N. <em>Encyclopedia of Chart Patterns.</em>
+          <span class="why">Estadísticas de rupturas y fallos de patrones clásicos; útil para calibrar expectativas.</span></li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>Nota sobre las fuentes</strong>
+        Las referencias se citan de memoria para orientar la lectura. Antes de usarlas en un documento formal, verifica volumen, número y año en la fuente original (Google Scholar, SSRN o la editorial).
+      </div>
+
+      <h3>Líneas de investigación propias para Flash Signals</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pregunta</th><th>Cómo medirla</th></tr></thead>
+          <tbody>
+            <tr><td>¿Qué % de sweeps con cierre dentro alcanza el 50%? ¿Y el extremo opuesto?</td><td>Contar sobre 2 años de velas diarias y H4 por activo</td></tr>
+            <tr><td>¿Mejora el reverse si se exige killzone?</td><td>Comparar expectativa con y sin filtro horario</td></tr>
+            <tr><td>¿Qué umbral de wick / rango separa mejor reverse de break?</td><td>Probar 30%, 40%, 50%, 60% out-of-sample</td></tr>
+            <tr><td>¿Los CRT de compresión (C1 &lt; 0.6× ADR) rompen más?</td><td>Segmentar resultados por tamaño de C1</td></tr>
+            <tr><td>¿Funciona igual en BTC fin de semana que entre semana?</td><td>Separar sábado/domingo del resto</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Glosario</h3>
+      <dl class="glossary">
+        <div><dt>ADR</dt><dd>Average Daily Range: rango medio diario de los últimos N días.</dd></div>
+        <div><dt>ATR</dt><dd>Average True Range: volatilidad media por vela, incluye gaps.</dd></div>
+        <div><dt>BSL / SSL</dt><dd>Buy-side / sell-side liquidity: stops acumulados sobre máximos / bajo mínimos.</dd></div>
+        <div><dt>CISD</dt><dd>Change in State of Delivery: cierre más allá del open de la secuencia de velas contrarias.</dd></div>
+        <div><dt>Draw on liquidity</dt><dd>El pool de liquidez hacia el que se espera que viaje el precio.</dd></div>
+        <div><dt>EQH / EQL</dt><dd>Equal highs / lows: máximos o mínimos casi iguales, liquidez muy visible.</dd></div>
+        <div><dt>FVG</dt><dd>Fair Value Gap: hueco entre la vela 1 y la 3 de un movimiento de desplazamiento.</dd></div>
+        <div><dt>Judas swing</dt><dd>Movimiento inicial de la sesión en contra de la dirección real del día.</dd></div>
+        <div><dt>Killzone</dt><dd>Ventana horaria de mayor probabilidad de manipulación / distribución.</dd></div>
+        <div><dt>MSS</dt><dd>Market Structure Shift: ruptura del último swing en LTF tras el sweep.</dd></div>
+        <div><dt>PD array</dt><dd>Zona de precio relevante (FVG, order block, máximo/mínimo previo) en premium o discount.</dd></div>
+        <div><dt>Premium / discount</dt><dd>Mitad superior / inferior de un rango, respecto al 50%.</dd></div>
+        <div><dt>SMT</dt><dd>Divergencia entre activos correlacionados: uno marca nuevo extremo y el otro no.</dd></div>
+        <div><dt>Sweep</dt><dd>Barrido de un extremo para tomar la liquidez acumulada tras él.</dd></div>
+      </dl>
+
+      <p class="footer-meta">
+        Flash Signals · fire &amp; shadow · Artefacto 2026-09-29 · CRT (Candle Range Theory) v2.0 ·
+        Sin JS: TOC por anclas y todas las secciones visibles. Con JS: tabs + scorecard + decisor + calculadora persistentes.
+      </p>
+    </section>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll(".tab[data-tab]");
+      const panels = document.querySelectorAll(".panel");
+      const KEY_TAB = "crt-artifact-tab";
+      const KEY_SCORE = "crt-artifact-score";
+      const KEY_DEC = "crt-artifact-decisor";
+
+      function save(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+      }
+
+      function load(key, length) {
+        let v = [];
+        try { v = JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) { v = []; }
+        return Array.isArray(v) && v.length === length ? v : Array(length).fill(false);
+      }
+
+      function showTab(id, pushHash) {
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+        panels.forEach((p) => p.classList.toggle("active", p.id === id));
+        try { localStorage.setItem(KEY_TAB, id); } catch (_) {}
+        if (pushHash && history.replaceState) history.replaceState(null, "", "#" + id);
+      }
+
+      tabs.forEach((t) => {
+        t.addEventListener("click", (e) => {
+          e.preventDefault();
+          showTab(t.dataset.tab, true);
+        });
+      });
+
+      let start = (location.hash || "").replace("#", "");
+      try { start = start || localStorage.getItem(KEY_TAB); } catch (_) {}
+      if (start && document.getElementById(start)) showTab(start, false);
+
+      // Scorecard
+      const items = [...document.querySelectorAll(".score-item")];
+      const state = load(KEY_SCORE, items.length);
+
+      function renderScore() {
+        let n = 0;
+        items.forEach((el, i) => {
+          const on = !!state[i];
+          el.classList.toggle("checked", on);
+          el.querySelector("input").checked = on;
+          if (on) n++;
+        });
+        document.getElementById("score-num").textContent = String(n);
+        const bar = document.getElementById("score-bar");
+        bar.style.width = n * 10 + "%";
+        bar.style.background = n >= 7 ? "var(--ok)" : n >= 4 ? "var(--warn)" : "var(--err)";
+        const v = document.getElementById("score-verdict");
+        v.textContent = n >= 7 ? "LISTO PARA OPERAR" : "NO TRADE";
+        v.className = n >= 7 ? "pass" : "fail";
+        save(KEY_SCORE, state);
+      }
+
+      items.forEach((el, i) => {
+        el.addEventListener("click", (e) => {
+          state[i] = e.target.tagName === "INPUT" ? e.target.checked : !state[i];
+          renderScore();
+        });
+      });
+      renderScore();
+
+      // Decisor Reverse vs Break
+      const decInputs = [...document.querySelectorAll("#decisor input")];
+      const dec = load(KEY_DEC, decInputs.length);
+
+      function renderDecisor() {
+        let rev = 0, brk = 0;
+        decInputs.forEach((inp, i) => {
+          inp.checked = !!dec[i];
+          if (dec[i]) inp.dataset.side === "rev" ? rev++ : brk++;
+        });
+        document.getElementById("rev-count").textContent = rev + " / 6";
+        document.getElementById("brk-count").textContent = brk + " / 6";
+        const total = rev + brk;
+        document.getElementById("tug-l").style.width = (total ? (rev / total) * 100 : 50) + "%";
+
+        const v = document.getElementById("decisor-verdict");
+        if (total === 0) {
+          v.textContent = "Marca checks para decidir";
+          v.style.color = "var(--muted)";
+        } else if (Math.max(rev, brk) < 3 || Math.abs(rev - brk) <= 1) {
+          v.textContent = "Zona gris · esperar";
+          v.style.color = "var(--warn)";
+        } else if (rev > brk) {
+          v.textContent = "Reverse · target extremo opuesto (" + rev + " vs " + brk + ")";
+          v.style.color = "var(--ok)";
+        } else {
+          v.textContent = "Break · target proyección (" + brk + " vs " + rev + ")";
+          v.style.color = "var(--violet)";
+        }
+        save(KEY_DEC, dec);
+      }
+
+      decInputs.forEach((inp, i) => {
+        inp.addEventListener("change", () => {
+          dec[i] = inp.checked;
+          renderDecisor();
+        });
+      });
+      renderDecisor();
+
+      // Calculadora de expectativa
+      const KEY_CALC = "crt-artifact-calc";
+      const calcIds = ["c-wr", "c-win", "c-loss", "c-n"];
+      const calcInputs = calcIds.map((id) => document.getElementById(id));
+      try {
+        const saved = JSON.parse(localStorage.getItem(KEY_CALC) || "null");
+        if (Array.isArray(saved) && saved.length === calcInputs.length) {
+          calcInputs.forEach((inp, i) => { inp.value = saved[i]; });
+        }
+      } catch (_) {}
+
+      function renderCalc() {
+        const wr = Math.min(Math.max(parseFloat(calcInputs[0].value) || 0, 0), 100) / 100;
+        const win = Math.max(parseFloat(calcInputs[1].value) || 0, 0);
+        const loss = Math.max(parseFloat(calcInputs[2].value) || 0, 0.01);
+        const n = Math.max(parseInt(calcInputs[3].value, 10) || 0, 0);
+
+        const exp = wr * win - (1 - wr) * loss;
+        const be = win > 0 ? loss / (win + loss) : 1;
+        const pf = wr < 1 ? (wr * win) / ((1 - wr) * loss) : Infinity;
+
+        const expEl = document.getElementById("o-exp");
+        expEl.textContent = (exp >= 0 ? "+" : "") + exp.toFixed(2) + "R";
+        expEl.style.color = exp > 0.2 ? "var(--ok)" : exp > 0 ? "var(--warn)" : "#ff8a8a";
+        document.getElementById("o-be").textContent = (be * 100).toFixed(1) + "%";
+        document.getElementById("o-month").textContent = (exp * n >= 0 ? "+" : "") + (exp * n).toFixed(1) + "R";
+        document.getElementById("o-pf").textContent = isFinite(pf) ? pf.toFixed(2) : "∞";
+
+        save(KEY_CALC, calcInputs.map((inp) => inp.value));
+      }
+
+      calcInputs.forEach((inp) => inp.addEventListener("input", renderCalc));
+      renderCalc();
+    })();
+  </script>
+</body>
+</html>
