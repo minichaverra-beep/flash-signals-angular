@@ -60,10 +60,10 @@
         <button
           type="button"
           class="btn-analyze"
-          [disabled]="analyzing"
+          [disabled]="busy"
           (click)="nuevoAnalisis()"
         >
-          {{ analyzing ? 'Analizando…' : 'Nuevo análisis' }}
+          {{ analyzeLabel }}
         </button>
       </div>
     </div>

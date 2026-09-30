@@ -5,7 +5,9 @@ import {
   HostListener,
   OnDestroy,
   OnInit,
+  effect,
   inject,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
@@ -29,7 +31,8 @@ import {
   scoreKpiRows,
   verdictRows,
 } from '../../shared/signal-report.helpers';
-import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
+import { SignalJobService, isRecentJob, jobKind } from '../../services/signal-job.service';
+import { Subscription } from 'rxjs';
 
 export type ViewMode = 'rapida' | 'trader' | 'inversor';
 
@@ -47,7 +50,10 @@ export interface HomeSectionLink {
 })
 export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly api = inject(SignalsApiService);
-  private pollSub?: Subscription;
+  readonly jobs = inject(SignalJobService);
+  private finishedSub?: Subscription;
+  /** Job cuya config (mercado/tier) ya se adoptó al reconectar. */
+  private adoptedJobId: string | null = null;
   private scrollSpyPausedUntil = 0;
   private lastSectionKey = '';
 
@@ -65,9 +71,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   apiOk: boolean | null = null;
   tradingRoot = '';
   tradingRootExists = false;
-  busy = false;
+  /** POST /signals/run en vuelo (antes de que el job exista en el servidor). */
+  starting = false;
   message = '';
-  job: JobStatus | null = null;
   latest: LatestResponse | null = null;
   showRawMarkdown = false;
   viewMode: ViewMode = 'rapida';
@@ -86,9 +92,21 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     { id: 'history', label: 'History', hint: 'P&L última Entry — no es señal' },
   ];
 
+  constructor() {
+    effect(() => {
+      const j = this.jobs.job();
+      untracked(() => this.adoptRunningJob(j));
+    });
+  }
+
   ngOnInit(): void {
     this.refreshHealth();
     this.loadLatest();
+    this.finishedSub = this.jobs.finished$.subscribe((j) => {
+      if (jobKind(j) !== 'signal') return;
+      this.message = '';
+      this.loadLatest();
+    });
   }
 
   ngAfterViewChecked(): void {
@@ -96,7 +114,52 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   ngOnDestroy(): void {
-    this.pollSub?.unsubscribe();
+    this.finishedSub?.unsubscribe();
+  }
+
+  /** Job de señal visible: en curso o terminado hace poco (sobrevive a F5 / cambio de ruta). */
+  get job(): JobStatus | null {
+    const j = this.jobs.job();
+    return jobKind(j) === 'signal' && isRecentJob(j) ? j : null;
+  }
+
+  get busy(): boolean {
+    return this.starting || this.jobs.running();
+  }
+
+  get runLabel(): string {
+    if (this.starting) return 'Iniciando…';
+    const j = this.jobs.job();
+    if (j?.status !== 'running') return 'Ejecutar señal';
+    const what = jobKind(j) === 'macd-quant' ? 'MACD en curso' : 'Ejecutando';
+    return `${what}… ${this.jobs.elapsed()}`;
+  }
+
+  get statusMessage(): string {
+    if (this.message) return this.message;
+    const running = this.jobs.job();
+    if (running?.status === 'running') {
+      return jobKind(running) === 'macd-quant'
+        ? 'Hay un análisis MACD-quant en ejecución; espera a que termine.'
+        : `Señal ${String(running.market ?? '').toUpperCase()} · ${running.tier ?? ''} en ejecución…`;
+    }
+    const j = this.job;
+    if (j?.status === 'done') return 'Listo — reporte generado.';
+    if (j?.status === 'error') return j.error || 'Error en el pipeline.';
+    return '';
+  }
+
+  /** Tras F5 / volver a la ruta: alinea mercado y tier con la corrida en curso. */
+  private adoptRunningJob(j: JobStatus | null): void {
+    if (j?.status !== 'running' || jobKind(j) !== 'signal' || !j.id) return;
+    if (j.id === this.adoptedJobId) return;
+    this.adoptedJobId = j.id;
+    const market = this.markets.find((m) => m.id === j.market)?.id ?? this.market;
+    const tier = this.tiers.find((t) => t.id === j.tier)?.id ?? this.tier;
+    if (market === this.market && tier === this.tier) return;
+    this.market = market;
+    this.tier = tier;
+    this.loadLatest();
   }
 
   get flagsDisabled(): boolean {
@@ -276,9 +339,8 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   run(): void {
     if (this.busy) return;
-    this.busy = true;
+    this.starting = true;
     this.message = '';
-    this.job = null;
 
     const body = {
       market: this.market,
@@ -296,42 +358,19 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
       entry: this.entry.trim() || undefined,
     };
 
-    this.api.run(body).subscribe({
-      next: () => {
-        this.message = 'Señal en ejecución…';
-        this.startPolling();
+    this.jobs.run(body).subscribe({
+      next: (r) => {
+        this.starting = false;
+        this.adoptedJobId = r.job.id ?? null;
       },
       error: (err: unknown) => {
-        this.busy = false;
-        this.message = this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
+        this.starting = false;
+        // 409: el job en curso ya se refleja vía SignalJobService.
+        this.message = this.jobs.running()
+          ? ''
+          : this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
       },
     });
-  }
-
-  private startPolling(): void {
-    this.pollSub?.unsubscribe();
-    this.pollSub = interval(1500)
-      .pipe(
-        switchMap(() => this.api.status()),
-        takeWhile((j) => j.status === 'running', true)
-      )
-      .subscribe({
-        next: (j) => {
-          this.job = j;
-          if (j.status !== 'running') {
-            this.busy = false;
-            this.message =
-              j.status === 'done'
-                ? 'Listo — reporte generado.'
-                : j.error || 'Error en el pipeline.';
-            this.loadLatest();
-          }
-        },
-        error: (err: unknown) => {
-          this.busy = false;
-          this.message = this.errMsg(err, 'Error al consultar estado.');
-        },
-      });
   }
 
   private errMsg(err: unknown, fallback: string): string {

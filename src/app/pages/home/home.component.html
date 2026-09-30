@@ -101,14 +101,15 @@
 
         <div class="actions">
           <button class="primary" type="button" (click)="run()" [disabled]="busy || apiOk === false">
-            {{ busy ? 'Ejecutando…' : 'Ejecutar señal' }}
+            <span class="spinner" *ngIf="busy" aria-hidden="true"></span>
+            {{ runLabel }}
           </button>
           <button type="button" class="ghost" (click)="loadLatest()" [disabled]="busy">
             Recargar último reporte
           </button>
         </div>
 
-        <p class="msg" *ngIf="message" [class.err]="job?.status === 'error'">{{ message }}</p>
+        <p class="msg" *ngIf="statusMessage" [class.err]="job?.status === 'error'" aria-live="polite">{{ statusMessage }}</p>
       </section>
 
       <section id="sec-modos" class="panel mode-panel" data-section="sec-modos">
@@ -147,7 +148,15 @@
       </section>
 
       <section id="sec-estado" class="panel result" *ngIf="job as j" data-section="sec-estado">
-        <h2>Estado: {{ j.status }}</h2>
+        <h2>
+          <span class="spinner" *ngIf="j.status === 'running'" aria-hidden="true"></span>
+          Estado: {{ j.status }}
+          <small class="muted">· {{ (j.market || '') | uppercase }} {{ j.tier }} · {{ jobs.elapsed() }}</small>
+        </h2>
+        <p class="muted tiny" *ngIf="j.status === 'running' && !jobs.connected()">
+          Reconectando con la API para seguir la corrida…
+        </p>
+        <pre class="job-tail" *ngIf="j.status === 'running' && viewMode !== 'trader' && j.logs.length">{{ j.logs.slice(-6).join('\n') }}</pre>
         <details class="report-card collapsible" *ngIf="j.logs?.length && viewMode === 'trader'">
           <summary>Registro técnico ({{ j.logs.length }} líneas)</summary>
           <div class="collapsible-body">
@@ -162,6 +171,13 @@
           <ng-container *ngIf="latest as L; else jobReportHead">
           <h2>Último reporte ({{ L.reportName }})</h2>
           <p class="muted hide-on-phone">Modificado: {{ L.mtime }}</p>
+          <p class="muted" *ngIf="s.dataAsOf">Datos hasta (última vela): {{ s.dataAsOf }}</p>
+          <p class="stale-alert" role="alert" *ngIf="s.dataStale">
+            {{ s.staleMessage || 'Datos desactualizados — no operar con estos niveles.' }}
+          </p>
+          <p class="stale-alert" role="alert" *ngIf="L.chartStale">
+            Gráfico de una corrida anterior ({{ L.chartMtime }}) — no se muestra. Ejecuta con Ilustrate o sin NoChart para regenerarlo.
+          </p>
         </ng-container>
         <ng-template #jobReportHead>
           <h2>Resultado de la corrida</h2>

@@ -1,7 +1,7 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, effect, inject, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { Subscription, interval, switchMap, takeWhile } from 'rxjs';
+import { Subscription } from 'rxjs';
 import {
   JobStatus,
   MacdQuantHistoryDetail,
@@ -9,6 +9,7 @@ import {
   Market,
   SignalsApiService,
 } from '../../services/signals-api.service';
+import { SignalJobService, isRecentJob, jobKind } from '../../services/signal-job.service';
 
 @Component({
   selector: 'app-macd-quant',
@@ -19,13 +20,16 @@ import {
 })
 export class MacdQuantComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
-  private pollSub?: Subscription;
+  readonly jobs = inject(SignalJobService);
+  private finishedSub?: Subscription;
+  /** Job cuyo mercado ya se adoptó al reconectar. */
+  private adoptedJobId: string | null = null;
 
   market: Market = 'btc';
   chartBroken = false;
-  analyzing = false;
+  /** POST analyze en vuelo (antes de que el job exista en el servidor). */
+  starting = false;
   analyzeMessage = '';
-  job: JobStatus | null = null;
   private cacheBust = Date.now();
 
   /** Historial preservado (SQLite). */
@@ -56,8 +60,38 @@ python -m scripts.plot_macd_quant --days 7 --force-refresh
 python -m scripts.plot_macd_quant --symbol us30 --days 7 --force-refresh
 python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
 
+  constructor() {
+    effect(() => {
+      const j = this.jobs.job();
+      untracked(() => this.adoptRunningJob(j));
+    });
+  }
+
   ngOnInit(): void {
     this.loadHistory();
+    this.finishedSub = this.jobs.finished$.subscribe((j) => {
+      if (jobKind(j) === 'macd-quant') this.onAnalysisFinished(j);
+    });
+  }
+
+  /** Job MACD-quant visible: en curso o terminado hace poco (sobrevive a F5 / cambio de ruta). */
+  get job(): JobStatus | null {
+    const j = this.jobs.job();
+    return jobKind(j) === 'macd-quant' && isRecentJob(j) ? j : null;
+  }
+
+  /** Cualquier job ocupa el lock del servidor (señal E1 o MACD). */
+  get busy(): boolean {
+    return this.starting || this.jobs.running();
+  }
+
+  get analyzing(): boolean {
+    return this.starting || this.job?.status === 'running';
+  }
+
+  get analyzeLabel(): string {
+    if (this.analyzing) return `Analizando… ${this.jobs.elapsed()}`;
+    return this.jobs.running() ? 'Señal en curso…' : 'Nuevo análisis';
   }
 
   chartUrl(): string {
@@ -97,19 +131,19 @@ python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
 
   /** Escaneo H4 de la semana + regenera PNG quant (auto-guarda en DB). */
   nuevoAnalisis(): void {
-    if (this.analyzing) return;
-    this.analyzing = true;
+    if (this.busy) return;
+    this.starting = true;
     this.analyzeMessage = 'Escaneando semana H4…';
-    this.job = null;
     this.backToLive();
 
-    this.api.macdQuantAnalyze(this.market, 7).subscribe({
-      next: () => {
+    this.jobs.macdQuantAnalyze(this.market, 7).subscribe({
+      next: (r) => {
+        this.starting = false;
+        this.adoptedJobId = r.job.id ?? null;
         this.analyzeMessage = 'Generando mini-chart MACD H4…';
-        this.startPolling();
       },
       error: (err: unknown) => {
-        this.analyzing = false;
+        this.starting = false;
         this.analyzeMessage = this.errMsg(
           err,
           'No se pudo iniciar el análisis (¿API en Windows?).'
@@ -118,38 +152,30 @@ python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
     });
   }
 
-  private startPolling(): void {
-    this.pollSub?.unsubscribe();
-    this.pollSub = interval(1200)
-      .pipe(
-        switchMap(() => this.api.status()),
-        takeWhile((j) => j.status === 'running', true)
-      )
-      .subscribe({
-        next: (j) => {
-          this.job = j;
-          if (j.status !== 'running') {
-            this.analyzing = false;
-            if (j.status === 'done') {
-              const saved =
-                j.macdQuantId != null
-                  ? ` · guardado #${j.macdQuantId}`
-                  : '';
-              this.analyzeMessage =
-                `Listo — PNG H4 regenerado y preservado${saved} (soft-filter, nunca trigger solo).`;
-              this.reloadChart();
-              this.loadHistory();
-            } else {
-              this.analyzeMessage = j.error || 'Error al generar el chart H4.';
-              this.loadHistory();
-            }
-          }
-        },
-        error: (err: unknown) => {
-          this.analyzing = false;
-          this.analyzeMessage = this.errMsg(err, 'Error al consultar estado.');
-        },
-      });
+  private onAnalysisFinished(j: JobStatus): void {
+    if (j.status === 'done') {
+      const saved = j.macdQuantId == null ? '' : ` · guardado #${j.macdQuantId}`;
+      this.analyzeMessage =
+        `Listo — PNG H4 regenerado y preservado${saved} (soft-filter, nunca trigger solo).`;
+      this.reloadChart();
+    } else {
+      this.analyzeMessage = j.error || 'Error al generar el chart H4.';
+    }
+    this.loadHistory();
+  }
+
+  /** Tras F5 / volver a la ruta: muestra el análisis en curso de su mercado. */
+  private adoptRunningJob(j: JobStatus | null): void {
+    if (j?.status !== 'running' || jobKind(j) !== 'macd-quant' || !j.id) return;
+    if (j.id === this.adoptedJobId) return;
+    this.adoptedJobId = j.id;
+    this.analyzeMessage = 'Generando mini-chart MACD H4…';
+    const market = this.markets.find((m) => m.id === j.market)?.id;
+    if (market && market !== this.market) {
+      this.market = market;
+      this.backToLive();
+      this.loadHistory();
+    }
   }
 
   loadHistory(): void {
@@ -217,6 +243,6 @@ python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
   }
 
   ngOnDestroy(): void {
-    this.pollSub?.unsubscribe();
+    this.finishedSub?.unsubscribe();
   }
 }

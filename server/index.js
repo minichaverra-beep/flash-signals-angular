@@ -12,6 +12,12 @@ const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
 const macdQuantStore = require('./db/macd-quant-store');
 const artifacts = require('./artifacts');
+const { JOB_EVENTS, createJobEvents } = require('./job-events');
+const {
+  pickLatestChart,
+  isChartStale,
+  parseDataFreshness,
+} = require('./live-freshness');
 
 const PORT = Number(process.env.PORT || 3847);
 /** Solo loopback: API local, no exponer a la LAN. */
@@ -88,8 +94,8 @@ const REPORTS = {
     light: 'xauusd_m5_signal.md',
     high: 'xauusd_m5_high_signal.md',
     history: 'xauusd_m5_high_signal.md',
-    // Controller XAU aún no genera *_chart_annotated; usa el chart crudo.
-    chart: 'xauusd_m5_chart.png',
+    // -Ilustrate → annotated; sin -NoChart → crudo con overlays. Se sirve el más reciente.
+    chart: ['xauusd_m5_chart_annotated.png', 'xauusd_m5_chart.png'],
   },
   // UKOIL: sin pipeline E1; chart MACD-quant H4 (proxy Yahoo BZ=F).
   ukoil: {
@@ -121,6 +127,41 @@ let currentJob = {
   entry: null,
   historyId: null,
 };
+
+const jobEvents = createJobEvents();
+/** Jobs cuyo fin ya se emitió (error + close pueden llegar ambos). */
+const announcedJobs = new WeakSet();
+
+/** Snapshot serializable del job (sin flags internos de persistencia). */
+function publicJob(job) {
+  const snapshot = { ...job };
+  delete snapshot.historyPersisted;
+  delete snapshot.macdQuantPersisted;
+  return snapshot;
+}
+
+/** Añade líneas al log del job y las emite como job:progress. */
+function appendJobLogs(job, chunk, stream) {
+  const lines = [];
+  for (const line of chunk.toString('utf8').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const entry = `[${stream}] ${line}`;
+    job.logs.push(entry);
+    lines.push(entry);
+  }
+  if (job.logs.length > 500) job.logs.splice(0, job.logs.length - 500);
+  if (lines.length) {
+    jobEvents.broadcast(JOB_EVENTS.progress, { id: job.id, lines });
+  }
+}
+
+/** Emite job:finished / job:failed una sola vez por job. */
+function announceJobEnd(job) {
+  if (announcedJobs.has(job)) return;
+  announcedJobs.add(job);
+  const event = job.status === 'done' ? JOB_EVENTS.finished : JOB_EVENTS.failed;
+  jobEvents.broadcast(event, publicJob(job));
+}
 
 /** Valida id numérico entero positivo (path param). */
 function parseHistoryId(raw) {
@@ -679,6 +720,7 @@ function parseSummary(md, market, tier) {
   return {
     market,
     tier,
+    ...parseDataFreshness(md),
     verdict: verdictMatch
       ? stripMd(verdictMatch[1])
       : extractField(md, 'Veredicto'),
@@ -726,6 +768,23 @@ function parseSummary(md, market, tier) {
   };
 }
 
+/** Chart más reciente del mercado; si es de una corrida anterior al reporte no se expone. */
+function latestChartInfo(key, chartNames, reportMtimeMs) {
+  const chart = pickLatestChart(livePath(), chartNames);
+  if (!chart) {
+    return { chartPath: null, chartUrl: null, chartMtime: null, chartStale: false };
+  }
+  const chartStale = isChartStale(chart.mtimeMs, reportMtimeMs);
+  return {
+    chartPath: chartStale ? null : chart.full,
+    chartUrl: chartStale
+      ? null
+      : `/api/signals/chart?market=${key}&v=${Math.round(chart.mtimeMs)}`,
+    chartMtime: new Date(chart.mtimeMs).toISOString(),
+    chartStale,
+  };
+}
+
 function readLatest(market, tierHint) {
   const key = REPORTS[market] ? market : 'btc';
   const files = REPORTS[key];
@@ -742,15 +801,12 @@ function readLatest(market, tierHint) {
     const full = livePath(name);
     if (fs.existsSync(full)) {
       const md = fs.readFileSync(full, 'utf8');
-      const chartName = files.chart;
-      const chartFull = livePath(chartName);
-      const chartExists = fs.existsSync(chartFull);
+      const reportStat = fs.statSync(full);
       return {
         reportPath: full,
         reportName: name,
-        chartPath: chartExists ? chartFull : null,
-        chartUrl: chartExists ? `/api/signals/chart?market=${key}` : null,
-        mtime: fs.statSync(full).mtime.toISOString(),
+        ...latestChartInfo(key, files.chart, reportStat.mtimeMs),
+        mtime: reportStat.mtime.toISOString(),
         summary: parseSummary(md, key, tierHint || 'high'),
         preview: md.slice(0, 50000),
       };
@@ -802,7 +858,12 @@ app.get('/api/health', (_req, res) => {
   });
 });
 app.get('/api/signals/status', (_req, res) => {
-  res.json(currentJob);
+  res.json(publicJob(currentJob));
+});
+
+/** SSE: snapshot inmediato + job:started|progress|finished|failed. */
+app.get('/api/signals/events', (req, res) => {
+  jobEvents.attach(req, res, publicJob(currentJob));
 });
 
 app.get('/api/signals/latest', (req, res) => {
@@ -831,20 +892,22 @@ app.get('/api/signals/chart', (req, res) => {
       market,
     });
   }
-  const chartName = REPORTS[market].chart;
+  const chartNames = REPORTS[market].chart;
   // path.resolve + join soporta espacios en "Cursor Trading"
   const liveRoot = path.resolve(path.join(TRADING_ROOT, 'live'));
-  const chartFull = path.resolve(livePath(chartName));
+  const chart = pickLatestChart(livePath(), chartNames);
+  if (!chart) {
+    return res.status(404).json({ error: 'PNG no encontrado', chart: chartNames });
+  }
+  const chartFull = path.resolve(chart.full);
   const underLive =
     chartFull === liveRoot ||
     chartFull.toLowerCase().startsWith(liveRoot.toLowerCase() + path.sep);
   if (!underLive) {
     return res.status(400).json({ error: 'path inválido' });
   }
-  if (!fs.existsSync(chartFull)) {
-    return res.status(404).json({ error: 'PNG no encontrado', chart: chartName });
-  }
   res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(chartFull);
 });
 
@@ -885,7 +948,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
   if (currentJob.status === 'running') {
     return res.status(409).json({
       error: 'Ya hay un job en ejecución. Espera a que termine.',
-      job: currentJob,
+      job: publicJob(currentJob),
     });
   }
 
@@ -927,6 +990,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
   const command = `${py} ${args.join(' ')}`;
 
   currentJob = {
+    id: crypto.randomUUID(),
     status: 'running',
     kind: 'macd-quant',
     startedAt: new Date().toISOString(),
@@ -949,6 +1013,8 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
     chartName: `${cliSymbol}_h4_macd_quant.png`,
     days: Number(daysArg),
   };
+  const job = currentJob;
+  jobEvents.broadcast(JOB_EVENTS.started, publicJob(job));
 
   const child = spawn(py, args, {
     cwd: TRADING_ROOT,
@@ -957,23 +1023,15 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
     shell: false,
   });
 
-  const pushLog = (chunk, stream) => {
-    const text = chunk.toString('utf8');
-    for (const line of text.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      currentJob.logs.push(`[${stream}] ${line}`);
-      if (currentJob.logs.length > 500) currentJob.logs.shift();
-    }
-  };
-
-  child.stdout.on('data', (d) => pushLog(d, 'out'));
-  child.stderr.on('data', (d) => pushLog(d, 'err'));
+  child.stdout.on('data', (d) => appendJobLogs(job, d, 'out'));
+  child.stderr.on('data', (d) => appendJobLogs(job, d, 'err'));
 
   child.on('error', (err) => {
     currentJob.status = 'error';
     currentJob.finishedAt = new Date().toISOString();
     currentJob.error = err.message;
     currentJob.logs.push(`[error] ${err.message}`);
+    announceJobEnd(job);
   });
 
   child.on('close', (code) => {
@@ -1000,18 +1058,13 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
         finalStatus
       );
       currentJob.status = finalStatus;
+      announceJobEnd(job);
     })();
   });
 
   res.status(202).json({
     message: 'Nuevo análisis MACD H4 en ejecución (semana de mercado)…',
-    job: {
-      status: currentJob.status,
-      kind: currentJob.kind,
-      market: currentJob.market,
-      startedAt: currentJob.startedAt,
-      command: currentJob.command,
-    },
+    job: publicJob(job),
   });
 });
 
@@ -1711,7 +1764,7 @@ app.post('/api/signals/run', (req, res) => {
   if (currentJob.status === 'running') {
     return res.status(409).json({
       error: 'Ya hay una señal en ejecución. Espera a que termine.',
-      job: currentJob,
+      job: publicJob(currentJob),
     });
   }
 
@@ -1777,6 +1830,8 @@ app.post('/api/signals/run', (req, res) => {
   }
 
   currentJob = {
+    id: crypto.randomUUID(),
+    kind: 'signal',
     status: 'running',
     startedAt: new Date().toISOString(),
     finishedAt: undefined,
@@ -1792,6 +1847,8 @@ app.post('/api/signals/run', (req, res) => {
     entry: body.entry ?? null,
     historyId: null,
   };
+  const job = currentJob;
+  jobEvents.broadcast(JOB_EVENTS.started, publicJob(job));
 
   const child = spawn(
     'powershell.exe',
@@ -1804,24 +1861,15 @@ app.post('/api/signals/run', (req, res) => {
     }
   );
 
-  const pushLog = (chunk, stream) => {
-    const text = chunk.toString('utf8');
-    for (const line of text.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      currentJob.logs.push(`[${stream}] ${line}`);
-      if (currentJob.logs.length > 500) currentJob.logs.shift();
-    }
-  };
-
-  child.stdout.on('data', (d) => pushLog(d, 'out'));
-  child.stderr.on('data', (d) => pushLog(d, 'err'));
+  child.stdout.on('data', (d) => appendJobLogs(job, d, 'out'));
+  child.stderr.on('data', (d) => appendJobLogs(job, d, 'err'));
 
   child.on('error', (err) => {
     currentJob.status = 'error';
     currentJob.finishedAt = new Date().toISOString();
     currentJob.error = err.message;
     currentJob.logs.push(`[error] ${err.message}`);
-    void persistJobSnapshot(currentJob);
+    void persistJobSnapshot(job).then(() => announceJobEnd(job));
   });
 
   child.on('close', (code) => {
@@ -1842,18 +1890,13 @@ app.post('/api/signals/run', (req, res) => {
       currentJob.error = `El script terminó con código ${code}`;
       currentJob.logs.push(`[error] exit ${code}`);
     }
-    void persistJobSnapshot(currentJob);
+    // El fin se emite tras persistir → el cliente recibe historyId.
+    void persistJobSnapshot(job).then(() => announceJobEnd(job));
   });
 
   res.status(202).json({
     message: 'Señal iniciada',
-    job: {
-      status: currentJob.status,
-      market,
-      tier,
-      command,
-      startedAt: currentJob.startedAt,
-    },
+    job: publicJob(job),
   });
 });
 

@@ -39,6 +39,8 @@ import {
   type ExportBundle,
   type ExportRowHelpers,
 } from './historial-export';
+import { SignalJobService, jobKind } from '../../services/signal-job.service';
+import { Subscription } from 'rxjs';
 
 export type ExportFormat = 'excel' | 'pdf';
 /** Página visible (según «por página») o todas las páginas del filtro. */
@@ -90,6 +92,8 @@ const DEFAULT_TAG_COLOR = '#4b5563';
 })
 export class HistorialComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
+  private readonly jobs = inject(SignalJobService);
+  private finishedSub?: Subscription;
   /** Limpia el listener de cierre outside-click (fase capture). */
   private removeDocClickClose?: () => void;
 
@@ -187,6 +191,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.loadTags();
     this.loadConfluencias();
     this.load();
+    // Señal terminada mientras se mira el historial → nueva fila sin recargar.
+    this.finishedSub = this.jobs.finished$.subscribe((j) => {
+      if (jobKind(j) === 'signal') this.load(1);
+    });
     // Capture: celdas vecinas / card-annotate hacen stopPropagation y el bubble
     // no llega a document; sin capture Confluencias (multi-select) queda abierta.
     const onDocClick = (ev: MouseEvent) => {
@@ -224,6 +232,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.removeDocClickClose?.();
+    this.finishedSub?.unsubscribe();
   }
 
   @HostListener('document:paste', ['$event'])

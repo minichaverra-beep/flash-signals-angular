@@ -61,6 +61,10 @@ export interface VolumeInfo {
 export interface SignalSummary {
   market?: string;
   tier?: string;
+  /** «YYYY-MM-DD HH:MM UTC» de la última vela usada por el pipeline. */
+  dataAsOf?: string | null;
+  dataStale?: boolean;
+  staleMessage?: string | null;
   verdict?: string | null;
   plan?: string | null;
   twoM5?: string | null;
@@ -95,6 +99,8 @@ export interface SignalSummary {
 }
 
 export interface JobStatus {
+  /** uuid del job (SSE /api/signals/events correlaciona progreso por id). */
+  id?: string;
   status: 'idle' | 'running' | 'done' | 'error' | (string & Record<never, never>);
   kind?: string;
   startedAt?: string;
@@ -120,6 +126,9 @@ export interface LatestResponse {
   reportName: string;
   chartPath?: string | null;
   chartUrl?: string | null;
+  chartMtime?: string | null;
+  /** PNG de una corrida anterior al reporte: la API no lo expone en chartUrl. */
+  chartStale?: boolean;
   mtime: string;
   summary: SignalSummary | null;
   preview: string;
@@ -136,8 +145,8 @@ export class SignalsApiService {
     );
   }
 
-  run(body: RunRequest): Observable<{ message: string; job: Partial<JobStatus> }> {
-    return this.http.post<{ message: string; job: Partial<JobStatus> }>(
+  run(body: RunRequest): Observable<{ message: string; job: JobStatus }> {
+    return this.http.post<{ message: string; job: JobStatus }>(
       `${this.base}/signals/run`,
       body
     );
@@ -147,8 +156,8 @@ export class SignalsApiService {
   macdQuantAnalyze(
     market: Market,
     days = 7
-  ): Observable<{ message: string; job: Partial<JobStatus> }> {
-    return this.http.post<{ message: string; job: Partial<JobStatus> }>(
+  ): Observable<{ message: string; job: JobStatus }> {
+    return this.http.post<{ message: string; job: JobStatus }>(
       `${this.base}/signals/macd-quant/analyze`,
       { market, days }
     );

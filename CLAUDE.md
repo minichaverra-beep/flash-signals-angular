@@ -54,6 +54,7 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 - `GET /api/health` — incluye `signalsRunnable` / `platform`
 - `POST /api/signals/run` — una job a la vez; persiste en hive box al completar
 - `GET /api/signals/status`, `latest`, `chart`
+- `GET /api/signals/events` — SSE del job en curso (`snapshot` al conectar, `job:started|progress|finished|failed`, `ping` cada 15 s). UI: `SignalJobService` (root) sobrevive a F5 / cambio de ruta
 - `GET /api/zentinel`
 - `GET|DELETE /api/history` (+ `/:id`)
 - `GET /api/artifacts`, `POST /api/artifacts/scan`, `GET /api/artifacts/item|raw?path=`
