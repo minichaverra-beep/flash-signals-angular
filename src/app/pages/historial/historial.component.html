@@ -216,9 +216,11 @@
               >Tasa de acierto <span class="th-tip-icon" aria-hidden="true">?</span></button>
               <button type="button" class="th-sort th-sort-icon" [class.active]="sortBy === 'winrate'" (click)="toggleSort('winrate')" aria-label="Ordenar por tasa de acierto"><span class="sort-ind">{{ sortIcon('winrate') }}</span></button>
             </th>
+            <th
+              class="run-th has-tip"
+              [attr.data-tooltip]="'Solo la última señal, hasta 30 min después de ejecutarse. Envía a MT5 la entrada óptima con SL y TP' + (mt5ProfileLabel ? ' · ' + mt5ProfileLabel : '') + ': mercado si el precio ya llegó; si no, LIMIT. Una sola vez.'"
+            >Run operation</th>
             <th [attr.aria-sort]="ariaSort('scoreCombined')"><button type="button" class="th-sort" [class.active]="sortBy === 'scoreCombined'" (click)="toggleSort('scoreCombined')">Probabilidad <span class="sort-ind">{{ sortIcon('scoreCombined') }}</span></button></th>
-            <th [attr.aria-sort]="ariaSort('status')"><button type="button" class="th-sort" [class.active]="sortBy === 'status'" (click)="toggleSort('status')">Estado <span class="sort-ind">{{ sortIcon('status') }}</span></button></th>
-            <th [attr.aria-sort]="ariaSort('comment')"><button type="button" class="th-sort" [class.active]="sortBy === 'comment'" (click)="toggleSort('comment')">Comentarios <span class="sort-ind">{{ sortIcon('comment') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('resultado')"><button type="button" class="th-sort" [class.active]="sortBy === 'resultado'" (click)="toggleSort('resultado')">Resultado <span class="sort-ind">{{ sortIcon('resultado') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('pnlUsd')"><button type="button" class="th-sort" [class.active]="sortBy === 'pnlUsd'" (click)="toggleSort('pnlUsd')">$/PnL <span class="sort-ind">{{ sortIcon('pnlUsd') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('hasResultImage')"><button type="button" class="th-sort" [class.active]="sortBy === 'hasResultImage'" (click)="toggleSort('hasResultImage')">Captura <span class="sort-ind">{{ sortIcon('hasResultImage') }}</span></button></th>
@@ -226,6 +228,7 @@
             <th>Dirección</th>
             <th>Confluencias</th>
             <th></th>
+            <th [attr.aria-sort]="ariaSort('comment')"><button type="button" class="th-sort" [class.active]="sortBy === 'comment'" (click)="toggleSort('comment')">Comentarios <span class="sort-ind">{{ sortIcon('comment') }}</span></button></th>
           </tr>
         </thead>
         <tbody>
@@ -306,6 +309,37 @@
                 </div>
               </ng-container>
             </td>
+            <td class="run-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+              <ng-container *ngIf="sentInfo(item) as s; else runBtn">
+                <div class="run-sent-wrap">
+                  <span class="run-sent has-tip" [attr.data-tooltip]="sentTip(s)">
+                    ✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small>
+                  </span>
+                  <span class="run-state muted tiny" *ngIf="sentStateLabel(s) as st">
+                    {{ st }}<ng-container *ngIf="s.profit != null"> · {{ s.profit | number:'1.2-2' }} USD</ng-container>
+                  </span>
+                  <button
+                    type="button"
+                    class="recalc-btn sm has-tip"
+                    data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
+                    [disabled]="mt5RecalcBusy.has(item.id)"
+                    (click)="recalcOperation(item, $event)"
+                  >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
+                </div>
+              </ng-container>
+              <ng-template #runBtn>
+                <span *ngIf="canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip()">
+                  <button
+                    type="button"
+                    class="run-btn sm"
+                    [attr.data-tone]="runTone(item)"
+                    [disabled]="!runWindowOpen() || runItem?.id === item.id"
+                    (click)="openRun(item, $event)"
+                  >▶ Run</button>
+                </span>
+              </ng-template>
+              <ng-template #noRun><span class="muted tiny">—</span></ng-template>
+            </td>
             <td class="prob-cell">
               <div
                 class="prob-adv has-tip"
@@ -315,25 +349,6 @@
                 <span class="prob-pct">{{ item.scoreCombined != null ? (item.scoreCombined | number:'1.0-1') + '%' : '—' }}</span>
                 <span class="prob-hint muted tiny" *ngIf="probHint(item) as ph">{{ ph }}</span>
               </div>
-            </td>
-            <td>
-              <span class="status" [class.ok]="item.status === 'done'" [class.bad]="item.status === 'error'">
-                {{ item.status }}
-              </span>
-            </td>
-            <td class="comment-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-              <textarea
-                class="hist-input hist-textarea hist-textarea-compact"
-                rows="1"
-                [attr.id]="'hist-comment-' + item.id"
-                [value]="item.comment || ''"
-                [disabled]="isSaving(item.id)"
-                placeholder="Nota…"
-                maxlength="2000"
-                aria-label="Comentario"
-                (input)="onAnnotateTextareaInput($event)"
-                (blur)="onCommentBlur(item, $event)"
-              ></textarea>
             </td>
             <td class="resultado-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <select
@@ -538,6 +553,20 @@
             <td class="actions-cell">
               <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
               <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
+            </td>
+            <td class="comment-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+              <textarea
+                class="hist-input hist-textarea hist-textarea-compact"
+                rows="1"
+                [attr.id]="'hist-comment-' + item.id"
+                [value]="item.comment || ''"
+                [disabled]="isSaving(item.id)"
+                placeholder="Nota…"
+                maxlength="2000"
+                aria-label="Comentario"
+                (input)="onAnnotateTextareaInput($event)"
+                (blur)="onCommentBlur(item, $event)"
+              ></textarea>
             </td>
           </tr>
           </ng-container>
@@ -805,6 +834,23 @@
           </div>
         </div>
         <div class="card-actions">
+          <span class="run-sent" *ngIf="sentInfo(item) as s">✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small></span>
+          <button
+            type="button"
+            class="recalc-btn sm"
+            *ngIf="sentInfo(item)"
+            [disabled]="mt5RecalcBusy.has(item.id)"
+            (click)="recalcOperation(item, $event)"
+          >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
+          <button
+            type="button"
+            class="run-btn sm"
+            [attr.data-tone]="runTone(item)"
+            *ngIf="!sentInfo(item) && canRunOperation(item)"
+            [disabled]="!runWindowOpen() || runItem?.id === item.id"
+            [attr.title]="runTip()"
+            (click)="openRun(item, $event)"
+          >▶ Run</button>
           <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
           <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
         </div>
@@ -1361,4 +1407,62 @@
       </button>
     </div>
   </dialog>
+
+  <!-- Run operation: confirmación de envío a MT5 -->
+  <button
+    type="button"
+    class="unlock-backdrop"
+    *ngIf="runItem"
+    aria-label="No enviar a MT5"
+    (click)="cancelRun()"
+  ></button>
+  <dialog open class="unlock-dialog run-dialog" *ngIf="runItem as it" aria-modal="true" aria-label="Confirmar envío a MT5">
+    <p class="eyebrow">MetaTrader 5 · señal #{{ it.id }} · {{ it.market | uppercase }}</p>
+    <h2>¿Ejecutar esta operación?</h2>
+    <p class="msg err" *ngIf="!isEntrarVerdict(it)">
+      Veredicto de la señal: <strong>{{ it.verdict || 'n/d' }}</strong> (no es ENTRAR). Se enviará igualmente si confirmas.
+    </p>
+    <p class="muted tiny" *ngIf="mt5ProfileLabel">
+      Perfil: <strong>{{ mt5ProfileLabel }}</strong> · <a routerLink="/configuracion">cambiar</a>
+    </p>
+    <p class="muted" *ngIf="runLoading">Validando con MT5…</p>
+
+    <ng-container *ngIf="runPreview as p">
+      <p class="run-account" [class.real]="!p.account.demo">
+        Cuenta {{ p.account.demo ? 'DEMO' : 'REAL' }} · {{ p.account.login }} · {{ p.account.server }}
+      </p>
+      <dl class="export-confirm-list">
+        <dt>Operación</dt>
+        <dd [class.run-long]="p.side === 'LONG'" [class.run-short]="p.side === 'SHORT'">{{ p.side }} {{ p.symbol }}</dd>
+        <dt>Tipo</dt>
+        <dd>{{ p.mode === 'market' ? 'A mercado ahora' : (p.side === 'LONG' ? 'BUY' : 'SELL') + ' LIMIT (espera la entrada)' }}</dd>
+        <dt>Entrada</dt>
+        <dd>{{ p.price }} <small class="muted">· óptima {{ p.signalEntry }} · broker {{ p.marketPrice }}</small></dd>
+        <dt>Stop loss</dt>
+        <dd>{{ p.sl }}</dd>
+        <dt>Take profit</dt>
+        <dd>{{ p.tp }}</dd>
+        <dt>Lotes</dt>
+        <dd>{{ p.volume }}</dd>
+      </dl>
+      <p class="muted tiny">
+        SL y TP incluyen el margen extra en pips de Configuración. Mercado o LIMIT se recalcula con el precio
+        del broker al confirmar. Solo se puede enviar una vez.
+      </p>
+    </ng-container>
+
+    <p class="msg err" *ngIf="runError">{{ runError }}</p>
+
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="cancelRun()" [disabled]="runSending">No enviar</button>
+      <button
+        type="button"
+        class="run-btn"
+        (click)="confirmRun()"
+        [disabled]="!runPreview || runLoading || runSending"
+      >{{ runSending ? 'Enviando…' : 'Confirmar y enviar' }}</button>
+    </div>
+  </dialog>
+
+  <p class="run-toast" *ngIf="runToast" [class.err]="runToastErr" role="status">{{ runToast }}</p>
 </div>

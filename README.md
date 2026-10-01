@@ -278,7 +278,9 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 - Lotaje por riesgo: `equity × MT5_RISK_PCT %` / pérdida hasta el SL (o `MT5_VOLUME` fijo).
 - Bloqueos: cuenta REAL (salvo `MT5_ALLOW_REAL=1`), precio broker a más de `MT5_MAX_DEVIATION_PCT` % de la entrada, precio ya fuera de SL/TP, posición/orden abierta del mismo magic en el símbolo, misma señal enviada dos veces.
 
-**Operación manual** (botón *Operación manual MT5…* en Señales, `POST /api/mt5/manual`): dirección, tipo (mercado / limit / stop), entrada, SL/TP opcionales y lotes (o riesgo % si hay SL), con símbolo del perfil o uno libre. Ignora veredicto, deduplicado, desvío broker↔señal, rango SL/TP y posiciones abiertas; solo valida MT5. Siempre pasa por *Previsualizar* (dry-run) → *Confirmar y enviar*. Token, bloqueo de cuenta REAL y Algo Trading siguen aplicando.
+**Run operation** (`/historial`, vista detallada): única vía de ejecución desde la UI. Solo la **última señal** y hasta **30 min** después de terminar (validado también en la API). Vista previa (dry-run) → *Confirmar y enviar*; color del botón según veredicto (NO OPERAR rojo, ESPERAR amarillo, resto verde). Una sola vez por señal y perfil (`data/mt5-sent.json`).
+
+**Operación manual** (solo API, `POST /api/mt5/manual`): dirección, tipo (mercado / limit / stop), entrada, SL/TP opcionales y lotes (o riesgo % si hay SL). Ignora los chequeos de señal; token, bloqueo de cuenta REAL y Algo Trading siguen aplicando.
 
 `run-api.ps1` y `run-both.ps1` preparan MT5 automáticamente: abren el terminal MetaTrader 5 si no está abierto, instalan la librería `MetaTrader5` si falta y lanzan el puente de Conf principal (y el de Conf secundaria si `MT5_TERMINAL_PATH_SECUNDARIA` está definido). Un puente que ya escucha no se duplica. `-NoMt5` lo omite. Solo falta activar **Algo Trading** en el terminal.
 

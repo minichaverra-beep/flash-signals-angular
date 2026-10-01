@@ -394,6 +394,66 @@ def place_manual(payload, symbol, side, order_mode):
     return execute(request, fillings, summary, dry_run)
 
 
+CLOSE_REASONS = {
+    getattr(mt5, "DEAL_REASON_SL", -1): "sl",
+    getattr(mt5, "DEAL_REASON_TP", -2): "tp",
+    getattr(mt5, "DEAL_REASON_SO", -3): "stopout",
+}
+
+
+def order_status(payload):
+    """Estado real de una orden enviada (ticket): pendiente, abierta, cerrada o cancelada."""
+    try:
+        ticket = int(payload.get("ticket"))
+    except (TypeError, ValueError):
+        raise BridgeError(400, "Falta 'ticket' numérico") from None
+    if ticket <= 0:
+        raise BridgeError(400, "'ticket' debe ser > 0")
+    ensure_connected()
+
+    def levels(price, sl, tp):
+        return {"entry": price or None, "sl": sl or None, "tp": tp or None}
+
+    pending = mt5.orders_get(ticket=ticket) or ()
+    if pending:
+        o = pending[0]
+        return {"ok": True, "ticket": ticket, "state": "pending", "symbol": o.symbol,
+                "volume": o.volume_current, **levels(o.price_open, o.sl, o.tp)}
+
+    positions = mt5.positions_get(ticket=ticket) or ()
+    if positions:
+        p = positions[0]
+        return {"ok": True, "ticket": ticket, "state": "open", "symbol": p.symbol, "volume": p.volume,
+                "profit": round(p.profit + p.swap, 2), "currentPrice": p.price_current,
+                **levels(p.price_open, p.sl, p.tp)}
+
+    deals = list(mt5.history_deals_get(position=ticket) or ())
+    if deals:
+        entry = next((d for d in deals if d.entry == mt5.DEAL_ENTRY_IN), deals[0])
+        exits = [d for d in deals if d.entry in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY)]
+        hist = mt5.history_orders_get(ticket=ticket) or ()
+        sl = hist[0].sl if hist else 0
+        tp = hist[0].tp if hist else 0
+        profit = round(sum(d.profit + d.swap + d.commission for d in deals), 2)
+        if exits:
+            last = exits[-1]
+            return {"ok": True, "ticket": ticket, "state": "closed", "symbol": entry.symbol,
+                    "volume": entry.volume, "profit": profit, "closePrice": last.price,
+                    "closeReason": CLOSE_REASONS.get(last.reason, "manual"),
+                    **levels(entry.price, sl, tp)}
+        return {"ok": True, "ticket": ticket, "state": "open", "symbol": entry.symbol,
+                "volume": entry.volume, "profit": profit, **levels(entry.price, sl, tp)}
+
+    hist = mt5.history_orders_get(ticket=ticket) or ()
+    if hist:
+        o = hist[0]
+        state = "expired" if o.state == mt5.ORDER_STATE_EXPIRED else "canceled"
+        return {"ok": True, "ticket": ticket, "state": state, "symbol": o.symbol,
+                "volume": o.volume_initial, **levels(o.price_open, o.sl, o.tp)}
+
+    raise BridgeError(404, f"Ticket {ticket} no encontrado en MT5 (¿otra cuenta?).")
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, body):
         data = json.dumps(body, default=str).encode("utf-8")
@@ -428,7 +488,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._authorized():
             return
-        if self.path != "/order":
+        routes = {"/order": place_order, "/status": order_status}
+        handler = routes.get(self.path)
+        if handler is None:
             self._send(404, {"ok": False, "error": "Ruta no encontrada"})
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -440,7 +502,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._send(400, {"ok": False, "error": "JSON inválido"})
             return
-        self._handle(lambda: place_order(payload))
+        self._handle(lambda: handler(payload))
 
     def log_message(self, fmt, *args):
         print(f"[mt5-bridge] {self.address_string()} {fmt % args}")

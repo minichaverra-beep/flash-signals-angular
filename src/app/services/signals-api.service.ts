@@ -82,6 +82,8 @@ export interface SignalSummary {
   scoreExtended?: number | null;
   scoreCombined?: number | null;
   planDetails?: PlanDetails | null;
+  /** Plan de la señal antes de reajustarlo con la orden real de MT5 (Recalcular). */
+  planOriginal?: { entry?: string | null; sl?: string | null; tp?: string | null } | null;
   checklist2M5?: ChecklistItem[];
   checklistE1?: ChecklistItem[];
   scorecard?: ScoreBar[];
@@ -141,21 +143,8 @@ export interface Mt5PushRequest {
   volume?: number;
   riskPct?: number;
   allowMultiple?: boolean;
-}
-
-export type Mt5ManualOrderMode = 'market' | 'limit' | 'stop';
-
-/** Operación manual: sin chequeos de señal (solo token, cuenta REAL y Algo Trading). */
-export interface Mt5ManualRequest {
-  market?: Market;
-  symbol?: string;
-  side: 'LONG' | 'SHORT';
-  orderMode: Mt5ManualOrderMode;
-  entry?: number;
-  sl?: number;
-  tp?: number;
-  volume?: number;
-  dryRun?: boolean;
+  /** Solo con historyId: ejecuta el plan aunque el veredicto no sea ENTRAR. */
+  anyVerdict?: boolean;
 }
 
 /** Respuesta del puente MT5 (orden enviada o vista previa con dryRun). */
@@ -186,6 +175,54 @@ export interface Mt5PushOutcome {
   profile?: { id: 'principal' | 'secundaria'; label: string };
 }
 
+/** Envío ya registrado de una señal del historial (anti doble ejecución). */
+export interface Mt5SentEntry {
+  at: string;
+  symbol: string | null;
+  side: 'LONG' | 'SHORT' | null;
+  mode: 'market' | 'pending' | null;
+  volume: number | null;
+  price: number | null;
+  sl: number | null;
+  tp: number | null;
+  order: number | null;
+  deal: number | null;
+  /** Último estado leído de MT5 con Recalcular. */
+  state?: 'pending' | 'open' | 'closed' | 'canceled' | 'expired' | null;
+  /** Niveles tal como se enviaron (antes del primer Recalcular). */
+  original?: { price: number | null; sl: number | null; tp: number | null; volume: number | null };
+  /** Cambios detectados en el último Recalcular ("SL 50590.6 → 50511.9"). */
+  lastChanges?: string[];
+  profit?: number | null;
+  closeReason?: string | null;
+  checkedAt?: string;
+}
+
+export interface Mt5RecalcResult {
+  ok: boolean;
+  message: string;
+  changes: string[];
+  sent: Mt5SentEntry;
+  annotation: { resultado?: string; pnlUsd?: number } | null;
+  /** «Captura detalle» redibujada con los niveles de MT5 (solo última señal del mercado). */
+  chart?: { updated: boolean; reason?: string; chartUrl?: string };
+}
+
+/** Única señal ejecutable desde Run operation (la última) y su ventana de tiempo. */
+export interface Mt5Runnable {
+  id: number;
+  at: string;
+  expiresAt: string;
+  open: boolean;
+  windowMinutes: number;
+}
+
+export interface Mt5SentState {
+  profile: { id: 'principal' | 'secundaria'; label: string };
+  sent: Record<number, Mt5SentEntry>;
+  runnable: Mt5Runnable | null;
+}
+
 export type Mt5SignalMarket = 'btc' | 'us30' | 'xauusd';
 
 /** Configuración MT5 (pantalla Configuración). El token nunca vuelve del servidor: solo hasToken. */
@@ -199,6 +236,11 @@ export interface Mt5Settings {
   expiryMinutes: number;
   deviationPoints: number;
   allowMultiple: boolean;
+  /** Margen extra sobre SL/TP de la señal, en pips. */
+  extraSlPips: number;
+  extraTpPips: number;
+  /** Valor en precio de 1 pip por mercado. */
+  pipSize: Record<Mt5SignalMarket, number>;
 }
 
 export type Mt5SettingsPatch = Partial<Omit<Mt5Settings, 'hasToken'>> & { bridgeToken?: string };
@@ -303,8 +345,12 @@ export class SignalsApiService {
     return this.http.post<Mt5PushOutcome>(`${this.base}/mt5/push`, body);
   }
 
-  mt5Manual(body: Mt5ManualRequest): Observable<Mt5PushOutcome> {
-    return this.http.post<Mt5PushOutcome>(`${this.base}/mt5/manual`, body);
+  mt5Sent(): Observable<Mt5SentState> {
+    return this.http.get<Mt5SentState>(`${this.base}/mt5/sent`);
+  }
+
+  mt5Recalc(historyId: number): Observable<Mt5RecalcResult> {
+    return this.http.post<Mt5RecalcResult>(`${this.base}/mt5/recalc`, { historyId });
   }
 
   mt5Settings(): Observable<Mt5SettingsState> {

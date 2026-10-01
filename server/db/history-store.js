@@ -1137,6 +1137,54 @@ async function updateAnnotation(id, patch = {}) {
 }
 
 /**
+ * Reajusta Entry/SL/TP del plan (summary.planDetails) con los niveles reales de MT5.
+ * El plan original de la señal se conserva una sola vez en summary.planOriginal.
+ * @param {number} id
+ * @param {{ entry?: number|null, sl?: number|null, tp?: number|null }} levels
+ */
+async function updatePlanLevels(id, levels = {}) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: 'id inválido' };
+  const row = e.get(`SELECT summary_json FROM signal_history WHERE id = ?`, [n]);
+  if (!row) return { ok: false, error: 'not_found' };
+  const summary = parseJson(row.summary_json, {}) || {};
+  const plan = { ...(summary.planDetails || {}) };
+  if (!summary.planOriginal) {
+    summary.planOriginal = {
+      entry: plan.entry ?? null,
+      sl: plan.sl ?? null,
+      tp: plan.tp ?? null,
+      rr: plan.rr ?? null,
+      risk: plan.risk ?? null,
+    };
+  }
+  let changed = false;
+  for (const key of ['entry', 'sl', 'tp']) {
+    const v = Number(levels[key]);
+    if (!Number.isFinite(v) || v <= 0) continue;
+    if (Number(plan[key]) !== v) {
+      plan[key] = String(v);
+      changed = true;
+    }
+  }
+  const [entry, sl, tp] = ['entry', 'sl', 'tp'].map((k) => Number(plan[k]));
+  if ([entry, sl, tp].every((v) => Number.isFinite(v) && v > 0)) {
+    const dec = Math.max(...[plan.entry, plan.sl, plan.tp].map((v) => (String(v).split('.')[1] || '').length));
+    const risk = Math.abs(entry - sl);
+    const reward = Math.abs(tp - entry);
+    plan.risk = risk.toFixed(Math.min(dec, 5));
+    if (risk > 0) {
+      const ratio = reward / risk;
+      plan.rr = Math.abs(ratio - Math.round(ratio)) < 0.05 ? `1:${Math.round(ratio)}` : `1:${ratio.toFixed(1)}`;
+    }
+  }
+  summary.planDetails = plan;
+  e.run(`UPDATE signal_history SET summary_json = ? WHERE id = ?`, [JSON.stringify(summary), n]);
+  return { ok: true, changed, planOriginal: summary.planOriginal };
+}
+
+/**
  * @param {number} id
  * @returns {Promise<{ absPath: string, mime: string } | null>}
  */
@@ -1493,6 +1541,7 @@ module.exports = {
   getById,
   deleteById,
   updateAnnotation,
+  updatePlanLevels,
   listTags,
   createTag,
   listConfluencias,

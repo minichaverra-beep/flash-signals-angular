@@ -37,6 +37,11 @@ function defaults() {
     expiryMinutes: envNumber('MT5_EXPIRY_MINUTES') ?? 30,
     deviationPoints: 20,
     allowMultiple: false,
+    /** Margen extra sobre el SL/TP de la señal, en pips (0 = niveles exactos de la señal). */
+    extraSlPips: 30,
+    extraTpPips: 30,
+    /** Valor en precio de 1 pip por mercado. */
+    pipSize: { btc: 1, us30: 1, xauusd: 0.1 },
   };
 }
 
@@ -116,11 +121,30 @@ function validatePatch(patch) {
     if (typeof patch.allowMultiple !== 'boolean') errors.push('allowMultiple: true/false');
     else value.allowMultiple = patch.allowMultiple;
   }
+  for (const key of ['extraSlPips', 'extraTpPips']) {
+    if (patch[key] !== undefined) value[key] = numberIn(errors, key, patch[key], { min: 0, max: 10000 });
+  }
+  if (patch.pipSize !== undefined) {
+    if (!patch.pipSize || typeof patch.pipSize !== 'object') {
+      errors.push('pipSize: objeto { btc, us30, xauusd }');
+    } else {
+      for (const market of SIGNAL_MARKETS) {
+        if (patch.pipSize[market] === undefined) continue;
+        const n = numberIn(errors, `pipSize.${market}`, patch.pipSize[market], { min: 0, max: 1000, minExclusive: true });
+        if (n !== undefined) (value.pipSize ??= {})[market] = n;
+      }
+    }
+  }
   return { value, errors };
 }
 
 function merge(base, patch) {
-  return { ...base, ...patch, symbols: { ...base.symbols, ...(patch.symbols || {}) } };
+  return {
+    ...base,
+    ...patch,
+    symbols: { ...base.symbols, ...(patch.symbols || {}) },
+    pipSize: { ...base.pipSize, ...(patch.pipSize || {}) },
+  };
 }
 
 /** Perfiles de configuración; el activo es el que se usa al enviar operaciones a MT5. */

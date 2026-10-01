@@ -59,6 +59,7 @@ data/history-attachments/
 data/macd-quant-charts/
 # Configuración MT5 de la UI (puede incluir token del puente)
 data/mt5-settings.json
+data/mt5-sent.json
 
 # Temporales en Artifacts (versionar el resto: README y artefactos útiles)
 docs/Artifacts/**/*.tmp

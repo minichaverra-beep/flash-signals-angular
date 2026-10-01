@@ -10,16 +10,11 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import {
   JobStatus,
   LatestResponse,
   Market,
-  Mt5ManualOrderMode,
-  Mt5ManualRequest,
-  Mt5OrderResult,
-  Mt5PushOutcome,
-  Mt5PushRequest,
   SignalSummary,
   SignalsApiService,
   Tier,
@@ -46,12 +41,6 @@ export interface HomeSectionLink {
   label: string;
 }
 
-/** Veredicto ENTRAR con Entry/SL/TP: candidata a enviarse a MT5. */
-export function isEntrySignal(s: SignalSummary | null | undefined): boolean {
-  const p = s?.planDetails;
-  return /entrar/i.test(s?.verdict ?? '') && !!(p?.entry && p?.sl && p?.tp);
-}
-
 @Component({
   selector: 'app-home',
   standalone: true,
@@ -61,6 +50,7 @@ export function isEntrySignal(s: SignalSummary | null | undefined): boolean {
 })
 export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly api = inject(SignalsApiService);
+  private readonly router = inject(Router);
   readonly jobs = inject(SignalJobService);
   private finishedSub?: Subscription;
   /** Job cuya config (mercado/tier) ya se adoptó al reconectar. */
@@ -90,42 +80,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   viewMode: ViewMode = 'rapida';
   activeSection = 'sec-config';
 
-  /** Confirmación de envío a MT5: vista previa (dryRun) → Confirmar / No enviar. */
-  mt5Open = false;
-  mt5Loading = false;
-  mt5Sending = false;
-  mt5Preview: Mt5OrderResult | null = null;
-  /** Perfil activo en Configuración (Conf principal / secundaria) usado para el envío. */
-  mt5ProfileLabel = '';
-  mt5Volume: number | null = null;
-  mt5Error = '';
-  mt5Message = '';
-  mt5MessageErr = false;
-  private mt5Target: Mt5PushRequest = {};
-
-  /** Operación manual: cualquier dirección/tipo/precio; solo MT5 valida. */
-  manualOpen = false;
-  manualLoading = false;
-  manualSending = false;
-  manualPreview: Mt5OrderResult | null = null;
-  manualProfileLabel = '';
-  manualError = '';
-  manualForm = {
-    market: 'btc' as Market,
-    symbol: '',
-    side: 'LONG' as 'LONG' | 'SHORT',
-    orderMode: 'market' as Mt5ManualOrderMode,
-    entry: null as number | null,
-    sl: null as number | null,
-    tp: null as number | null,
-    volume: null as number | null,
-  };
-  readonly manualModes: { id: Mt5ManualOrderMode; label: string }[] = [
-    { id: 'market', label: 'Mercado' },
-    { id: 'limit', label: 'Limit' },
-    { id: 'stop', label: 'Stop' },
-  ];
-
   readonly markets: { id: Market; label: string }[] = [
     { id: 'btc', label: 'BTC' },
     { id: 'us30', label: 'US30' },
@@ -152,11 +106,12 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.finishedSub = this.jobs.finished$.subscribe((j) => {
       if (jobKind(j) !== 'signal') return;
       this.message = '';
-      this.mt5Message = '';
-      this.loadLatest();
-      if (j.status === 'done' && isEntrySignal(j.summary)) {
-        this.openMt5Confirm(j.historyId ? { historyId: j.historyId } : { market: j.market as Market });
+      if (j.status === 'done') {
+        // Corrida terminada → historial, donde está Run operation de la nueva señal.
+        void this.router.navigate(['/historial']);
+        return;
       }
+      this.loadLatest();
     });
   }
 
@@ -422,192 +377,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
           : this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
       },
     });
-  }
-
-  get canSendMt5(): boolean {
-    return isEntrySignal(this.reportSummary);
-  }
-
-  /** Corrida recién terminada del mercado visible → por historyId; si no, último reporte del mercado. */
-  private currentMt5Target(): Mt5PushRequest {
-    const j = this.job;
-    if (j?.status === 'done' && j.historyId && j.market === this.market) {
-      return { historyId: j.historyId };
-    }
-    return { market: this.market };
-  }
-
-  openMt5Confirm(target: Mt5PushRequest = this.currentMt5Target()): void {
-    this.mt5Target = target;
-    this.mt5Open = true;
-    this.mt5Loading = true;
-    this.mt5Preview = null;
-    this.mt5Volume = null;
-    this.mt5Error = '';
-    this.mt5Message = '';
-    this.mt5ProfileLabel = '';
-    this.api.mt5Push({ ...target, dryRun: true }).subscribe({
-      next: (r) => {
-        this.mt5Loading = false;
-        this.mt5ProfileLabel = r.profile?.label ?? '';
-        if (r.status === 'sent' && r.result) {
-          this.mt5Preview = r.result;
-          this.mt5Volume = r.result.volume;
-        } else {
-          this.mt5Error = r.message;
-        }
-      },
-      error: (err: unknown) => {
-        this.mt5Loading = false;
-        const body = (err as { error?: Mt5PushOutcome } | null)?.error;
-        this.mt5ProfileLabel = body?.profile?.label ?? '';
-        this.mt5Error = this.mt5ErrMsg(err, 'No se pudo preparar la orden MT5.');
-      },
-    });
-  }
-
-  confirmMt5(): void {
-    if (!this.mt5Preview || this.mt5Sending) return;
-    const volume = Number(this.mt5Volume);
-    if (!Number.isFinite(volume) || volume <= 0) {
-      this.mt5Error = 'Lotes debe ser un número mayor que 0.';
-      return;
-    }
-    this.mt5Sending = true;
-    this.mt5Error = '';
-    const body: Mt5PushRequest = { ...this.mt5Target };
-    if (volume !== this.mt5Preview.volume) body.volume = volume;
-    this.api.mt5Push(body).subscribe({
-      next: (r) => {
-        this.mt5Sending = false;
-        if (r.status !== 'sent') {
-          this.mt5Error = r.message;
-          return;
-        }
-        this.mt5Open = false;
-        this.mt5Message = `Enviada a MT5: ${r.message}`;
-        this.mt5MessageErr = false;
-      },
-      error: (err: unknown) => {
-        this.mt5Sending = false;
-        this.mt5Error = this.mt5ErrMsg(err, 'MT5 no aceptó la orden.');
-      },
-    });
-  }
-
-  cancelMt5(): void {
-    if (this.mt5Sending) return;
-    const hadPreview = !!this.mt5Preview;
-    this.mt5Open = false;
-    this.mt5Message = hadPreview ? 'Operación no enviada a MT5.' : '';
-    this.mt5MessageErr = false;
-  }
-
-  /** Abre el formulario manual precargado con el plan visible (si lo hay) del mercado actual. */
-  openManual(): void {
-    const plan = this.reportSummary?.planDetails;
-    const num = (v: unknown) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    };
-    const entry = num(plan?.entry);
-    const sl = num(plan?.sl);
-    const tp = num(plan?.tp);
-    this.manualForm = {
-      market: this.market,
-      symbol: '',
-      side: sl != null && entry != null && sl > entry ? 'SHORT' : 'LONG',
-      orderMode: 'market',
-      entry,
-      sl,
-      tp,
-      volume: this.manualForm.volume,
-    };
-    this.manualPreview = null;
-    this.manualError = '';
-    this.manualProfileLabel = '';
-    this.manualOpen = true;
-  }
-
-  /** Cualquier cambio del formulario invalida la vista previa. */
-  manualChanged(): void {
-    this.manualPreview = null;
-    this.manualError = '';
-  }
-
-  private manualBody(dryRun: boolean): Mt5ManualRequest {
-    const f = this.manualForm;
-    const opt = (v: number | null) => (v != null && Number(v) > 0 ? Number(v) : undefined);
-    const symbol = f.symbol.trim();
-    return {
-      ...(symbol ? { symbol } : { market: f.market }),
-      side: f.side,
-      orderMode: f.orderMode,
-      entry: f.orderMode === 'market' ? undefined : opt(f.entry),
-      sl: opt(f.sl),
-      tp: opt(f.tp),
-      volume: opt(f.volume),
-      dryRun,
-    };
-  }
-
-  previewManual(): void {
-    if (this.manualLoading || this.manualSending) return;
-    this.manualLoading = true;
-    this.manualPreview = null;
-    this.manualError = '';
-    this.api.mt5Manual(this.manualBody(true)).subscribe({
-      next: (r) => {
-        this.manualLoading = false;
-        this.manualProfileLabel = r.profile?.label ?? '';
-        this.manualPreview = r.result ?? null;
-        if (r.result?.ok === false) {
-          this.manualError = `Aviso de MT5 (order_check): ${r.result.check?.comment ?? 'rechazo'}. Puedes enviar igualmente.`;
-        }
-      },
-      error: (err: unknown) => {
-        this.manualLoading = false;
-        const body = (err as { error?: Mt5PushOutcome } | null)?.error;
-        this.manualProfileLabel = body?.profile?.label ?? '';
-        this.manualError = this.mt5ErrMsg(err, 'No se pudo preparar la orden manual.');
-      },
-    });
-  }
-
-  confirmManual(): void {
-    if (!this.manualPreview || this.manualSending) return;
-    this.manualSending = true;
-    this.manualError = '';
-    const body = this.manualBody(false);
-    if (!body.volume) body.volume = this.manualPreview.volume;
-    this.api.mt5Manual(body).subscribe({
-      next: (r) => {
-        this.manualSending = false;
-        this.manualOpen = false;
-        this.mt5Message = `Operación manual enviada a MT5: ${r.message}`;
-        this.mt5MessageErr = false;
-      },
-      error: (err: unknown) => {
-        this.manualSending = false;
-        this.manualError = this.mt5ErrMsg(err, 'MT5 no aceptó la orden manual.');
-      },
-    });
-  }
-
-  cancelManual(): void {
-    if (this.manualSending) return;
-    this.manualOpen = false;
-  }
-
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.manualOpen) this.cancelManual();
-    else if (this.mt5Open) this.cancelMt5();
-  }
-
-  private mt5ErrMsg(err: unknown, fallback: string): string {
-    const body = (err as { error?: Partial<Mt5PushOutcome> & { error?: string } } | null)?.error;
-    return body?.message || body?.error || fallback;
   }
 
   private errMsg(err: unknown, fallback: string): string {

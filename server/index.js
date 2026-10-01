@@ -14,6 +14,7 @@ const macdQuantStore = require('./db/macd-quant-store');
 const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
+const mt5Sent = require('./mt5-sent');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
 const {
   pickLatestChart,
@@ -256,28 +257,45 @@ async function persistJobSnapshot(job, extras = {}) {
   }
 }
 
-/** Claves (job/historial) ya enviadas a MT5: evita duplicar la misma señal. */
-const mt5PushedKeys = new Set();
+/** Run operation del historial: solo la última señal y dentro de esta ventana desde que terminó. */
+const MT5_RUN_WINDOW_MIN = 30;
+
+/** Última corrida del historial ejecutable desde Run operation → { id, at, expiresAt, open }. */
+async function runnableHistory() {
+  const res = await historyStore.listHistory({ page: 1, pageSize: 1, sortBy: 'createdAt', sortDir: 'desc' });
+  const last = res?.items?.[0];
+  if (!last) return null;
+  const at = last.finishedAt || last.createdAt;
+  const expiresAt = new Date(new Date(at).getTime() + MT5_RUN_WINDOW_MIN * 60_000).toISOString();
+  return { id: last.id, at, expiresAt, open: Date.now() <= Date.parse(expiresAt), windowMinutes: MT5_RUN_WINDOW_MIN };
+}
+
+/** Envíos en curso (perfil:clave): evita doble ejecución por clics/peticiones simultáneas. */
+const mt5InFlight = new Set();
 
 /**
  * Envía el plan Entry/SL/TP de una señal al puente MT5.
  * @returns {Promise<{ status: 'sent'|'skipped'|'error', message: string, result?: object, order?: object }>}
  */
-async function pushSignalToMt5({ key, market, summary, overrides = {} }) {
+async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdict = false }) {
   const profileId = mt5Settings.getActive();
   const settings = mt5Settings.get(profileId);
   const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
-  const { order, skip } = mt5.buildOrderFromSummary(market, summary, settings);
+  const { order, skip } = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict });
   if (!order) return { status: 'skipped', message: skip, profile };
-  // Por perfil: la misma señal puede ir a la cuenta principal y a la secundaria.
-  const sentKey = key ? `${profileId}:${key}` : null;
+  // Por perfil (persistido): la misma señal puede ir a la cuenta principal y a la secundaria.
   const allowMultiple = overrides.allow_multiple || settings.allowMultiple;
-  if (sentKey && mt5PushedKeys.has(sentKey) && !allowMultiple) {
+  if (key && mt5Sent.has(profileId, key) && !allowMultiple) {
     return { status: 'skipped', message: `Esta señal ya se envió a MT5 con ${profile.label}`, order, profile };
   }
+  const lockKey = key && !overrides.dry_run ? `${profileId}:${key}` : null;
+  if (lockKey && mt5InFlight.has(lockKey)) {
+    return { status: 'skipped', message: 'Esta señal ya se está enviando a MT5', order, profile };
+  }
+  if (lockKey) mt5InFlight.add(lockKey);
   try {
     const result = await mt5.pushOrder(order, { clientId: key, ...overrides }, settings);
-    if (sentKey && !overrides.dry_run) mt5PushedKeys.add(sentKey);
+    if (lockKey) mt5Sent.record(profileId, key, result);
     const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
     return {
       status: 'sent',
@@ -288,6 +306,8 @@ async function pushSignalToMt5({ key, market, summary, overrides = {} }) {
     };
   } catch (err) {
     return { status: 'error', message: err.message, order, profile, httpStatus: err.status, details: err.details };
+  } finally {
+    if (lockKey) mt5InFlight.delete(lockKey);
   }
 }
 
@@ -1845,7 +1865,8 @@ app.patch('/api/mt5/settings', (req, res) => {
  * Envía a MT5 el plan de una señal. Origen: body.historyId → última corrida terminada
  * (si coincide body.market) → último reporte live/ de body.market.
  * La UI llama primero con dryRun=true (vista previa) y solo envía tras confirmar.
- * Opcionales: dryRun, volume, riskPct, allowMultiple.
+ * Opcionales: dryRun, volume, riskPct, allowMultiple, anyVerdict (solo con historyId: ejecuta el
+ * plan aunque el veredicto no sea ENTRAR; el puente sigue validando desvío y rango SL/TP).
  */
 app.post('/api/mt5/push', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -1896,13 +1917,136 @@ app.post('/api/mt5/push', async (req, res) => {
   if (body.volume != null) overrides.volume = volume;
   if (body.riskPct != null) overrides.risk_pct = riskPct;
 
-  const outcome = await pushSignalToMt5({ key, market, summary, overrides });
+  const anyVerdict = body.anyVerdict === true && body.historyId != null;
+  if (anyVerdict) {
+    const runnable = await runnableHistory().catch(() => null);
+    if (!runnable || runnable.id !== parseHistoryId(body.historyId)) {
+      return res.status(409).json({ status: 'skipped', message: 'Run operation solo está disponible para la última señal.' });
+    }
+    if (!runnable.open) {
+      return res.status(409).json({
+        status: 'skipped',
+        message: `Pasaron más de ${MT5_RUN_WINDOW_MIN} min desde la señal: ya no se puede ejecutar.`,
+      });
+    }
+  }
+  const outcome = await pushSignalToMt5({ key, market, summary, overrides, anyVerdict });
   if (!overrides.dry_run && currentJob.summary === summary) {
     currentJob.mt5 = outcome;
     currentJob.logs.push(`[mt5] ${outcome.status}: ${outcome.message}`);
   }
   const status = { sent: 200, skipped: 409 }[outcome.status] || outcome.httpStatus || 502;
   res.status(status).json(outcome);
+});
+
+/**
+ * Señales del historial ya enviadas a MT5 con el perfil activo y la única ejecutable desde
+ * Run operation → { profile, sent: { [historyId]: {...} }, runnable: { id, at, expiresAt, open } | null }.
+ */
+app.get('/api/mt5/sent', async (_req, res) => {
+  const profileId = mt5Settings.getActive();
+  res.json({
+    profile: { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] },
+    sent: mt5Sent.historyMap(profileId),
+    runnable: await runnableHistory().catch(() => null),
+  });
+});
+
+const CHART_ASSET = { btc: 'BTC', us30: 'US30', xauusd: 'XAUUSD' };
+const CHART_DECIMALS = { btc: 1, us30: 1, xauusd: 2 };
+
+/**
+ * Redibuja la «Captura detalle» (PNG anotado de live/) con los niveles reajustados.
+ * Solo para la última señal de su mercado: el PNG de live/ es el de esa corrida.
+ * @returns {Promise<{ updated: boolean, reason?: string, chartUrl?: string }>}
+ */
+async function rerenderDetailChart(id, levels, sent) {
+  const row = await historyStore.getById(id);
+  const asset = row && CHART_ASSET[row.market];
+  if (!asset || !row.chartPath) return { updated: false, reason: 'sin captura detalle' };
+  const latest = await historyStore.listHistory({
+    page: 1, pageSize: 1, market: row.market, sortBy: 'createdAt', sortDir: 'desc',
+  });
+  if (latest?.items?.[0]?.id !== id) return { updated: false, reason: 'no es la última señal del mercado' };
+  const liveRoot = path.resolve(livePath());
+  const chartFull = path.resolve(row.chartPath);
+  if (!chartFull.toLowerCase().startsWith(liveRoot.toLowerCase() + path.sep) || !fs.existsSync(chartFull)) {
+    return { updated: false, reason: 'PNG no encontrado en live/' };
+  }
+  const nums = [levels.entry, levels.sl, levels.tp].map(Number);
+  if (nums.some((n) => !Number.isFinite(n))) return { updated: false, reason: 'niveles incompletos' };
+
+  const hhmm = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const args = [
+    '-m', 'app.views.chart_rerender',
+    '--chart', chartFull,
+    '--entry', String(nums[0]), '--sl', String(nums[1]), '--tp', String(nums[2]),
+    '--note', `Reajustado con MT5 · ticket ${sent.order} · ${hhmm}`,
+    '--asset', asset,
+    '--until', row.finishedAt || row.createdAt,
+    '--decimals', String(CHART_DECIMALS[row.market]),
+  ];
+  const direction = sent.side || row.summary?.direction;
+  if (direction) args.push('--direction', String(direction).toUpperCase());
+  if (row.verdict) args.push('--verdict', String(row.verdict));
+  const price = Number(row.summary?.price);
+  if (Number.isFinite(price)) args.push('--price', String(price));
+
+  const py = process.env.PYTHON || process.env.PYTHON_EXE || 'python';
+  const out = await new Promise((resolve) => {
+    const child = spawn(py, args, {
+      cwd: TRADING_ROOT,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      windowsHide: true,
+    });
+    let stdout = '';
+    const timer = setTimeout(() => child.kill(), 90_000);
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
+    child.on('close', () => {
+      clearTimeout(timer);
+      const line = stdout.trim().split(/\r?\n/).pop() || '';
+      try { resolve(JSON.parse(line)); } catch { resolve({ ok: false, error: 'salida inválida del script' }); }
+    });
+  });
+  if (!out.ok) return { updated: false, reason: out.error || 'error al redibujar' };
+  const mtime = Math.round(fs.statSync(chartFull).mtimeMs);
+  return { updated: true, chartUrl: `/api/signals/chart?market=${row.market}&v=${mtime}` };
+}
+
+/**
+ * Recalcular una operación ya enviada (Run operation): lee su estado real en MT5 y reajusta
+ * el historial (Entrada/SL/TP del plan; Resultado y $/PnL si se cerró o canceló).
+ * Body: { historyId }.
+ */
+app.post('/api/mt5/recalc', async (req, res) => {
+  const id = parseHistoryId(req.body?.historyId);
+  if (id == null) return res.status(400).json({ error: 'historyId inválido' });
+  const profileId = mt5Settings.getActive();
+  const settings = mt5Settings.get(profileId);
+  const key = `h${id}`;
+  const sent = mt5Sent.get(profileId, key);
+  if (!sent?.order) {
+    return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${mt5Settings.PROFILE_LABELS[profileId]}` });
+  }
+  try {
+    const status = await mt5.orderStatus(sent.order, settings);
+    const rec = mt5.reconcileOrder(sent, status);
+    const plan = await historyStore.updatePlanLevels(id, rec.levels);
+    if (!plan.ok) return res.status(plan.error === 'not_found' ? 404 : 400).json({ error: plan.error });
+    if (rec.annotation) {
+      const ann = await historyStore.updateAnnotation(id, rec.annotation);
+      if (!ann.ok) return res.status(400).json({ error: ann.error });
+    }
+    const updated = mt5Sent.update(profileId, key, rec.sentPatch);
+    const chart = await rerenderDetailChart(id, rec.levels, updated).catch((err) => ({
+      updated: false,
+      reason: err.message,
+    }));
+    res.json({ ok: true, message: rec.message, changes: rec.changes, status, sent: updated, annotation: rec.annotation, chart });
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message, details: err.details });
+  }
 });
 
 /**

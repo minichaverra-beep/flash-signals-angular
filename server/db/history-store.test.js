@@ -136,6 +136,35 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.ok(bogus.items[0].id > bogus.items[2].id);
   });
 
+  it('updatePlanLevels: niveles de MT5 recalculan riesgo y R:R; conserva el plan original', async () => {
+    const { id } = await store.insertSnapshot(
+      sampleSnap({
+        summary: {
+          planDetails: { entry: '50628.4', sl: '50566.3', tp: '50752.8', rr: '1:2', risk: '62.2', trigger: 'x' },
+        },
+      })
+    );
+    const r = await store.updatePlanLevels(id, { entry: 50725.1, sl: 50615, tp: 50916.8 });
+    assert.equal(r.ok, true);
+    assert.equal(r.changed, true);
+    const { summary } = await store.getById(id);
+    assert.deepEqual(
+      { entry: summary.planDetails.entry, sl: summary.planDetails.sl, tp: summary.planDetails.tp },
+      { entry: '50725.1', sl: '50615', tp: '50916.8' }
+    );
+    assert.equal(summary.planDetails.risk, '110.1');
+    assert.equal(summary.planDetails.rr, '1:1.7');
+    assert.equal(summary.planDetails.trigger, 'x');
+    assert.deepEqual(summary.planOriginal, {
+      entry: '50628.4', sl: '50566.3', tp: '50752.8', rr: '1:2', risk: '62.2',
+    });
+
+    await store.updatePlanLevels(id, { entry: 50700, sl: 50600, tp: 50900 });
+    const again = await store.getById(id);
+    assert.equal(again.summary.planDetails.rr, '1:2');
+    assert.equal(again.summary.planOriginal.entry, '50628.4');
+  });
+
   it('getById: detalle con summary parseado; ids inválidos → null', async () => {
     const { id } = await store.insertSnapshot(
       sampleSnap({

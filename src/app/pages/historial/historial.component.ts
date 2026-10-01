@@ -9,6 +9,10 @@ import {
   HistorySortKey,
   HistoryTag,
   Market,
+  Mt5OrderResult,
+  Mt5PushOutcome,
+  Mt5Runnable,
+  Mt5SentEntry,
   SignalsApiService,
   SortDir,
 } from '../../services/signals-api.service';
@@ -138,6 +142,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   imageBusyIds = new Set<number>();
   /** cache-bust por id de imagen */
   imageBust = new Map<number, number>();
+  /** URL con cache-bust de la «Captura detalle» redibujada tras Recalcular (por mercado). */
+  detailChartUrl = new Map<string, string>();
   saveHint = '';
   dropActive = false;
 
@@ -170,6 +176,25 @@ export class HistorialComponent implements OnInit, OnDestroy {
   exportScope: ExportScope = readExportScope();
   /** Formato pendiente de confirmar en el diálogo de exportación. */
   exportConfirm: ExportFormat | null = null;
+
+  /** Señales del historial ya enviadas a MT5 con el perfil activo (por historyId). */
+  mt5Sent: Record<number, Mt5SentEntry> = {};
+  mt5ProfileLabel = '';
+  /** Solo la última señal es ejecutable, y solo dentro de su ventana (30 min). */
+  mt5Runnable: Mt5Runnable | null = null;
+  /** Reloj para deshabilitar Run al vencer la ventana sin recargar. */
+  nowMs = Date.now();
+  private clockTimer?: ReturnType<typeof setInterval>;
+  /** Run operation: fila en confirmación → vista previa (dryRun) → enviar. */
+  runItem: HistoryListItem | null = null;
+  runLoading = false;
+  runSending = false;
+  runPreview: Mt5OrderResult | null = null;
+  runError = '';
+  runToast = '';
+  runToastErr = false;
+  /** Filas con Recalcular en curso (lee MT5 y reajusta el historial). */
+  mt5RecalcBusy = new Set<number>();
 
   /** Diálogo de desbloqueo para borrar (modo lock). */
   unlockOpen = false;
@@ -225,10 +250,15 @@ export class HistorialComponent implements OnInit, OnDestroy {
     document.addEventListener('click', onDocClick, true);
     this.removeDocClickClose = () =>
       document.removeEventListener('click', onDocClick, true);
+    this.clockTimer = setInterval(() => (this.nowMs = Date.now()), 15_000);
   }
 
   @HostListener('document:keydown.escape')
   onDocumentEscape(): void {
+    if (this.runItem) {
+      this.cancelRun();
+      return;
+    }
     if (this.exportConfirm) {
       this.cancelExport();
       return;
@@ -250,6 +280,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearInterval(this.clockTimer);
     this.removeDocClickClose?.();
     this.finishedSub?.unsubscribe();
   }
@@ -288,6 +319,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
           this.rebuildDisplayRows();
           this.loading = false;
           this.loadMetricsDataset();
+          this.loadMt5Sent();
         },
         error: (err: unknown) => {
           this.loading = false;
@@ -295,6 +327,175 @@ export class HistorialComponent implements OnInit, OnDestroy {
           this.error = this.errMsg(err, 'No se pudo cargar el historial. ¿API en :3847?');
         },
       });
+  }
+
+  private loadMt5Sent(): void {
+    this.api.mt5Sent().subscribe({
+      next: (r) => {
+        this.mt5Sent = r.sent ?? {};
+        this.mt5ProfileLabel = r.profile?.label ?? '';
+        this.mt5Runnable = r.runnable ?? null;
+        this.nowMs = Date.now();
+      },
+      error: (err: unknown) => console.warn('[historial] envíos MT5 opcionales:', err),
+    });
+  }
+
+  /** Última señal con plan Entry/SL/TP coherente (LONG: SL<E<TP · SHORT: TP<E<SL); el veredicto solo se avisa. */
+  canRunOperation(item: HistoryListItem): boolean {
+    if (item.id !== this.mt5Runnable?.id) return false;
+    const { plannedEntry: e, plannedSl: sl, plannedTp: tp } = item;
+    if (item.status !== 'done' || e == null || sl == null || tp == null) return false;
+    return (sl < e && e < tp) || (tp < e && e < sl);
+  }
+
+  /** Dentro de los 30 min desde que terminó la última señal. */
+  runWindowOpen(): boolean {
+    const r = this.mt5Runnable;
+    return !!r && this.nowMs <= Date.parse(r.expiresAt);
+  }
+
+  runTip(): string {
+    const r = this.mt5Runnable;
+    if (!r) return '';
+    if (!this.runWindowOpen()) return `Pasaron más de ${r.windowMinutes} min desde la señal: ya no se puede ejecutar.`;
+    const left = Math.max(1, Math.ceil((Date.parse(r.expiresAt) - this.nowMs) / 60_000));
+    return `Envía a MT5 la entrada óptima con SL y TP · quedan ${left} min`;
+  }
+
+  /** Color de Run por veredicto: NO OPERAR (LONG/SHORT) rojo · ESPERAR amarillo · resto verde. */
+  runTone(item: HistoryListItem): 'bad' | 'warn' | 'ok' {
+    const v = (item.verdict ?? '').toUpperCase().replace(/[_\s]+/g, ' ');
+    if (/NO OPERAR/.test(v)) return 'bad';
+    if (/ESPERAR/.test(v)) return 'warn';
+    return 'ok';
+  }
+
+  isEntrarVerdict(item: HistoryListItem): boolean {
+    return /entrar/i.test(item.verdict ?? '');
+  }
+
+  sentInfo(item: HistoryListItem): Mt5SentEntry | null {
+    return this.mt5Sent[item.id] ?? null;
+  }
+
+  sentTip(s: Mt5SentEntry): string {
+    const how = s.mode === 'market' ? 'mercado' : 'LIMIT';
+    const state = this.sentStateLabel(s);
+    const levels = (l: { price: number | null; sl: number | null; tp: number | null; volume: number | null }) =>
+      `${l.price ?? '—'} · SL ${l.sl ?? '—'} · TP ${l.tp ?? '—'} · ${l.volume ?? '—'} lotes`;
+    const head = `${s.side ?? ''} ${s.symbol ?? ''} · ${how}${s.order ? ' · ticket ' + s.order : ''}${state ? ' · ' + state : ''}`;
+    const lines = [head];
+    if (s.checkedAt) {
+      const orig = s.original ?? s;
+      lines.push(`Enviada: ${levels(orig)} (${this.absoluteTime(s.at)})`);
+      lines.push(`Ahora en MT5: ${levels(s)} (revisada ${this.absoluteTime(s.checkedAt)})`);
+      lines.push(s.lastChanges?.length ? `Último reajuste: ${s.lastChanges.join(' · ')}` : 'Último reajuste: sin cambios');
+    } else {
+      lines.push(`Enviada: ${levels(s)} (${this.absoluteTime(s.at)})`);
+      lines.push('Pulsa Recalcular para leer el estado actual en MT5.');
+    }
+    if (s.profit != null) lines.push(`PnL: ${s.profit} USD${s.closeReason ? ' · cierre por ' + s.closeReason.toUpperCase() : ''}`);
+    return lines.join('\n');
+  }
+
+  openRun(item: HistoryListItem, ev?: Event): void {
+    ev?.stopPropagation();
+    if (this.sentInfo(item) || !this.canRunOperation(item) || !this.runWindowOpen()) return;
+    this.runItem = item;
+    this.runPreview = null;
+    this.runError = '';
+    this.runLoading = true;
+    this.api.mt5Push({ historyId: item.id, anyVerdict: true, dryRun: true }).subscribe({
+      next: (r) => {
+        this.runLoading = false;
+        this.mt5ProfileLabel = r.profile?.label ?? this.mt5ProfileLabel;
+        if (r.status === 'sent' && r.result) this.runPreview = r.result;
+        else this.runError = r.message;
+      },
+      error: (err: unknown) => {
+        this.runLoading = false;
+        this.runError = this.runErrMsg(err, 'No se pudo preparar la orden MT5.');
+        this.loadMt5Sent();
+      },
+    });
+  }
+
+  confirmRun(): void {
+    const item = this.runItem;
+    if (!item || !this.runPreview || this.runSending) return;
+    this.nowMs = Date.now();
+    if (!this.runWindowOpen()) {
+      this.runError = this.runTip();
+      return;
+    }
+    this.runSending = true;
+    this.runError = '';
+    this.api.mt5Push({ historyId: item.id, anyVerdict: true }).subscribe({
+      next: (r) => {
+        this.runSending = false;
+        this.runItem = null;
+        this.showRunToast(`Enviada a MT5: ${r.message}`);
+        this.loadMt5Sent();
+      },
+      error: (err: unknown) => {
+        this.runSending = false;
+        this.runError = this.runErrMsg(err, 'MT5 no aceptó la orden.');
+        this.loadMt5Sent();
+      },
+    });
+  }
+
+  cancelRun(): void {
+    if (this.runSending) return;
+    this.runItem = null;
+  }
+
+  /** Lee la orden en MT5 y reajusta Entrada/SL/TP (y Resultado/$PnL si cerró) en el historial. */
+  recalcOperation(item: HistoryListItem, ev?: Event): void {
+    ev?.stopPropagation();
+    if (this.mt5RecalcBusy.has(item.id)) return;
+    this.mt5RecalcBusy.add(item.id);
+    this.api.mt5Recalc(item.id).subscribe({
+      next: (r) => {
+        this.mt5RecalcBusy.delete(item.id);
+        if (r.chart?.updated && r.chart.chartUrl) this.detailChartUrl.set(item.market, r.chart.chartUrl);
+        const chartMsg = r.chart?.updated ? ' · captura detalle actualizada' : '';
+        this.showRunToast(`#${item.id} · ${r.message}${chartMsg}`);
+        this.load();
+        if (this.drawerOpen && this.detail?.id === item.id) {
+          this.api.historyGet(item.id).subscribe({ next: (d) => (this.detail = d) });
+        }
+      },
+      error: (err: unknown) => {
+        this.mt5RecalcBusy.delete(item.id);
+        this.showRunToast(`#${item.id} · ${this.runErrMsg(err, 'No se pudo recalcular con MT5.')}`, true);
+      },
+    });
+  }
+
+  sentStateLabel(s: Mt5SentEntry): string {
+    const labels: Record<string, string> = {
+      pending: 'Pendiente',
+      open: 'Abierta',
+      closed: 'Cerrada',
+      canceled: 'Cancelada',
+      expired: 'Expirada',
+    };
+    return s.state ? labels[s.state] ?? s.state : '';
+  }
+
+  private showRunToast(text: string, isError = false): void {
+    this.runToast = text;
+    this.runToastErr = isError;
+    setTimeout(() => {
+      if (this.runToast === text) this.runToast = '';
+    }, 8000);
+  }
+
+  private runErrMsg(err: unknown, fallback: string): string {
+    const body = (err as { error?: Partial<Mt5PushOutcome> & { error?: string } } | null)?.error;
+    return body?.message || body?.error || fallback;
   }
 
   /** Carga todas las páginas del filtro para métricas (máx. pageSize 100). */
@@ -690,7 +891,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
   /** Thumbnail del chart anotado del detalle (no la captura de resultado). */
   detailImageUrl(item: HistoryListItem | HistoryDetail): string | null {
     if (!item.chartPath) return null;
-    return `/api/signals/chart?market=${encodeURIComponent(item.market)}`;
+    return (
+      this.detailChartUrl.get(item.market) ??
+      `/api/signals/chart?market=${encodeURIComponent(item.market)}`
+    );
   }
 
   onCommentBlur(item: HistoryListItem, ev: Event): void {

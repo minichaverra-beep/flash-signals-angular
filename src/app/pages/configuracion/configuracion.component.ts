@@ -152,6 +152,9 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       expiryMinutes: f.expiryMinutes,
       deviationPoints: f.deviationPoints,
       allowMultiple: f.allowMultiple,
+      extraSlPips: f.extraSlPips,
+      extraTpPips: f.extraTpPips,
+      pipSize: { ...f.pipSize },
     };
     if (d.clearToken) settings.bridgeToken = '';
     else if (d.tokenInput.trim()) settings.bridgeToken = d.tokenInput.trim();
@@ -197,7 +200,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
 
   private toDraft(s: Mt5Settings): ProfileDraft {
     return {
-      form: { ...s, symbols: { ...s.symbols } },
+      form: { ...s, symbols: { ...s.symbols }, pipSize: { ...s.pipSize } },
       lotMode: s.volume ? 'fixed' : 'risk',
       fixedVolume: s.volume ?? 0.01,
       tokenInput: '',

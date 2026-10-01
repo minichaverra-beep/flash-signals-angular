@@ -31,11 +31,12 @@ function positiveNumber(raw) {
 /**
  * Convierte el summary de un reporte en una orden MT5.
  * El lado se deduce de la geometría SL/TP (no del texto), así un plan incoherente se descarta.
+ * anyVerdict: el trader decide ejecutar un plan aunque el veredicto no sea ENTRAR (Run operation del historial).
  * @returns {{ order?: object, skip?: string }}
  */
-function buildOrderFromSummary(market, summary, settings = mt5Settings.get()) {
+function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { anyVerdict = false } = {}) {
   if (!summary) return { skip: 'Sin resumen de señal' };
-  if (!/entrar/i.test(String(summary.verdict || ''))) {
+  if (!anyVerdict && !/entrar/i.test(String(summary.verdict || ''))) {
     return { skip: `Veredicto "${summary.verdict || 'n/d'}": no se envía orden` };
   }
   const symbol = symbolFor(market, settings);
@@ -52,7 +53,18 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get()) {
   else if (tp < entry && entry < sl) side = 'SHORT';
   if (!side) return { skip: `Plan incoherente: entry=${entry} sl=${sl} tp=${tp}` };
 
-  return { order: { symbol, side, entry, sl, tp } };
+  return { order: { symbol, side, entry, ...padStops(market, side, sl, tp, settings) } };
+}
+
+const roundPrice = (n) => Math.round(n * 1e6) / 1e6;
+
+/** Aleja SL y TP de la entrada extraSlPips / extraTpPips × pipSize del mercado. */
+function padStops(market, side, sl, tp, settings = {}) {
+  const pip = Number(settings.pipSize?.[market]) || 0;
+  const slPad = (Number(settings.extraSlPips) || 0) * pip;
+  const tpPad = (Number(settings.extraTpPips) || 0) * pip;
+  const dir = side === 'LONG' ? 1 : -1;
+  return { sl: roundPrice(sl - dir * slPad), tp: roundPrice(tp + dir * tpPad) };
 }
 
 const MANUAL_ORDER_MODES = ['market', 'limit', 'stop', 'auto'];
@@ -92,6 +104,71 @@ function buildManualOrder(body = {}, settings = mt5Settings.get()) {
   return { order };
 }
 
+const STATE_LABELS = {
+  pending: 'pendiente (LIMIT)',
+  open: 'abierta',
+  closed: 'cerrada',
+  canceled: 'cancelada',
+  expired: 'expirada',
+};
+
+/**
+ * Recalcular: compara el envío registrado con el estado real de MT5.
+ * @param {object} sent entrada de mt5-sent (price/sl/tp enviados)
+ * @param {object} status respuesta del puente /status
+ * @returns {{ levels: object, annotation: object|null, changes: string[], sentPatch: object, message: string }}
+ */
+function reconcileOrder(sent = {}, status = {}) {
+  const changes = [];
+  const fields = [
+    ['entry', 'price', 'Entrada'],
+    ['sl', 'sl', 'SL'],
+    ['tp', 'tp', 'TP'],
+  ];
+  for (const [key, sentKey, label] of fields) {
+    const now = positiveNumber(status[key]);
+    const before = positiveNumber(sent[sentKey]);
+    if (now != null && now !== before) changes.push(`${label} ${before ?? '—'} → ${now}`);
+  }
+  if (status.volume != null && sent.volume != null && Number(status.volume) !== Number(sent.volume)) {
+    changes.push(`Lotes ${sent.volume} → ${status.volume}`);
+  }
+
+  let annotation = null;
+  if (status.state === 'closed' && Number.isFinite(Number(status.profit))) {
+    const profit = Number(status.profit);
+    annotation = { resultado: profit >= 0 ? 'ganada' : 'perdida', pnlUsd: profit };
+  } else if (status.state === 'canceled' || status.state === 'expired') {
+    annotation = { resultado: 'no_tomada' };
+  }
+
+  const sentPatch = {
+    original: sent.original ?? { price: sent.price ?? null, sl: sent.sl ?? null, tp: sent.tp ?? null, volume: sent.volume ?? null },
+    lastChanges: changes,
+    state: status.state ?? null,
+    price: positiveNumber(status.entry) ?? sent.price ?? null,
+    sl: positiveNumber(status.sl) ?? sent.sl ?? null,
+    tp: positiveNumber(status.tp) ?? sent.tp ?? null,
+    volume: status.volume ?? sent.volume ?? null,
+    profit: Number.isFinite(Number(status.profit)) ? Number(status.profit) : null,
+    closeReason: status.closeReason ?? null,
+    checkedAt: new Date().toISOString(),
+  };
+
+  const parts = [`Orden ${STATE_LABELS[status.state] || status.state || 'desconocida'}`];
+  parts.push(changes.length ? `reajustada: ${changes.join(' · ')}` : 'sin cambios en Entrada/SL/TP');
+  if (annotation?.pnlUsd != null) parts.push(`PnL ${annotation.pnlUsd} USD (${annotation.resultado})`);
+  else if (annotation) parts.push('marcada como no tomada');
+
+  return {
+    levels: { entry: status.entry, sl: status.sl, tp: status.tp },
+    annotation,
+    changes,
+    sentPatch,
+    message: parts.join(' · '),
+  };
+}
+
 async function callBridge(method, path, body, settings = mt5Settings.get()) {
   const { bridgeUrl, bridgeToken } = settings;
   const headers = { 'Content-Type': 'application/json' };
@@ -124,6 +201,11 @@ function bridgeHealth(settings) {
   return callBridge('GET', '/health', undefined, settings);
 }
 
+/** Estado real en MT5 de un ticket enviado: pending | open | closed | canceled | expired. */
+function orderStatus(ticket, settings) {
+  return callBridge('POST', '/status', { ticket }, settings);
+}
+
 /** @param {object} order salida de buildOrderFromSummary; overrides: volume, risk_pct, dry_run… */
 function pushOrder(order, { clientId, ...overrides } = {}, settings = mt5Settings.get()) {
   return callBridge(
@@ -143,6 +225,9 @@ module.exports = {
   buildManualOrder,
   buildOrderFromSummary,
   bridgeHealth,
+  orderStatus,
+  padStops,
   pushOrder,
+  reconcileOrder,
   symbolFor,
 };

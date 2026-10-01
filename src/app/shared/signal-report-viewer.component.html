@@ -1,6 +1,39 @@
 @if (summary; as s) {
   @if (mode === 'trader') {
     <!-- Vista detallada: análisis completo con etiquetas claras -->
+    @if (s.planDetails; as pd) {
+      @if (pd.entry || pd.sl || pd.tp || pd.rr || pd.risk) {
+        <div class="table-wrap plan-top">
+          <table class="matrix plan-grid">
+            <thead>
+              <tr>
+                <th>Entrada</th>
+                <th>Stop</th>
+                <th>Objetivo</th>
+                <th>Riesgo/beneficio</th>
+                <th>Riesgo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{ pd.entry || '—' }}</td>
+                <td>{{ pd.sl || '—' }}</td>
+                <td>{{ pd.tp || '—' }}</td>
+                <td>{{ pd.rr || '—' }}</td>
+                <td>{{ pd.risk || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        @if (s.planOriginal; as po) {
+          <p class="plan-mt5 tiny">
+            Reajustado con la orden real de MT5 · plan original de la señal:
+            Entrada {{ po.entry || '—' }} · Stop {{ po.sl || '—' }} · Objetivo {{ po.tp || '—' }}
+          </p>
+        }
+      }
+    }
+
     @if (verdictRows(s); as vRows) {
       @if (vRows.length) {
         <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible" open>
@@ -49,31 +82,6 @@
           }
 
           @if (s.planDetails; as pd) {
-            @if (pd.entry || pd.sl || pd.tp || pd.rr || pd.risk) {
-              <div class="table-wrap" [class.stack-gap]="marketRows(s).length">
-                <table class="matrix plan-grid">
-                  <thead>
-                    <tr>
-                      <th>Entrada</th>
-                      <th>Stop</th>
-                      <th>Objetivo</th>
-                      <th>Riesgo/beneficio</th>
-                      <th>Riesgo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>{{ pd.entry || '—' }}</td>
-                      <td>{{ pd.sl || '—' }}</td>
-                      <td>{{ pd.tp || '—' }}</td>
-                      <td>{{ pd.rr || '—' }}</td>
-                      <td>{{ pd.risk || '—' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            }
-
             @if (pd.trigger || pd.invalidation || pd.confirmation) {
               <div class="table-wrap meta-plan">
                 <table class="matrix">

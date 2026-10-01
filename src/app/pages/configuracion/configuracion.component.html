@@ -153,6 +153,40 @@
       </section>
 
       <section class="panel">
+        <h2>Margen extra de SL / TP</h2>
+        <p class="muted tiny">
+          Se suma a los niveles de la señal al enviar: el SL se aleja de la entrada y el TP también. 0 = niveles exactos.
+        </p>
+        <div class="grid">
+          <div class="field">
+            <label for="cfg-xsl">SL extra (pips)</label>
+            <input id="cfg-xsl" name="extraSlPips" type="number" min="0" max="10000" step="1" [(ngModel)]="d.form.extraSlPips" />
+          </div>
+          <div class="field">
+            <label for="cfg-xtp">TP extra (pips)</label>
+            <input id="cfg-xtp" name="extraTpPips" type="number" min="0" max="10000" step="1" [(ngModel)]="d.form.extraTpPips" />
+          </div>
+        </div>
+        <div class="grid">
+          <div class="field" *ngFor="let m of markets">
+            <label [for]="'cfg-pip-' + m.id">1 pip en {{ m.label }} (precio)</label>
+            <input
+              [id]="'cfg-pip-' + m.id"
+              [name]="'pip-' + m.id"
+              type="number"
+              min="0.00001"
+              step="any"
+              [(ngModel)]="d.form.pipSize[m.id]"
+            />
+            <small class="muted">
+              {{ d.form.extraSlPips || 0 }} pips SL = {{ ((d.form.extraSlPips || 0) * (d.form.pipSize[m.id] || 0)) | number:'1.0-5' }} ·
+              {{ d.form.extraTpPips || 0 }} pips TP = {{ ((d.form.extraTpPips || 0) * (d.form.pipSize[m.id] || 0)) | number:'1.0-5' }}
+            </small>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>Ejecución</h2>
         <div class="grid">
           <div class="field">
