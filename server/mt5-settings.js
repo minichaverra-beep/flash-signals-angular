@@ -60,80 +60,86 @@ function numberIn(errors, key, raw, { min, max, integer = false, minExclusive = 
  * Valida un patch parcial. Solo se aplican los campos presentes.
  * @returns {{ value: object, errors: string[] }}
  */
+/** Campos numéricos del patch y su rango. */
+const NUMBER_FIELDS = {
+  riskPct: { min: 0, max: 5, minExclusive: true },
+  maxDeviationPct: { min: 0, max: 10, minExclusive: true },
+  expiryMinutes: { min: 0, max: 1440, integer: true },
+  deviationPoints: { min: 1, max: 1000, integer: true },
+  extraSlPips: { min: 0, max: 10000 },
+  extraTpPips: { min: 0, max: 10000 },
+};
+
+function validateBridgeUrl(errors, raw) {
+  try {
+    const url = new URL(String(raw));
+    if (!/^https?:$/.test(url.protocol) || !LOOPBACK_HOSTS.has(url.hostname)) throw new Error('host');
+    return url.origin;
+  } catch {
+    errors.push('bridgeUrl: debe ser http://127.0.0.1:<puerto> o http://localhost:<puerto>');
+    return undefined;
+  }
+}
+
+/** Objeto { btc, us30, xauusd } validado campo a campo; undefined si no queda ninguno válido. */
+function validateMarketMap(errors, name, raw, parse) {
+  if (!raw || typeof raw !== 'object') {
+    errors.push(`${name}: objeto { btc, us30, xauusd }`);
+    return undefined;
+  }
+  const out = {};
+  for (const market of SIGNAL_MARKETS) {
+    if (raw[market] === undefined) continue;
+    const v = parse(raw[market], `${name}.${market}`);
+    if (v !== undefined) out[market] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Validador por campo: (errors, raw) → valor válido o undefined (con el error añadido). */
+const FIELD_VALIDATORS = {
+  bridgeUrl: validateBridgeUrl,
+  bridgeToken(errors, raw) {
+    const token = String(raw ?? '');
+    if (token.length <= 200) return token;
+    errors.push('bridgeToken: máximo 200 caracteres');
+    return undefined;
+  },
+  symbols(errors, raw) {
+    return validateMarketMap(errors, 'symbols', raw, (v, label) => {
+      const sym = String(v).trim();
+      if (SYMBOL_RE.test(sym)) return sym;
+      errors.push(`${label}: símbolo inválido`);
+      return undefined;
+    });
+  },
+  pipSize(errors, raw) {
+    return validateMarketMap(errors, 'pipSize', raw, (v, label) =>
+      numberIn(errors, label, v, { min: 0, max: 1000, minExclusive: true })
+    );
+  },
+  volume(errors, raw) {
+    if (raw === null || raw === '') return null;
+    return numberIn(errors, 'volume', raw, { min: 0, max: 100, minExclusive: true });
+  },
+  allowMultiple(errors, raw) {
+    if (typeof raw === 'boolean') return raw;
+    errors.push('allowMultiple: true/false');
+    return undefined;
+  },
+  ...Object.fromEntries(
+    Object.entries(NUMBER_FIELDS).map(([key, range]) => [key, (errors, raw) => numberIn(errors, key, raw, range)])
+  ),
+};
+
 function validatePatch(patch) {
   const errors = [];
   const value = {};
   if (!patch || typeof patch !== 'object') return { value, errors: ['Body inválido'] };
-
-  if (patch.bridgeUrl !== undefined) {
-    try {
-      const url = new URL(String(patch.bridgeUrl));
-      if (!/^https?:$/.test(url.protocol) || !LOOPBACK_HOSTS.has(url.hostname)) throw new Error('host');
-      value.bridgeUrl = url.origin;
-    } catch {
-      errors.push('bridgeUrl: debe ser http://127.0.0.1:<puerto> o http://localhost:<puerto>');
-    }
-  }
-  if (patch.bridgeToken !== undefined) {
-    const token = String(patch.bridgeToken ?? '');
-    if (token.length > 200) errors.push('bridgeToken: máximo 200 caracteres');
-    else value.bridgeToken = token;
-  }
-  if (patch.symbols !== undefined) {
-    if (!patch.symbols || typeof patch.symbols !== 'object') {
-      errors.push('symbols: objeto { btc, us30, xauusd }');
-    } else {
-      for (const market of SIGNAL_MARKETS) {
-        if (patch.symbols[market] === undefined) continue;
-        const sym = String(patch.symbols[market]).trim();
-        if (!SYMBOL_RE.test(sym)) errors.push(`symbols.${market}: símbolo inválido`);
-        else (value.symbols ??= {})[market] = sym;
-      }
-    }
-  }
-  if (patch.riskPct !== undefined) {
-    value.riskPct = numberIn(errors, 'riskPct', patch.riskPct, { min: 0, max: 5, minExclusive: true });
-  }
-  if (patch.volume !== undefined) {
-    value.volume =
-      patch.volume === null || patch.volume === ''
-        ? null
-        : numberIn(errors, 'volume', patch.volume, { min: 0, max: 100, minExclusive: true });
-  }
-  if (patch.maxDeviationPct !== undefined) {
-    value.maxDeviationPct = numberIn(errors, 'maxDeviationPct', patch.maxDeviationPct, {
-      min: 0,
-      max: 10,
-      minExclusive: true,
-    });
-  }
-  if (patch.expiryMinutes !== undefined) {
-    value.expiryMinutes = numberIn(errors, 'expiryMinutes', patch.expiryMinutes, { min: 0, max: 1440, integer: true });
-  }
-  if (patch.deviationPoints !== undefined) {
-    value.deviationPoints = numberIn(errors, 'deviationPoints', patch.deviationPoints, {
-      min: 1,
-      max: 1000,
-      integer: true,
-    });
-  }
-  if (patch.allowMultiple !== undefined) {
-    if (typeof patch.allowMultiple !== 'boolean') errors.push('allowMultiple: true/false');
-    else value.allowMultiple = patch.allowMultiple;
-  }
-  for (const key of ['extraSlPips', 'extraTpPips']) {
-    if (patch[key] !== undefined) value[key] = numberIn(errors, key, patch[key], { min: 0, max: 10000 });
-  }
-  if (patch.pipSize !== undefined) {
-    if (!patch.pipSize || typeof patch.pipSize !== 'object') {
-      errors.push('pipSize: objeto { btc, us30, xauusd }');
-    } else {
-      for (const market of SIGNAL_MARKETS) {
-        if (patch.pipSize[market] === undefined) continue;
-        const n = numberIn(errors, `pipSize.${market}`, patch.pipSize[market], { min: 0, max: 1000, minExclusive: true });
-        if (n !== undefined) (value.pipSize ??= {})[market] = n;
-      }
-    }
+  for (const [key, validate] of Object.entries(FIELD_VALIDATORS)) {
+    if (patch[key] === undefined) continue;
+    const v = validate(errors, patch[key]);
+    if (v !== undefined) value[key] = v;
   }
   return { value, errors };
 }
@@ -142,8 +148,8 @@ function merge(base, patch) {
   return {
     ...base,
     ...patch,
-    symbols: { ...base.symbols, ...(patch.symbols || {}) },
-    pipSize: { ...base.pipSize, ...(patch.pipSize || {}) },
+    symbols: { ...base.symbols, ...patch.symbols },
+    pipSize: { ...base.pipSize, ...patch.pipSize },
   };
 }
 

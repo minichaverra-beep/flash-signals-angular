@@ -2,8 +2,8 @@
  * Registro persistente de señales ya enviadas a MT5 (por perfil), para no ejecutar dos veces
  * la misma señal aunque se reinicie la API. Archivo JSON junto a mt5-settings.json.
  */
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 let cache = null;
 

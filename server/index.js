@@ -27,7 +27,7 @@ const PORT = Number(process.env.PORT || 3847);
 const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const TRADING_ROOT =
   process.env.CURSOR_TRADING_ROOT ||
-  path.normalize('D:\\Danilo\\Trading\\Cursor Trading');
+  path.normalize(String.raw`D:\Danilo\Trading\Cursor Trading`);
 
 /** Contraseña para borrar filas / limpiar historial (modo lock). Local desk tool. */
 const HISTORY_UNLOCK_PASSWORD =
@@ -312,6 +312,7 @@ async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdic
 }
 
 const app = express();
+app.disable('x-powered-by');
 app.use(
   cors({
     origin(origin, callback) {
@@ -393,9 +394,9 @@ function buildPsArgs(body) {
 
 function stripMd(s) {
   return String(s || '')
-    .replace(/\*\*/g, '')
-    .replace(/`/g, '')
-    .replace(/\u00a0/g, ' ')
+    .replaceAll('**', '')
+    .replaceAll('`', '')
+    .replaceAll('\u00a0', ' ')
     .trim();
 }
 
@@ -638,7 +639,7 @@ function parseVolumeZentinel(md) {
       break;
     }
   }
-  const preset = parts.find((p) => /zentinel/i.test(p)) || parts[parts.length - 1] || null;
+  const preset = parts.find((p) => /zentinel/i.test(p)) || parts.at(-1) || null;
   return { band, ratio, preset };
 }
 
@@ -742,7 +743,7 @@ function parseSummary(md, market, tier) {
     watchtowerKz: watchtower,
     volBand: vol.band,
     volRatio: vol.ratio,
-    preset: vol.preset || (thresholds && thresholds.presetName) || null,
+    preset: vol.preset || thresholds?.presetName || null,
     kzOn: watchtower
       ? !/fuera|off|lunch|asia|london/i.test(watchtower) &&
         /NY|ON|open|mid|pm/i.test(watchtower)
@@ -813,7 +814,7 @@ function parseSummary(md, market, tier) {
     volume: {
       band: vol.band,
       ratio: vol.ratio,
-      preset: vol.preset || (thresholds && thresholds.presetName) || null,
+      preset: vol.preset || thresholds?.presetName || null,
       thresholds: thresholds
         ? {
             very_low: thresholds.very_low,
@@ -1010,7 +1011,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
     });
   }
 
-  const body = { ...(req.body || {}) };
+  const body = { ...req.body };
   const market = normalizeMarket(body.market) || 'btc';
   if (!normalizeMarket(body.market) && body.market) {
     return res.status(400).json({ error: MARKET_ERROR });
@@ -1026,7 +1027,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
     return res.status(503).json({
       error:
         'Nuevo análisis requiere API en host Windows (run-api.ps1). El contenedor Linux solo cubre UI/health.',
-      hint: 'En el host Windows: .\\run-api.ps1',
+      hint: String.raw`En el host Windows: .\run-api.ps1`,
       platform: process.platform,
     });
   }
@@ -1735,13 +1736,13 @@ app.patch('/api/wiki/categories/:id', async (req, res) => {
     }
     const body = req.body || {};
     const patch = {};
-    if (Object.prototype.hasOwnProperty.call(body, 'name')) patch.name = body.name;
-    if (Object.prototype.hasOwnProperty.call(body, 'sortOrder')) {
+    if (Object.hasOwn(body, 'name')) patch.name = body.name;
+    if (Object.hasOwn(body, 'sortOrder')) {
       patch.sortOrder = body.sortOrder;
-    } else if (Object.prototype.hasOwnProperty.call(body, 'sort_order')) {
+    } else if (Object.hasOwn(body, 'sort_order')) {
       patch.sortOrder = body.sort_order;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'color')) patch.color = body.color;
+    if (Object.hasOwn(body, 'color')) patch.color = body.color;
     const result = await wikiStore.updateCategory(id, patch);
     if (!result.ok) {
       return res.status(result.status).json({ error: result.error });
@@ -1759,8 +1760,8 @@ app.delete('/api/wiki/categories/:id', async (req, res) => {
     if (!id) {
       return res.status(400).json({ error: 'id inválido' });
     }
-    let reassignTo = undefined;
-    if (Object.prototype.hasOwnProperty.call(req.query, 'reassignTo')) {
+    let reassignTo;
+    if (Object.hasOwn(req.query, 'reassignTo')) {
       const raw = req.query.reassignTo;
       if (raw === '' || raw === 'null' || raw == null) {
         reassignTo = null;
@@ -1822,7 +1823,7 @@ app.get('/api/artifacts/raw', (req, res) => {
 
 /** ?profile=principal|secundaria (por defecto el activo). */
 app.get('/api/mt5/health', async (req, res) => {
-  const profile = req.query.profile ? String(req.query.profile) : mt5Settings.getActive();
+  const profile = typeof req.query.profile === 'string' && req.query.profile ? req.query.profile : mt5Settings.getActive();
   if (!mt5Settings.PROFILES.includes(profile)) {
     return res.status(400).json({ ok: false, error: `profile debe ser ${mt5Settings.PROFILES.join(' | ')}` });
   }
@@ -1868,67 +1869,76 @@ app.patch('/api/mt5/settings', (req, res) => {
  * Opcionales: dryRun, volume, riskPct, allowMultiple, anyVerdict (solo con historyId: ejecuta el
  * plan aunque el veredicto no sea ENTRAR; el puente sigue validando desvío y rango SL/TP).
  */
-app.post('/api/mt5/push', async (req, res) => {
-  const body = req.body && typeof req.body === 'object' ? req.body : {};
-  let key;
-  let market;
-  let summary;
-
+/** Señal a enviar: historyId → job terminado → último reporte live/. → { key, market, summary } | { status, error }. */
+async function resolvePushSource(body) {
   if (body.historyId != null) {
     const id = parseHistoryId(body.historyId);
-    if (id == null) return res.status(400).json({ error: 'historyId inválido' });
+    if (id == null) return { status: 400, error: 'historyId inválido' };
     const item = await historyStore.getById(id).catch(() => null);
-    if (!item) return res.status(404).json({ error: 'Entrada de historial no encontrada' });
-    key = `h${id}`;
-    market = item.market;
-    summary = item.summary;
-  } else {
-    const wantedMarket = body.market != null ? normalizeMarket(body.market) : null;
-    if (body.market != null && !wantedMarket) return res.status(400).json({ error: MARKET_ERROR });
-    const jobUsable =
-      currentJob.status === 'done' &&
-      currentJob.kind === 'signal' &&
-      currentJob.summary &&
-      (!wantedMarket || currentJob.market === wantedMarket);
-    if (jobUsable) {
-      key = currentJob.historyId ? `h${currentJob.historyId}` : currentJob.id.slice(0, 8);
-      market = currentJob.market;
-      summary = currentJob.summary;
-    } else if (wantedMarket) {
-      const latest = readLatest(wantedMarket, 'high');
-      if (!latest?.summary) return res.status(404).json({ error: 'No hay reporte para ese mercado' });
-      key = `r${wantedMarket}${Math.round(fs.statSync(latest.reportPath).mtimeMs / 1000)}`;
-      market = wantedMarket;
-      summary = latest.summary;
-    } else {
-      return res.status(409).json({ error: 'No hay una señal terminada para enviar. Indica historyId o market.' });
-    }
+    if (!item) return { status: 404, error: 'Entrada de historial no encontrada' };
+    return { key: `h${id}`, market: item.market, summary: item.summary };
   }
+  const wantedMarket = body.market == null ? null : normalizeMarket(body.market);
+  if (body.market != null && !wantedMarket) return { status: 400, error: MARKET_ERROR };
+  const jobUsable =
+    currentJob.status === 'done' &&
+    currentJob.kind === 'signal' &&
+    currentJob.summary &&
+    (!wantedMarket || currentJob.market === wantedMarket);
+  if (jobUsable) {
+    const key = currentJob.historyId ? `h${currentJob.historyId}` : currentJob.id.slice(0, 8);
+    return { key, market: currentJob.market, summary: currentJob.summary };
+  }
+  if (!wantedMarket) {
+    return { status: 409, error: 'No hay una señal terminada para enviar. Indica historyId o market.' };
+  }
+  const latest = readLatest(wantedMarket, 'high');
+  if (!latest?.summary) return { status: 404, error: 'No hay reporte para ese mercado' };
+  const key = `r${wantedMarket}${Math.round(fs.statSync(latest.reportPath).mtimeMs / 1000)}`;
+  return { key, market: wantedMarket, summary: latest.summary };
+}
 
+/** dryRun / allowMultiple / volume / riskPct del body → { overrides } | { error }. */
+function parsePushOverrides(body) {
   const overrides = { dry_run: body.dryRun === true, allow_multiple: body.allowMultiple === true };
-  const volume = Number(body.volume);
-  const riskPct = Number(body.riskPct);
-  if (body.volume != null && (!Number.isFinite(volume) || volume <= 0)) {
-    return res.status(400).json({ error: 'volume debe ser > 0' });
+  if (body.volume != null) {
+    const volume = Number(body.volume);
+    if (!Number.isFinite(volume) || volume <= 0) return { error: 'volume debe ser > 0' };
+    overrides.volume = volume;
   }
-  if (body.riskPct != null && (!Number.isFinite(riskPct) || riskPct <= 0 || riskPct > 5)) {
-    return res.status(400).json({ error: 'riskPct debe estar entre 0 y 5' });
+  if (body.riskPct != null) {
+    const riskPct = Number(body.riskPct);
+    if (!Number.isFinite(riskPct) || riskPct <= 0 || riskPct > 5) return { error: 'riskPct debe estar entre 0 y 5' };
+    overrides.risk_pct = riskPct;
   }
-  if (body.volume != null) overrides.volume = volume;
-  if (body.riskPct != null) overrides.risk_pct = riskPct;
+  return { overrides };
+}
+
+/** Run operation: solo la última señal y dentro de la ventana. → mensaje de rechazo o null. */
+async function runWindowRejection(historyId) {
+  const runnable = await runnableHistory().catch(() => null);
+  if (runnable?.id !== parseHistoryId(historyId)) {
+    return 'Run operation solo está disponible para la última señal.';
+  }
+  if (!runnable.open) {
+    return `Pasaron más de ${MT5_RUN_WINDOW_MIN} min desde la señal: ya no se puede ejecutar.`;
+  }
+  return null;
+}
+
+app.post('/api/mt5/push', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const source = await resolvePushSource(body);
+  if (source.error) return res.status(source.status).json({ error: source.error });
+  const { key, market, summary } = source;
+
+  const { overrides, error } = parsePushOverrides(body);
+  if (error) return res.status(400).json({ error });
 
   const anyVerdict = body.anyVerdict === true && body.historyId != null;
   if (anyVerdict) {
-    const runnable = await runnableHistory().catch(() => null);
-    if (!runnable || runnable.id !== parseHistoryId(body.historyId)) {
-      return res.status(409).json({ status: 'skipped', message: 'Run operation solo está disponible para la última señal.' });
-    }
-    if (!runnable.open) {
-      return res.status(409).json({
-        status: 'skipped',
-        message: `Pasaron más de ${MT5_RUN_WINDOW_MIN} min desde la señal: ya no se puede ejecutar.`,
-      });
-    }
+    const rejection = await runWindowRejection(body.historyId);
+    if (rejection) return res.status(409).json({ status: 'skipped', message: rejection });
   }
   const outcome = await pushSignalToMt5({ key, market, summary, overrides, anyVerdict });
   if (!overrides.dry_run && currentJob.summary === summary) {
@@ -2087,7 +2097,7 @@ app.post('/api/signals/run', (req, res) => {
     });
   }
 
-  const body = { ...(req.body || {}) };
+  const body = { ...req.body };
   const market = normalizeMarket(body.market);
   const tier = normalizeTier(body.tier);
 
@@ -2142,7 +2152,7 @@ app.post('/api/signals/run', (req, res) => {
     return res.status(503).json({
       error:
         'Señales reales requieren API en host Windows (run-api.ps1). El contenedor Linux solo cubre UI/health.',
-      hint: 'En el host Windows: .\\run-api.ps1  y  .\\run-docker.ps1 -HostApi',
+      hint: String.raw`En el host Windows: .\run-api.ps1  y  .\run-docker.ps1 -HostApi`,
       platform: process.platform,
       command,
     });

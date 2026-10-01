@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import MetaTrader5 as mt5
 
 HOST = os.environ.get("MT5_BRIDGE_HOST", "127.0.0.1")
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 PORT = int(os.environ.get("MT5_BRIDGE_PORT", "8765"))
 TOKEN = os.environ.get("MT5_BRIDGE_TOKEN", "")
 ALLOW_REAL = os.environ.get("MT5_ALLOW_REAL") == "1"
@@ -171,6 +172,75 @@ def send(request, fillings):
 ORDER_MODES = ("auto", "market", "limit", "stop")
 
 
+def symbol_quote(symbol, require_tradeable=False):
+    if not mt5.symbol_select(symbol, True):
+        raise BridgeError(404, f"Símbolo '{symbol}' no existe en el broker (revisa MT5_SYMBOL_*).")
+    info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if info is None or tick is None:
+        raise BridgeError(503, f"Sin cotización para {symbol}: {mt5.last_error()}")
+    if require_tradeable and info.trade_mode == mt5.SYMBOL_TRADE_MODE_DISABLED:
+        raise BridgeError(409, f"{symbol} no permite operar ahora (mercado cerrado o deshabilitado).")
+    return info, tick
+
+
+def as_market(request, info, is_long, deviation):
+    """Completa la petición como orden a mercado; devuelve los modos de llenado a probar."""
+    request.update(
+        action=mt5.TRADE_ACTION_DEAL,
+        type=mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL,
+        deviation=deviation,
+        type_time=mt5.ORDER_TIME_GTC,
+    )
+    return filling_candidates(info)
+
+
+def as_pending(request, info, tick, order_type, expiry_minutes):
+    """Completa la petición como orden pendiente (con expiración si el broker la admite)."""
+    request.update(action=mt5.TRADE_ACTION_PENDING, type=order_type, type_time=mt5.ORDER_TIME_GTC)
+    if expiry_minutes > 0 and info.expiration_mode & 4:
+        request.update(type_time=mt5.ORDER_TIME_SPECIFIED, expiration=int(tick.time) + expiry_minutes * 60)
+    return [mt5.ORDER_FILLING_RETURN]
+
+
+def in_range(is_long, sl, price, tp):
+    return sl < price < tp if is_long else tp < price < sl
+
+
+def check_signal_market(is_long, entry, sl, tp, market_price, max_dev_pct):
+    deviation_pct = abs(market_price - entry) / entry * 100
+    if deviation_pct > max_dev_pct:
+        raise BridgeError(
+            422,
+            f"Precio broker {market_price} está a {deviation_pct:.2f}% de la entrada {entry} "
+            f"(máx {max_dev_pct}%). Feed de la señal y broker no coinciden.",
+        )
+    if not in_range(is_long, sl, market_price, tp):
+        raise BridgeError(409, f"Precio {market_price} ya fuera del rango SL/TP: señal invalidada o TP alcanzado.")
+
+
+def check_exposure(symbol):
+    positions, orders = own_exposure(symbol)
+    if positions or orders:
+        raise BridgeError(
+            409,
+            f"Ya hay {positions} posición(es) y {orders} orden(es) de Flash Signals en {symbol}.",
+        )
+
+
+def account_info(acc, is_demo):
+    return {"login": acc.login, "server": acc.server, "demo": is_demo}
+
+
+def parse_order_mode(payload, manual):
+    order_mode = str(payload.get("order_mode") or ("market" if manual else "auto")).lower()
+    if order_mode not in ORDER_MODES:
+        raise BridgeError(400, f"'order_mode' debe ser {' | '.join(ORDER_MODES)}")
+    if not manual and order_mode != "auto":
+        raise BridgeError(400, "'order_mode' distinto de auto requiere 'manual'")
+    return order_mode
+
+
 def place_order(payload):
     symbol = str(payload.get("symbol") or "").strip()
     side = str(payload.get("side") or "").upper()
@@ -180,116 +250,89 @@ def place_order(payload):
         raise BridgeError(400, "'side' debe ser LONG o SHORT")
     # manual: sin chequeos de señal (coherencia, desvío, rango SL/TP, exposición); MT5 valida el resto.
     manual = bool(payload.get("manual"))
-    order_mode = str(payload.get("order_mode") or ("market" if manual else "auto")).lower()
-    if order_mode not in ORDER_MODES:
-        raise BridgeError(400, f"'order_mode' debe ser {' | '.join(ORDER_MODES)}")
-    if not manual and order_mode != "auto":
-        raise BridgeError(400, "'order_mode' distinto de auto requiere 'manual'")
+    order_mode = parse_order_mode(payload, manual)
     if manual:
         return place_manual(payload, symbol, side, order_mode)
+    return place_signal(payload, symbol, side)
+
+
+def order_options(payload):
+    """Opciones comunes a orden de señal y manual (con sus valores por defecto)."""
+    return {
+        "volume": num(payload, "volume", required=False),
+        "risk_pct": num(payload, "risk_pct", required=False) or 0.5,
+        "deviation": int(num(payload, "deviation_points", required=False) or 20),
+        "expiry_minutes": int(payload.get("expiry_minutes") or 0),
+        "dry_run": bool(payload.get("dry_run")),
+        "client_id": str(payload.get("client_id") or "")[:24],
+    }
+
+
+def order_summary(mode, side, request, market_price, entry, acc, is_demo):
+    return {
+        "mode": mode,
+        "symbol": request["symbol"],
+        "side": side,
+        "volume": request["volume"],
+        "price": request["price"],
+        "sl": request["sl"] or None,
+        "tp": request["tp"] or None,
+        "marketPrice": market_price,
+        "signalEntry": entry,
+        "expiresAt": request.get("expiration"),
+        "account": account_info(acc, is_demo),
+    }
+
+
+def signal_uses_market(is_long, entry, market_price, min_dist):
+    """A mercado si el precio ya alcanzó la entrada o está a menos del stops level; si no, LIMIT."""
+    reached = market_price <= entry if is_long else market_price >= entry
+    return reached or abs(market_price - entry) <= min_dist
+
+
+def place_signal(payload, symbol, side):
     entry = num(payload, "entry")
     sl = num(payload, "sl")
     tp = num(payload, "tp")
-    volume = num(payload, "volume", required=False)
-    risk_pct = num(payload, "risk_pct", required=False) or 0.5
     max_dev_pct = num(payload, "max_entry_deviation_pct", required=False) or 1.0
-    deviation = int(num(payload, "deviation_points", required=False) or 20)
-    expiry_minutes = int(payload.get("expiry_minutes") or 0)
-    allow_multiple = bool(payload.get("allow_multiple"))
-    dry_run = bool(payload.get("dry_run"))
-    client_id = str(payload.get("client_id") or "")[:24]
+    opts = order_options(payload)
 
     is_long = side == "LONG"
-    if is_long and not (sl < entry < tp):
-        raise BridgeError(422, "LONG requiere SL < entry < TP")
-    if not is_long and not (tp < entry < sl):
-        raise BridgeError(422, "SHORT requiere TP < entry < SL")
+    if not in_range(is_long, sl, entry, tp):
+        raise BridgeError(422, "LONG requiere SL < entry < TP" if is_long else "SHORT requiere TP < entry < SL")
 
     acc, is_demo = account_guard()
-
-    if not mt5.symbol_select(symbol, True):
-        raise BridgeError(404, f"Símbolo '{symbol}' no existe en el broker (revisa MT5_SYMBOL_*).")
-    info = mt5.symbol_info(symbol)
-    tick = mt5.symbol_info_tick(symbol)
-    if info is None or tick is None:
-        raise BridgeError(503, f"Sin cotización para {symbol}: {mt5.last_error()}")
-    if info.trade_mode == mt5.SYMBOL_TRADE_MODE_DISABLED:
-        raise BridgeError(409, f"{symbol} no permite operar ahora (mercado cerrado o deshabilitado).")
+    info, tick = symbol_quote(symbol, require_tradeable=True)
 
     market_price = tick.ask if is_long else tick.bid
-    deviation_pct = abs(market_price - entry) / entry * 100
-    if deviation_pct > max_dev_pct:
-        raise BridgeError(
-            422,
-            f"Precio broker {market_price} está a {deviation_pct:.2f}% de la entrada {entry} "
-            f"(máx {max_dev_pct}%). Feed de la señal y broker no coinciden.",
-        )
-    if is_long and not (sl < market_price < tp):
-        raise BridgeError(409, f"Precio {market_price} ya fuera del rango SL/TP: señal invalidada o TP alcanzado.")
-    if not is_long and not (tp < market_price < sl):
-        raise BridgeError(409, f"Precio {market_price} ya fuera del rango SL/TP: señal invalidada o TP alcanzado.")
+    check_signal_market(is_long, entry, sl, tp, market_price, max_dev_pct)
+    if not payload.get("allow_multiple"):
+        check_exposure(symbol)
 
-    if not allow_multiple:
-        positions, orders = own_exposure(symbol)
-        if positions or orders:
-            raise BridgeError(
-                409,
-                f"Ya hay {positions} posición(es) y {orders} orden(es) de Flash Signals en {symbol}.",
-            )
-
-    digits = info.digits
     min_dist = info.trade_stops_level * info.point
-    price_reached = market_price <= entry if is_long else market_price >= entry
-    use_market = price_reached or abs(market_price - entry) <= min_dist
+    use_market = signal_uses_market(is_long, entry, market_price, min_dist)
     price = market_price if use_market else entry
-
     if abs(price - sl) < min_dist or abs(tp - price) < min_dist:
         raise BridgeError(422, f"SL/TP demasiado cerca del precio (stops level {info.trade_stops_level} pts).")
 
-    lots = calc_volume(symbol, info, is_long, price, sl, acc.equity, volume, risk_pct)
-    comment = f"FS {client_id}".strip()[:31]
-
+    digits = info.digits
     request = {
         "symbol": symbol,
-        "volume": lots,
+        "volume": calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"]),
         "price": round(price, digits),
         "sl": round(sl, digits),
         "tp": round(tp, digits),
         "magic": MAGIC,
-        "comment": comment,
+        "comment": f"FS {opts['client_id']}".strip()[:31],
     }
     if use_market:
-        request.update(
-            action=mt5.TRADE_ACTION_DEAL,
-            type=mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL,
-            deviation=deviation,
-            type_time=mt5.ORDER_TIME_GTC,
-        )
-        fillings = filling_candidates(info)
+        fillings = as_market(request, info, is_long, opts["deviation"])
     else:
-        request.update(
-            action=mt5.TRADE_ACTION_PENDING,
-            type=mt5.ORDER_TYPE_BUY_LIMIT if is_long else mt5.ORDER_TYPE_SELL_LIMIT,
-            type_time=mt5.ORDER_TIME_GTC,
-        )
-        if expiry_minutes > 0 and info.expiration_mode & 4:
-            request.update(type_time=mt5.ORDER_TIME_SPECIFIED, expiration=int(tick.time) + expiry_minutes * 60)
-        fillings = [mt5.ORDER_FILLING_RETURN]
+        limit_type = mt5.ORDER_TYPE_BUY_LIMIT if is_long else mt5.ORDER_TYPE_SELL_LIMIT
+        fillings = as_pending(request, info, tick, limit_type, opts["expiry_minutes"])
 
-    summary = {
-        "mode": "market" if use_market else "pending",
-        "symbol": symbol,
-        "side": side,
-        "volume": lots,
-        "price": request["price"],
-        "sl": request["sl"],
-        "tp": request["tp"],
-        "marketPrice": market_price,
-        "signalEntry": entry,
-        "expiresAt": request.get("expiration"),
-        "account": {"login": acc.login, "server": acc.server, "demo": is_demo},
-    }
-    return execute(request, fillings, summary, dry_run)
+    summary = order_summary("market" if use_market else "pending", side, request, market_price, entry, acc, is_demo)
+    return execute(request, fillings, summary, opts["dry_run"])
 
 
 def execute(request, fillings, summary, dry_run):
@@ -321,77 +364,59 @@ def place_manual(payload, symbol, side, order_mode):
     entry = num(payload, "entry", required=order_mode in ("limit", "stop"))
     sl = num(payload, "sl", required=False)
     tp = num(payload, "tp", required=False)
-    volume = num(payload, "volume", required=False)
-    risk_pct = num(payload, "risk_pct", required=False) or 0.5
-    deviation = int(num(payload, "deviation_points", required=False) or 20)
-    expiry_minutes = int(payload.get("expiry_minutes") or 0)
-    dry_run = bool(payload.get("dry_run"))
-    client_id = str(payload.get("client_id") or "")[:24]
+    opts = order_options(payload)
+    if opts["volume"] is None and sl is None:
+        raise BridgeError(422, "Sin SL no se puede calcular el riesgo: indica los lotes.")
     is_long = side == "LONG"
 
     acc, is_demo = account_guard()
-
-    if not mt5.symbol_select(symbol, True):
-        raise BridgeError(404, f"Símbolo '{symbol}' no existe en el broker.")
-    info = mt5.symbol_info(symbol)
-    tick = mt5.symbol_info_tick(symbol)
-    if info is None or tick is None:
-        raise BridgeError(503, f"Sin cotización para {symbol}: {mt5.last_error()}")
+    info, tick = symbol_quote(symbol)
 
     market_price = tick.ask if is_long else tick.bid
-    use_market = order_mode == "market" or (
-        order_mode == "auto" and (entry is None or (market_price <= entry if is_long else market_price >= entry))
-    )
+    use_market = manual_uses_market(order_mode, is_long, entry, market_price)
     price = market_price if use_market else entry
 
-    if volume is None and sl is None:
-        raise BridgeError(422, "Sin SL no se puede calcular el riesgo: indica los lotes.")
-    lots = calc_volume(symbol, info, is_long, price, sl, acc.equity, volume, risk_pct)
     digits = info.digits
-
     request = {
         "symbol": symbol,
-        "volume": lots,
+        "volume": calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"]),
         "price": round(price, digits),
-        "sl": round(sl, digits) if sl else 0.0,
-        "tp": round(tp, digits) if tp else 0.0,
+        "sl": round_or_zero(sl, digits),
+        "tp": round_or_zero(tp, digits),
         "magic": MAGIC,
-        "comment": f"FS manual {client_id}".strip()[:31],
-        "type_time": mt5.ORDER_TIME_GTC,
+        "comment": f"FS manual {opts['client_id']}".strip()[:31],
     }
+    stop = order_mode == "stop"
     if use_market:
-        request.update(
-            action=mt5.TRADE_ACTION_DEAL,
-            type=mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL,
-            deviation=deviation,
-        )
-        fillings = filling_candidates(info)
+        fillings = as_market(request, info, is_long, opts["deviation"])
+        mode = "market"
     else:
-        stop = order_mode == "stop"
-        if is_long:
-            pending_type = mt5.ORDER_TYPE_BUY_STOP if stop else mt5.ORDER_TYPE_BUY_LIMIT
-        else:
-            pending_type = mt5.ORDER_TYPE_SELL_STOP if stop else mt5.ORDER_TYPE_SELL_LIMIT
-        request.update(action=mt5.TRADE_ACTION_PENDING, type=pending_type)
-        if expiry_minutes > 0 and info.expiration_mode & 4:
-            request.update(type_time=mt5.ORDER_TIME_SPECIFIED, expiration=int(tick.time) + expiry_minutes * 60)
-        fillings = [mt5.ORDER_FILLING_RETURN]
+        fillings = as_pending(request, info, tick, pending_order_type(is_long, stop), opts["expiry_minutes"])
+        mode = "stop" if stop else "pending"
 
-    summary = {
-        "mode": "market" if use_market else ("stop" if stop else "pending"),
-        "manual": True,
-        "symbol": symbol,
-        "side": side,
-        "volume": lots,
-        "price": request["price"],
-        "sl": request["sl"] or None,
-        "tp": request["tp"] or None,
-        "marketPrice": market_price,
-        "signalEntry": entry,
-        "expiresAt": request.get("expiration"),
-        "account": {"login": acc.login, "server": acc.server, "demo": is_demo},
-    }
-    return execute(request, fillings, summary, dry_run)
+    summary = {**order_summary(mode, side, request, market_price, entry, acc, is_demo), "manual": True}
+    return execute(request, fillings, summary, opts["dry_run"])
+
+def round_or_zero(value, digits):
+    """MT5 usa 0.0 para «sin SL/TP»."""
+    return round(value, digits) if value else 0.0
+
+
+def manual_uses_market(order_mode, is_long, entry, market_price):
+    """market siempre; auto a mercado si no hay entrada o el precio ya la alcanzó."""
+    if order_mode == "market":
+        return True
+    if order_mode != "auto":
+        return False
+    if entry is None:
+        return True
+    return market_price <= entry if is_long else market_price >= entry
+
+
+def pending_order_type(is_long, stop):
+    if is_long:
+        return mt5.ORDER_TYPE_BUY_STOP if stop else mt5.ORDER_TYPE_BUY_LIMIT
+    return mt5.ORDER_TYPE_SELL_STOP if stop else mt5.ORDER_TYPE_SELL_LIMIT
 
 
 CLOSE_REASONS = {
@@ -410,48 +435,61 @@ def order_status(payload):
     if ticket <= 0:
         raise BridgeError(400, "'ticket' debe ser > 0")
     ensure_connected()
-
-    def levels(price, sl, tp):
-        return {"entry": price or None, "sl": sl or None, "tp": tp or None}
-
-    pending = mt5.orders_get(ticket=ticket) or ()
-    if pending:
-        o = pending[0]
-        return {"ok": True, "ticket": ticket, "state": "pending", "symbol": o.symbol,
-                "volume": o.volume_current, **levels(o.price_open, o.sl, o.tp)}
-
-    positions = mt5.positions_get(ticket=ticket) or ()
-    if positions:
-        p = positions[0]
-        return {"ok": True, "ticket": ticket, "state": "open", "symbol": p.symbol, "volume": p.volume,
-                "profit": round(p.profit + p.swap, 2), "currentPrice": p.price_current,
-                **levels(p.price_open, p.sl, p.tp)}
-
-    deals = list(mt5.history_deals_get(position=ticket) or ())
-    if deals:
-        entry = next((d for d in deals if d.entry == mt5.DEAL_ENTRY_IN), deals[0])
-        exits = [d for d in deals if d.entry in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY)]
-        hist = mt5.history_orders_get(ticket=ticket) or ()
-        sl = hist[0].sl if hist else 0
-        tp = hist[0].tp if hist else 0
-        profit = round(sum(d.profit + d.swap + d.commission for d in deals), 2)
-        if exits:
-            last = exits[-1]
-            return {"ok": True, "ticket": ticket, "state": "closed", "symbol": entry.symbol,
-                    "volume": entry.volume, "profit": profit, "closePrice": last.price,
-                    "closeReason": CLOSE_REASONS.get(last.reason, "manual"),
-                    **levels(entry.price, sl, tp)}
-        return {"ok": True, "ticket": ticket, "state": "open", "symbol": entry.symbol,
-                "volume": entry.volume, "profit": profit, **levels(entry.price, sl, tp)}
-
-    hist = mt5.history_orders_get(ticket=ticket) or ()
-    if hist:
-        o = hist[0]
-        state = "expired" if o.state == mt5.ORDER_STATE_EXPIRED else "canceled"
-        return {"ok": True, "ticket": ticket, "state": state, "symbol": o.symbol,
-                "volume": o.volume_initial, **levels(o.price_open, o.sl, o.tp)}
-
+    for lookup in (_pending_status, _position_status, _deals_status, _history_status):
+        status = lookup(ticket)
+        if status is not None:
+            return {"ok": True, "ticket": ticket, **status}
     raise BridgeError(404, f"Ticket {ticket} no encontrado en MT5 (¿otra cuenta?).")
+
+
+def _levels(price, sl, tp):
+    return {"entry": price or None, "sl": sl or None, "tp": tp or None}
+
+
+def _pending_status(ticket):
+    pending = mt5.orders_get(ticket=ticket) or ()
+    if not pending:
+        return None
+    o = pending[0]
+    return {"state": "pending", "symbol": o.symbol, "volume": o.volume_current,
+            **_levels(o.price_open, o.sl, o.tp)}
+
+
+def _position_status(ticket):
+    positions = mt5.positions_get(ticket=ticket) or ()
+    if not positions:
+        return None
+    p = positions[0]
+    return {"state": "open", "symbol": p.symbol, "volume": p.volume,
+            "profit": round(p.profit + p.swap, 2), "currentPrice": p.price_current,
+            **_levels(p.price_open, p.sl, p.tp)}
+
+
+def _deals_status(ticket):
+    deals = list(mt5.history_deals_get(position=ticket) or ())
+    if not deals:
+        return None
+    entry = next((d for d in deals if d.entry == mt5.DEAL_ENTRY_IN), deals[0])
+    exits = [d for d in deals if d.entry in (mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY)]
+    hist = mt5.history_orders_get(ticket=ticket) or ()
+    sl, tp = (hist[0].sl, hist[0].tp) if hist else (0, 0)
+    profit = round(sum(d.profit + d.swap + d.commission for d in deals), 2)
+    base = {"symbol": entry.symbol, "volume": entry.volume, "profit": profit, **_levels(entry.price, sl, tp)}
+    if not exits:
+        return {"state": "open", **base}
+    last = exits[-1]
+    return {"state": "closed", **base, "closePrice": last.price,
+            "closeReason": CLOSE_REASONS.get(last.reason, "manual")}
+
+
+def _history_status(ticket):
+    hist = mt5.history_orders_get(ticket=ticket) or ()
+    if not hist:
+        return None
+    o = hist[0]
+    state = "expired" if o.state == mt5.ORDER_STATE_EXPIRED else "canceled"
+    return {"state": state, "symbol": o.symbol, "volume": o.volume_initial,
+            **_levels(o.price_open, o.sl, o.tp)}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -514,10 +552,13 @@ def main():
         print(f"[mt5-bridge] Conectado a MT5: {health()['account']}")
     except BridgeError as err:
         print(f"[mt5-bridge] Aviso: {err.message} (se reintentará en cada petición)")
+    if HOST not in LOOPBACK_HOSTS:
+        raise SystemExit(f"[mt5-bridge] MT5_BRIDGE_HOST={HOST!r} no es loopback: el puente no se expone a la red.")
     server = HTTPServer((HOST, PORT), Handler)
-    print(f"[mt5-bridge] Escuchando en http://{HOST}:{PORT}  (magic={MAGIC}, allowReal={ALLOW_REAL})")
+    print(f"[mt5-bridge] Escuchando en {HOST}:{PORT} (solo loopback, magic={MAGIC}, allowReal={ALLOW_REAL})")
     try:
-        server.serve_forever()
+        # HTTP sin TLS aceptable: solo loopback (LOOPBACK_HOSTS).
+        server.serve_forever()  # NOSONAR
     finally:
         mt5.shutdown()
 

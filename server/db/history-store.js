@@ -1149,7 +1149,7 @@ async function updatePlanLevels(id, levels = {}) {
   const row = e.get(`SELECT summary_json FROM signal_history WHERE id = ?`, [n]);
   if (!row) return { ok: false, error: 'not_found' };
   const summary = parseJson(row.summary_json, {}) || {};
-  const plan = { ...(summary.planDetails || {}) };
+  const plan = { ...summary.planDetails };
   if (!summary.planOriginal) {
     summary.planOriginal = {
       entry: plan.entry ?? null,
