@@ -266,6 +266,48 @@ Cómo añadir: copia el archivo a `docs/Artifacts` (o subcarpeta) → abre `/wik
 
 Tiers: `context` | `light` | `high` | `history`.
 
+## Ejecución en MetaTrader 5 (puente local)
+
+Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal MT5 de este Windows, **siempre con confirmación**:
+
+- Al terminar una señal `ENTRAR` se abre el diálogo **¿Enviar esta operación?** con la vista previa validada por MT5 (`dryRun`): cuenta demo/real, lado, mercado o LIMIT, entrada, SL, TP y lotes (editables). **No enviar** la descarta.
+- El botón **Enviar a MT5…** del resultado permite enviarla más tarde (último reporte del mercado visible).
+- Precio del broker **en o mejor** que la entrada óptima → orden **a mercado**.
+- Precio aún **no llega** a la entrada → **BUY/SELL LIMIT** en la entrada (expira a los `MT5_EXPIRY_MINUTES`).
+- SL y TP van siempre adjuntos. El lado (LONG/SHORT) se deduce de SL/TP; un plan incoherente no se envía.
+- Lotaje por riesgo: `equity × MT5_RISK_PCT %` / pérdida hasta el SL (o `MT5_VOLUME` fijo).
+- Bloqueos: cuenta REAL (salvo `MT5_ALLOW_REAL=1`), precio broker a más de `MT5_MAX_DEVIATION_PCT` % de la entrada, precio ya fuera de SL/TP, posición/orden abierta del mismo magic en el símbolo, misma señal enviada dos veces.
+
+**Operación manual** (botón *Operación manual MT5…* en Señales, `POST /api/mt5/manual`): dirección, tipo (mercado / limit / stop), entrada, SL/TP opcionales y lotes (o riesgo % si hay SL), con símbolo del perfil o uno libre. Ignora veredicto, deduplicado, desvío broker↔señal, rango SL/TP y posiciones abiertas; solo valida MT5. Siempre pasa por *Previsualizar* (dry-run) → *Confirmar y enviar*. Token, bloqueo de cuenta REAL y Algo Trading siguen aplicando.
+
+`run-api.ps1` y `run-both.ps1` preparan MT5 automáticamente: abren el terminal MetaTrader 5 si no está abierto, instalan la librería `MetaTrader5` si falta y lanzan el puente de Conf principal (y el de Conf secundaria si `MT5_TERMINAL_PATH_SECUNDARIA` está definido). Un puente que ya escucha no se duplica. `-NoMt5` lo omite. Solo falta activar **Algo Trading** en el terminal.
+
+```powershell
+.\run-both.ps1                            # API + web + terminal MT5 + puente(s)
+.\run-api.ps1 -NoMt5                      # solo la API
+# Manual:
+.\run-mt5-bridge.ps1                      # Conf principal: http://127.0.0.1:8765 (MT5_BRIDGE_TOKEN)
+.\run-mt5-bridge.ps1 -Perfil secundaria   # Conf secundaria: :8766 (MT5_BRIDGE_TOKEN_SECUNDARIA, MT5_TERMINAL_PATH_SECUNDARIA)
+```
+
+**Configuración** (`/configuracion`): dos perfiles, **Conf principal** y **Conf secundaria** (p.ej. otra cuenta/terminal con su propio puente en `MT5_BRIDGE_PORT=8766`), y un selector del perfil **en uso** para enviar operaciones (el diálogo de confirmación indica cuál se usará). Cada perfil tiene URL/token del puente, símbolos del broker, riesgo % o lotes fijos, distancia máx. broker↔señal, caducidad LIMIT, deslizamiento y operaciones múltiples. Se guarda en `data/mt5-settings.json` (gitignore) y aplica al siguiente envío sin reiniciar. Botón **Probar conexión** muestra cuenta demo/real, balance y Algo Trading. Las variables de entorno solo dan los valores por defecto:
+
+| Variable | Default | Uso |
+|----------|---------|-----|
+| `MT5_SYMBOL_BTC` / `_US30` / `_XAUUSD` | `BTCUSD` / `US30` / `XAUUSD` | Nombre del símbolo en tu broker (p.ej. `US30.cash`, `XAUUSDm`) |
+| `MT5_RISK_PCT` | `0.5` | % de equity arriesgado hasta el SL |
+| `MT5_VOLUME` | — | Lotes fijos (ignora el riesgo %) |
+| `MT5_MAX_DEVIATION_PCT` | `1` | Máx. distancia broker ↔ entrada de la señal |
+| `MT5_EXPIRY_MINUTES` | `30` | Caducidad de la orden LIMIT |
+| `MT5_BRIDGE_URL` / `MT5_BRIDGE_TOKEN` | `http://127.0.0.1:8765` / — | Ubicación y token compartido del puente |
+| `MT5_ALLOW_REAL`, `MT5_MAGIC`, `MT5_TERMINAL_PATH`, `MT5_LOGIN`/`MT5_PASSWORD`/`MT5_SERVER` | — | Solo en el puente (`bridge.py`) |
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/api/mt5/health?profile=` | Estado del puente del perfil (por defecto el activo), cuenta (demo/real), Algo Trading |
+| `GET` / `PATCH` | `/api/mt5/settings` | Lee perfiles + activo; `PATCH { profile, settings }` guarda un perfil, `PATCH { active }` cambia el perfil en uso. El token nunca se devuelve (`hasToken`) |
+| `POST` | `/api/mt5/push` | Envía `{ "historyId": 42 }`, la última señal terminada o `{ "market": "xauusd" }` (último reporte). Opcionales: `dryRun` (vista previa), `volume`, `riskPct`, `allowMultiple` |
+
 ## Limitaciones
 
 - **TradingView no se lee en vivo** — presets Zentinel son locales (`config/zentinel_presets.yaml`); el checklist TV sigue siendo manual.

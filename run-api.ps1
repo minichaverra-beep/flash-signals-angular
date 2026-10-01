@@ -5,12 +5,19 @@
 .DESCRIPTION
   Siempre lanza una ventana nueva de PowerShell titulada "Flash Signals API"
   para ver logs/debug. Usa -InWindow solo internamente (proceso ya en esa ventana).
+  También prepara MT5 (run-mt5-bridge.ps1): abre el terminal MetaTrader 5 si
+  no está abierto y lanza el puente de Conf principal (8765). Conf secundaria
+  (8766) solo si MT5_TERMINAL_PATH_SECUNDARIA está definido. Los puentes que
+  ya estén escuchando no se duplican.
 .PARAMETER InWindow
   Uso interno: ejecuta la API en la consola actual (no vuelve a abrir otra ventana).
+.PARAMETER NoMt5
+  No arranca el terminal MT5 ni los puentes.
 #>
 [CmdletBinding()]
 param(
-  [switch]$InWindow
+  [switch]$InWindow,
+  [switch]$NoMt5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +36,21 @@ if (-not $InWindow) {
   $argList = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -InWindow"
   Write-Host "Abriendo consola 'Flash Signals API' (puerto 3847)..." -ForegroundColor Cyan
   Start-Process -FilePath $psExe -WorkingDirectory $ProjectRoot -ArgumentList $argList
+
+  if (-not $NoMt5) {
+    $bridgeScript = Join-Path $ProjectRoot 'run-mt5-bridge.ps1'
+    if (Test-Path -LiteralPath $bridgeScript) {
+      & $bridgeScript -Perfil principal
+      $secondaryTerminal = [Environment]::GetEnvironmentVariable('MT5_TERMINAL_PATH_SECUNDARIA', 'Process')
+      if (-not $secondaryTerminal) { $secondaryTerminal = [Environment]::GetEnvironmentVariable('MT5_TERMINAL_PATH_SECUNDARIA', 'User') }
+      if ($secondaryTerminal) {
+        & $bridgeScript -Perfil secundaria
+      } else {
+        Write-Host "Conf secundaria: sin MT5_TERMINAL_PATH_SECUNDARIA, no se arranca su puente." -ForegroundColor DarkGray
+      }
+      Write-Host "Recuerda: 'Algo Trading' debe estar activado en MetaTrader 5 para enviar órdenes." -ForegroundColor Yellow
+    }
+  }
   exit 0
 }
 

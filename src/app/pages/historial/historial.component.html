@@ -1,7 +1,7 @@
 <div class="page">
   <header class="hero">
     <div class="brand">
-      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
         <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Historial</h1>
@@ -9,11 +9,11 @@
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
-      <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
+      <a routerLink="/senales" routerLinkActive="active">Señales</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
       <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
 
@@ -63,11 +63,11 @@
   <section class="panel empty" *ngIf="!loading && !items.length && !calcMarkers.length && !error">
     <h2>Sin entradas aún</h2>
     <p class="muted hide-on-phone">
-      Ejecuta una señal desde <a routerLink="/">Señales</a>. Al terminar el job,
+      Ejecuta una señal desde <a routerLink="/senales">Señales</a>. Al terminar el job,
       el snapshot se guarda aquí automáticamente (hive box local).
     </p>
     <p class="muted phone-only">
-      Ejecuta una señal desde <a routerLink="/">Señales</a> para verla aquí.
+      Ejecuta una señal desde <a routerLink="/senales">Señales</a> para verla aquí.
     </p>
   </section>
 

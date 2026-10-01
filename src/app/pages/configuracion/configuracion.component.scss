@@ -1,0 +1,309 @@
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 3rem;
+}
+
+.sub,
+.muted {
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+
+.tiny {
+  font-size: 0.8rem;
+}
+
+.panel {
+  background: color-mix(in srgb, var(--panel) 82%, #1a1010);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 8px 28px color-mix(in srgb, black 35%, transparent);
+}
+
+.panel h2 {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.panel > .muted {
+  margin-bottom: 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin: 0.85rem 0 1rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.field input[type='text'],
+.field input[type='password'],
+.field input[type='number'] {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #1a1010;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.field input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.field input:disabled {
+  opacity: 0.5;
+}
+
+.field small {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.check {
+  display: flex !important;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.seg,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.seg button,
+.actions button {
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.seg button:hover,
+.ghost:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.seg button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel-deep));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.primary {
+  background: var(--accent-fire) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  box-shadow: var(--glow-fire);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.msg {
+  margin: 0.9rem 0 0.5rem;
+  color: var(--ok);
+}
+
+.msg.err {
+  color: var(--err);
+}
+
+code {
+  color: color-mix(in srgb, var(--gold) 55%, white);
+  font-size: 0.82rem;
+}
+
+.health {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+}
+
+.health.bad {
+  border-color: color-mix(in srgb, var(--err) 50%, transparent);
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+}
+
+.health p {
+  margin: 0.2rem 0;
+}
+
+.demo {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.real {
+  color: var(--err);
+  font-weight: 700;
+}
+
+.active-panel {
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
+}
+
+.profile-toggle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.profile-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.profile-toggle button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.profile-toggle button.active {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, var(--panel-deep));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ok) 28%, transparent);
+}
+
+.profile-toggle .dot {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+
+.profile-toggle button.active .dot {
+  border-color: var(--ok);
+  background: radial-gradient(circle, var(--ok) 0 45%, transparent 50%);
+}
+
+.toggle-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.toggle-text small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.75rem;
+}
+
+.profile-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+.profile-tabs button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel-deep));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  z-index: 50;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+  background: #1a1010;
+  box-shadow: 0 10px 30px color-mix(in srgb, black 50%, transparent);
+}
+
+.toast.err {
+  border-color: color-mix(in srgb, var(--err) 60%, transparent);
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

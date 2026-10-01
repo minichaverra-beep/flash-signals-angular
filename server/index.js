@@ -12,6 +12,8 @@ const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
 const macdQuantStore = require('./db/macd-quant-store');
 const artifacts = require('./artifacts');
+const mt5 = require('./mt5');
+const mt5Settings = require('./mt5-settings');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
 const {
   pickLatestChart,
@@ -126,6 +128,7 @@ let currentJob = {
   flags: null,
   entry: null,
   historyId: null,
+  mt5: null,
 };
 
 const jobEvents = createJobEvents();
@@ -250,6 +253,41 @@ async function persistJobSnapshot(job, extras = {}) {
   } catch (err) {
     job.logs.push(`[history] No se pudo guardar: ${err.message}`);
     console.error('[history] persist error:', err);
+  }
+}
+
+/** Claves (job/historial) ya enviadas a MT5: evita duplicar la misma señal. */
+const mt5PushedKeys = new Set();
+
+/**
+ * Envía el plan Entry/SL/TP de una señal al puente MT5.
+ * @returns {Promise<{ status: 'sent'|'skipped'|'error', message: string, result?: object, order?: object }>}
+ */
+async function pushSignalToMt5({ key, market, summary, overrides = {} }) {
+  const profileId = mt5Settings.getActive();
+  const settings = mt5Settings.get(profileId);
+  const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
+  const { order, skip } = mt5.buildOrderFromSummary(market, summary, settings);
+  if (!order) return { status: 'skipped', message: skip, profile };
+  // Por perfil: la misma señal puede ir a la cuenta principal y a la secundaria.
+  const sentKey = key ? `${profileId}:${key}` : null;
+  const allowMultiple = overrides.allow_multiple || settings.allowMultiple;
+  if (sentKey && mt5PushedKeys.has(sentKey) && !allowMultiple) {
+    return { status: 'skipped', message: `Esta señal ya se envió a MT5 con ${profile.label}`, order, profile };
+  }
+  try {
+    const result = await mt5.pushOrder(order, { clientId: key, ...overrides }, settings);
+    if (sentKey && !overrides.dry_run) mt5PushedKeys.add(sentKey);
+    const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
+    return {
+      status: 'sent',
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}`,
+      order,
+      result,
+      profile,
+    };
+  } catch (err) {
+    return { status: 'error', message: err.message, order, profile, httpStatus: err.status, details: err.details };
   }
 }
 
@@ -1762,6 +1800,141 @@ app.get('/api/artifacts/raw', (req, res) => {
   res.sendFile(resolved.full);
 });
 
+/** ?profile=principal|secundaria (por defecto el activo). */
+app.get('/api/mt5/health', async (req, res) => {
+  const profile = req.query.profile ? String(req.query.profile) : mt5Settings.getActive();
+  if (!mt5Settings.PROFILES.includes(profile)) {
+    return res.status(400).json({ ok: false, error: `profile debe ser ${mt5Settings.PROFILES.join(' | ')}` });
+  }
+  const settings = mt5Settings.get(profile);
+  const { bridgeUrl } = settings;
+  try {
+    const bridge = await mt5.bridgeHealth(settings);
+    res.json({ profile, bridgeUrl, ...bridge });
+  } catch (err) {
+    res.status(err.status || 503).json({ ok: false, profile, bridgeUrl, error: err.message });
+  }
+});
+
+app.get('/api/mt5/settings', (_req, res) => {
+  res.json({ ...mt5Settings.publicState(), defaults: mt5Settings.toPublic(mt5Settings.defaults()) });
+});
+
+/**
+ * Configuración MT5 (pantalla Configuración):
+ *  - { profile, settings }: patch parcial de un perfil (bridgeToken: '' lo borra)
+ *  - { active }: perfil usado al enviar operaciones
+ */
+app.patch('/api/mt5/settings', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  if (body.active !== undefined && !mt5Settings.PROFILES.includes(body.active)) {
+    return res.status(400).json({ error: `active debe ser ${mt5Settings.PROFILES.join(' | ')}` });
+  }
+  try {
+    if (body.settings !== undefined) mt5Settings.update(body.settings, body.profile ?? mt5Settings.getActive());
+    if (body.active !== undefined) mt5Settings.setActive(body.active);
+    res.json({ ...mt5Settings.publicState(), defaults: mt5Settings.toPublic(mt5Settings.defaults()) });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message, errors: err.errors });
+    console.error('[mt5] settings:', err);
+    res.status(500).json({ error: 'No se pudo guardar la configuración MT5' });
+  }
+});
+
+/**
+ * Envía a MT5 el plan de una señal. Origen: body.historyId → última corrida terminada
+ * (si coincide body.market) → último reporte live/ de body.market.
+ * La UI llama primero con dryRun=true (vista previa) y solo envía tras confirmar.
+ * Opcionales: dryRun, volume, riskPct, allowMultiple.
+ */
+app.post('/api/mt5/push', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  let key;
+  let market;
+  let summary;
+
+  if (body.historyId != null) {
+    const id = parseHistoryId(body.historyId);
+    if (id == null) return res.status(400).json({ error: 'historyId inválido' });
+    const item = await historyStore.getById(id).catch(() => null);
+    if (!item) return res.status(404).json({ error: 'Entrada de historial no encontrada' });
+    key = `h${id}`;
+    market = item.market;
+    summary = item.summary;
+  } else {
+    const wantedMarket = body.market != null ? normalizeMarket(body.market) : null;
+    if (body.market != null && !wantedMarket) return res.status(400).json({ error: MARKET_ERROR });
+    const jobUsable =
+      currentJob.status === 'done' &&
+      currentJob.kind === 'signal' &&
+      currentJob.summary &&
+      (!wantedMarket || currentJob.market === wantedMarket);
+    if (jobUsable) {
+      key = currentJob.historyId ? `h${currentJob.historyId}` : currentJob.id.slice(0, 8);
+      market = currentJob.market;
+      summary = currentJob.summary;
+    } else if (wantedMarket) {
+      const latest = readLatest(wantedMarket, 'high');
+      if (!latest?.summary) return res.status(404).json({ error: 'No hay reporte para ese mercado' });
+      key = `r${wantedMarket}${Math.round(fs.statSync(latest.reportPath).mtimeMs / 1000)}`;
+      market = wantedMarket;
+      summary = latest.summary;
+    } else {
+      return res.status(409).json({ error: 'No hay una señal terminada para enviar. Indica historyId o market.' });
+    }
+  }
+
+  const overrides = { dry_run: body.dryRun === true, allow_multiple: body.allowMultiple === true };
+  const volume = Number(body.volume);
+  const riskPct = Number(body.riskPct);
+  if (body.volume != null && (!Number.isFinite(volume) || volume <= 0)) {
+    return res.status(400).json({ error: 'volume debe ser > 0' });
+  }
+  if (body.riskPct != null && (!Number.isFinite(riskPct) || riskPct <= 0 || riskPct > 5)) {
+    return res.status(400).json({ error: 'riskPct debe estar entre 0 y 5' });
+  }
+  if (body.volume != null) overrides.volume = volume;
+  if (body.riskPct != null) overrides.risk_pct = riskPct;
+
+  const outcome = await pushSignalToMt5({ key, market, summary, overrides });
+  if (!overrides.dry_run && currentJob.summary === summary) {
+    currentJob.mt5 = outcome;
+    currentJob.logs.push(`[mt5] ${outcome.status}: ${outcome.message}`);
+  }
+  const status = { sent: 200, skipped: 409 }[outcome.status] || outcome.httpStatus || 502;
+  res.status(status).json(outcome);
+});
+
+/**
+ * Orden manual con el perfil activo: sin veredicto, deduplicado, desvío broker↔entrada,
+ * rango SL/TP ni exposición previa. Siguen aplicando token, bloqueo de cuenta REAL y Algo Trading.
+ * Body: market|symbol, side, orderMode (market|limit|stop|auto), entry, sl, tp, volume, dryRun.
+ */
+app.post('/api/mt5/manual', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const profileId = mt5Settings.getActive();
+  const settings = mt5Settings.get(profileId);
+  const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
+  const { order, error } = mt5.buildManualOrder(body, settings);
+  if (!order) return res.status(400).json({ status: 'error', message: error, profile });
+
+  const dryRun = body.dryRun === true;
+  try {
+    const result = await mt5.pushOrder(order, { clientId: 'manual', dry_run: dryRun }, settings);
+    const how = { market: 'mercado', pending: 'LIMIT', stop: 'STOP' }[result.mode] || result.mode;
+    const stops = `SL ${result.sl ?? '—'} · TP ${result.tp ?? '—'}`;
+    res.json({
+      status: 'sent',
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · ${stops} · ${profile.label}${dryRun ? ' (dry-run)' : ''}`,
+      order,
+      result,
+      profile,
+    });
+  } catch (err) {
+    res.status(err.status || 502).json({ status: 'error', message: err.message, order, profile, details: err.details });
+  }
+});
+
 app.post('/api/signals/run', (req, res) => {
   if (currentJob.status === 'running') {
     return res.status(409).json({
@@ -1848,6 +2021,7 @@ app.post('/api/signals/run', (req, res) => {
     flags: flagsFromBody(body),
     entry: body.entry ?? null,
     historyId: null,
+    mt5: null,
   };
   const job = currentJob;
   jobEvents.broadcast(JOB_EVENTS.started, publicJob(job));

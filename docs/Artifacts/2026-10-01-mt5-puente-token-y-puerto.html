@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Puente MT5 · Token y puerto · Flash Signals</title>
+  <meta name="description" content="Cómo preparar el token del puente MT5 (mt5-bridge) y el puerto local para Flash Signals: generar token, configurarlo, elegir puerto, dos terminales, firewall y solución de problemas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: 1040px; margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 24px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+      display: flex; align-items: center; gap: 10px;
+    }
+    h2 .n {
+      display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; flex-shrink: 0;
+      border-radius: 50%; font-size: 0.9rem; color: #120c0c; background: var(--fire);
+    }
+    h3 { font-size: 0.95rem; margin: 16px 0 8px; color: #7ec8c9; }
+    p { margin-bottom: 10px; }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 72ch; }
+    .toc {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px;
+    }
+    .toc a {
+      font-size: 0.8rem; color: var(--muted); text-decoration: none;
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--stroke); background: var(--bg-elev);
+    }
+    .toc a:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+    section.card {
+      background: color-mix(in srgb, var(--bg-card) 85%, #1a1010);
+      border: 1px solid var(--stroke); border-radius: 16px;
+      padding: 22px 24px; margin-bottom: 16px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+    ul, ol { margin: 0 0 12px 1.3rem; }
+    li { margin-bottom: 6px; }
+    code {
+      font-family: var(--mono); font-size: 0.85em;
+      color: color-mix(in srgb, var(--gold) 60%, white);
+      background: rgba(0, 0, 0, 0.3); padding: 1px 6px; border-radius: 5px;
+    }
+    .code {
+      position: relative; margin: 10px 0 14px;
+      background: #0e0808; border: 1px solid var(--stroke); border-radius: var(--radius);
+    }
+    .code-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; border-bottom: 1px solid var(--stroke);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .code pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; color: #f3e6d0;
+    }
+    .copy {
+      font: inherit; font-size: 0.7rem; cursor: pointer;
+      color: var(--gold); background: transparent;
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      border-radius: 6px; padding: 2px 8px;
+    }
+    .copy:hover { background: rgba(255, 215, 0, 0.1); }
+    .note {
+      border-radius: var(--radius); padding: 12px 14px; margin: 12px 0;
+      border: 1px solid var(--stroke); background: var(--info-dim); font-size: 0.92rem;
+    }
+    .note.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .note.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+    .note.err { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+    .note strong:first-child { display: block; margin-bottom: 4px; }
+    .flow {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0 4px;
+    }
+    .flow div {
+      position: relative; padding: 12px; border-radius: var(--radius);
+      border: 1px solid var(--stroke); background: var(--bg-elev); font-size: 0.85rem;
+    }
+    .flow strong { display: block; color: var(--gold); font-size: 0.9rem; }
+    .flow small { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 8px 0 12px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--stroke); vertical-align: top; }
+    th { color: var(--gold); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .check { list-style: none; margin-left: 0; }
+    .check li { padding-left: 1.7rem; position: relative; }
+    .check li::before {
+      content: ""; position: absolute; left: 0; top: 0.3rem; width: 1rem; height: 1rem;
+      border: 2px solid var(--ok); border-radius: 4px;
+    }
+    footer { margin-top: 24px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="chips">
+        <span class="chip fire">MetaTrader 5</span>
+        <span class="chip teal">mt5-bridge · Python</span>
+        <span class="chip ok">Solo localhost</span>
+        <span class="chip warn">Guía práctica</span>
+      </div>
+      <h1>Puente MT5: preparar el token y el puerto</h1>
+      <p class="hero-sub">
+        Cómo dejar listo el puente <code>mt5-bridge/bridge.py</code> de Flash Signals: generar un token seguro,
+        configurarlo en el puente y en <strong>Configuración</strong>, elegir el puerto, correr dos terminales
+        (Conf principal / Conf secundaria) y por qué <strong>no hace falta abrir puertos</strong> en el firewall.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Contenido">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#token">1 · Token</a>
+      <a href="#puente">2 · Puente</a>
+      <a href="#app">3 · App</a>
+      <a href="#puerto">4 · Puerto</a>
+      <a href="#dos">5 · Dos terminales</a>
+      <a href="#firewall">6 · ¿Abrir puertos?</a>
+      <a href="#problemas">Problemas</a>
+      <a href="#checklist">Checklist</a>
+    </nav>
+
+    <section class="card" id="como-funciona">
+      <h2>Cómo funciona</h2>
+      <div class="flow">
+        <div><strong>Flash Signals UI</strong><small>Angular · :4400 / :8080<br />Confirmas la operación</small></div>
+        <div><strong>API Express</strong><small>127.0.0.1:3847<br />Lee la Conf activa</small></div>
+        <div><strong>Puente MT5</strong><small>127.0.0.1:8765<br />Valida el token</small></div>
+        <div><strong>Terminal MT5</strong><small>Librería MetaTrader5 (IPC)<br />Envía la orden al broker</small></div>
+      </div>
+      <ul>
+        <li>El <strong>token</strong> es una contraseña compartida: la API la manda en la cabecera <code>X-Bridge-Token</code> y el puente rechaza (401) cualquier petición sin ella.</li>
+        <li>El <strong>puerto</strong> es donde escucha el puente (por defecto <code>8765</code>), siempre en <code>127.0.0.1</code>.</li>
+        <li>El puente habla con MT5 por la librería oficial <code>MetaTrader5</code>, que se conecta al terminal abierto <strong>sin red</strong>: MT5 no necesita ningún puerto adicional.</li>
+      </ul>
+      <div class="note">
+        <strong>¿Es obligatorio el token?</strong>
+        No: si el puente arranca sin <code>MT5_BRIDGE_TOKEN</code> acepta peticiones locales sin token. Es recomendable
+        porque impide que cualquier otro programa de tu PC (o una página web maliciosa abierta en el navegador) mande órdenes al puente.
+      </div>
+    </section>
+
+    <section class="card" id="token">
+      <h2><span class="n">1</span>Generar un token seguro</h2>
+      <p>Usa un valor aleatorio largo (32 bytes). Cualquiera de estas opciones sirve; copia el resultado.</p>
+
+      <div class="code">
+        <div class="code-head">PowerShell (Windows)<button class="copy" type="button">Copiar</button></div>
+        <pre>$b = New-Object byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+-join ($b | ForEach-Object { $_.ToString('x2') })</pre>
+      </div>
+
+      <div class="code">
+        <div class="code-head">Python<button class="copy" type="button">Copiar</button></div>
+        <pre>python -c "import secrets; print(secrets.token_urlsafe(32))"</pre>
+      </div>
+
+      <div class="note warn">
+        <strong>Reglas del token</strong>
+        Máximo 200 caracteres · no lo subas a git ni lo pegues en chats/capturas · usa uno distinto por puente
+        si tienes dos terminales · si se filtra, genera otro y actualízalo en el puente y en la app.
+      </div>
+    </section>
+
+    <section class="card" id="puente">
+      <h2><span class="n">2</span>Configurar el token en el puente</h2>
+      <p>
+        El puente lee el token de la variable de entorno <code>MT5_BRIDGE_TOKEN</code>. Antes, abre MT5, inicia sesión
+        (cuenta <strong>demo</strong> recomendada) y activa <strong>Algo Trading</strong> en la barra de herramientas.
+      </p>
+
+      <h3>Opción A · Solo para esta sesión</h3>
+      <div class="code">
+        <div class="code-head">PowerShell · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <pre>$env:MT5_BRIDGE_TOKEN = 'PEGA_AQUI_TU_TOKEN'
+.\run-mt5-bridge.ps1</pre>
+      </div>
+
+      <h3>Opción B · Permanente para tu usuario</h3>
+      <div class="code">
+        <div class="code-head">PowerShell<button class="copy" type="button">Copiar</button></div>
+        <pre>[Environment]::SetEnvironmentVariable('MT5_BRIDGE_TOKEN', 'PEGA_AQUI_TU_TOKEN', 'User')
+# Cierra y vuelve a abrir PowerShell para que la variable esté disponible
+.\run-mt5-bridge.ps1</pre>
+      </div>
+
+      <p>Si todo va bien, la consola muestra algo como:</p>
+      <div class="code">
+        <div class="code-head">Salida esperada</div>
+        <pre>[mt5-bridge] Conectado a MT5: {'login': 12345678, 'server': 'Broker-Demo', 'demo': True, ...}
+[mt5-bridge] Escuchando en http://127.0.0.1:8765  (magic=260901, allowReal=False)</pre>
+      </div>
+      <div class="note err">
+        <strong>Cuentas reales</strong>
+        El puente bloquea cuentas REAL salvo que arranques con <code>MT5_ALLOW_REAL=1</code>. Esa variable vive solo en el
+        puente, a propósito: no se puede activar desde el navegador.
+      </div>
+    </section>
+
+    <section class="card" id="app">
+      <h2><span class="n">3</span>Configurar el token en Flash Signals</h2>
+      <ol>
+        <li>Abre <strong>Configuración</strong> (<code>/configuracion</code>).</li>
+        <li>En <em>Configuración para operar en MT5</em> elige el perfil que usarás (<strong>Conf principal</strong> o <strong>Conf secundaria</strong>).</li>
+        <li>En la pestaña <em>Editar …</em> de ese perfil: <strong>URL del puente</strong> = <code>http://127.0.0.1:8765</code> y pega el mismo token en <strong>Token del puente</strong>.</li>
+        <li>Pulsa <strong>Guardar</strong> y luego <strong>Probar conexión</strong>: debe mostrar <em>Conectado</em>, la cuenta DEMO/REAL, balance y Algo Trading activado.</li>
+      </ol>
+      <div class="note ok">
+        <strong>Dónde se guarda</strong>
+        En <code>data/mt5-settings.json</code> (ignorado por git). La API nunca devuelve el token a la web: solo verás
+        <em>guardado</em>. Deja el campo vacío para mantenerlo o marca <em>Quitar token</em> para borrarlo.
+      </div>
+    </section>
+
+    <section class="card" id="puerto">
+      <h2><span class="n">4</span>Elegir y comprobar el puerto</h2>
+      <p>Por defecto el puente usa <code>8765</code>. Cámbialo con <code>MT5_BRIDGE_PORT</code> si está ocupado.</p>
+
+      <h3>¿Está libre el puerto?</h3>
+      <div class="code">
+        <div class="code-head">PowerShell<button class="copy" type="button">Copiar</button></div>
+        <pre># Sin resultado = libre. Con resultado, OwningProcess es el PID que lo usa
+Get-NetTCPConnection -LocalPort 8765 -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress, LocalPort, State, OwningProcess
+
+# ¿Qué programa es?
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8765).OwningProcess</pre>
+      </div>
+
+      <h3>Usar otro puerto</h3>
+      <div class="code">
+        <div class="code-head">PowerShell<button class="copy" type="button">Copiar</button></div>
+        <pre>$env:MT5_BRIDGE_PORT = '8770'
+.\run-mt5-bridge.ps1
+# Y en Configuración: URL del puente = http://127.0.0.1:8770</pre>
+      </div>
+
+      <h3>¿Responde el puente?</h3>
+      <div class="code">
+        <div class="code-head">PowerShell<button class="copy" type="button">Copiar</button></div>
+        <pre>Test-NetConnection 127.0.0.1 -Port 8765          # TcpTestSucceeded : True
+Invoke-RestMethod http://127.0.0.1:8765/health -Headers @{ 'X-Bridge-Token' = 'TU_TOKEN' }</pre>
+      </div>
+    </section>
+
+    <section class="card" id="dos">
+      <h2><span class="n">5</span>Dos terminales: Conf principal y Conf secundaria</h2>
+      <p>Para operar dos cuentas a la vez (p. ej. demo y fondeo) necesitas <strong>dos terminales MT5</strong> y <strong>dos puentes</strong>, cada uno en su puerto.</p>
+      <ol>
+        <li>Instala MT5 una segunda vez en otra carpeta (o copia la carpeta del terminal) e inicia sesión con la otra cuenta.</li>
+        <li>Guarda una vez la ruta del segundo terminal y su token en tu usuario.</li>
+        <li>Arranca cada puente con <code>-Perfil</code>: cada uno abre su propia ventana, con su puerto y su token.</li>
+      </ol>
+      <div class="code">
+        <div class="code-head">Una sola vez · variables de usuario<button class="copy" type="button">Copiar</button></div>
+        <pre>[Environment]::SetEnvironmentVariable('MT5_TERMINAL_PATH_SECUNDARIA', 'D:\MT5-Secundaria\terminal64.exe', 'User')
+[Environment]::SetEnvironmentVariable('MT5_BRIDGE_TOKEN_SECUNDARIA', 'TOKEN_SECUNDARIO', 'User')</pre>
+      </div>
+      <div class="code">
+        <div class="code-head">Arrancar los puentes<button class="copy" type="button">Copiar</button></div>
+        <pre>.\run-mt5-bridge.ps1 -Perfil principal    # 8765 · MT5_BRIDGE_TOKEN · MT5_TERMINAL_PATH (o el abierto)
+.\run-mt5-bridge.ps1 -Perfil secundaria   # 8766 · MT5_BRIDGE_TOKEN_SECUNDARIA · MT5_TERMINAL_PATH_SECUNDARIA</pre>
+      </div>
+      <table>
+        <thead><tr><th>Perfil</th><th>URL del puente</th><th>Token</th><th>Terminal</th></tr></thead>
+        <tbody>
+          <tr><td>Conf principal</td><td><code>http://127.0.0.1:8765</code></td><td>TOKEN_PRINCIPAL</td><td>MetaTrader 5</td></tr>
+          <tr><td>Conf secundaria</td><td><code>http://127.0.0.1:8766</code></td><td>TOKEN_SECUNDARIO</td><td>MT5-Secundaria</td></tr>
+        </tbody>
+      </table>
+      <p>Luego el selector de <strong>Configuración</strong> decide a qué cuenta va cada operación confirmada.</p>
+    </section>
+
+    <section class="card" id="firewall">
+      <h2><span class="n">6</span>¿Hay que abrir puertos?</h2>
+      <div class="note ok">
+        <strong>No, en el uso normal.</strong>
+        La API, el puente y MT5 corren en el mismo Windows y se hablan por <code>127.0.0.1</code> (loopback). El firewall
+        de Windows no bloquea ese tráfico y el router no interviene. MT5 solo hace conexiones <em>salientes</em> al broker,
+        que ya funcionan si puedes iniciar sesión.
+      </div>
+      <ul>
+        <li><strong>No</strong> configures “port forwarding” en el router ni expongas el puente a Internet: quien llegue a ese puerto podría abrir operaciones en tu cuenta.</li>
+        <li>Si Windows muestra el aviso “Permitir acceso a Python” al arrancar el puente, puedes <strong>cancelarlo</strong>: no afecta al tráfico local.</li>
+        <li>La app solo acepta URLs de puente <code>localhost</code> / <code>127.0.0.1</code> en Configuración, a propósito.</li>
+        <li>La lista “Permitir WebRequest para las URL” de MT5 (Herramientas → Opciones → Asesores Expertos) <strong>no hace falta</strong>: solo aplica a Expert Advisors MQL5, y este puente usa la librería Python.</li>
+      </ul>
+      <h3>Si de verdad el terminal está en otro PC</h3>
+      <p>
+        No está soportado por la app. La alternativa segura es un túnel (SSH o VPN tipo Tailscale) que haga aparecer el
+        puente remoto como <code>127.0.0.1:puerto</code> en tu máquina. Solo como referencia, una regla de firewall
+        restringida a una IP sería:
+      </p>
+      <div class="code">
+        <div class="code-head">PowerShell (Administrador) · solo referencia<button class="copy" type="button">Copiar</button></div>
+        <pre>New-NetFirewallRule -DisplayName "MT5 Bridge 8765" -Direction Inbound -Protocol TCP `
+  -LocalPort 8765 -RemoteAddress 192.168.1.50 -Action Allow
+# Quitarla:
+Remove-NetFirewallRule -DisplayName "MT5 Bridge 8765"</pre>
+      </div>
+    </section>
+
+    <section class="card" id="problemas">
+      <h2>Solución de problemas</h2>
+      <table>
+        <thead><tr><th>Mensaje</th><th>Causa</th><th>Solución</th></tr></thead>
+        <tbody>
+          <tr><td><code>Token inválido</code> (401)</td><td>Token distinto en puente y Configuración, o falta en uno</td><td>Pega el mismo valor en ambos; reinicia el puente si cambiaste la variable</td></tr>
+          <tr><td><code>Puente MT5 no disponible … (fetch failed)</code></td><td>Puente apagado, puerto o URL distintos</td><td>Arranca <code>.\run-mt5-bridge.ps1</code> y revisa que la URL coincida con el puerto</td></tr>
+          <tr><td><code>The operation was aborted due to timeout</code> / el puente deja de responder</td><td>Clic dentro de la ventana del puente con “Edición rápida”: Windows pausa el proceso</td><td>Pulsa <kbd>Esc</kbd> o Enter en esa ventana. <code>run-mt5-bridge.ps1</code> ya desactiva la Edición rápida al arrancar</td></tr>
+          <tr><td><code>[WinError 10048]</code> al arrancar</td><td>Puerto ocupado</td><td>Usa otro <code>MT5_BRIDGE_PORT</code> o cierra el proceso que lo usa</td></tr>
+          <tr><td><code>No se pudo conectar al terminal MT5</code></td><td>MT5 cerrado, sin sesión, o ruta incorrecta</td><td>Abre MT5 e inicia sesión; define <code>MT5_TERMINAL_PATH</code></td></tr>
+          <tr><td><code>Activa 'Algo Trading'</code></td><td>Botón Algo Trading apagado</td><td>Actívalo en la barra de MT5 (debe quedar en verde)</td></tr>
+          <tr><td><code>Cuenta REAL bloqueada</code> (403)</td><td>Protección del puente</td><td>Usa demo o arranca con <code>MT5_ALLOW_REAL=1</code> sabiendo el riesgo</td></tr>
+          <tr><td><code>Símbolo … no existe</code></td><td>El broker usa otro nombre</td><td>Ajusta los símbolos del perfil en Configuración (p. ej. <code>US30.cash</code>)</td></tr>
+          <tr><td><code>No module named 'MetaTrader5'</code></td><td>Librería sin instalar</td><td><code>python -m pip install MetaTrader5</code> (Python 64 bits)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" id="checklist">
+      <h2>Checklist final</h2>
+      <ul class="check">
+        <li>MT5 abierto, sesión iniciada (demo) y Algo Trading en verde.</li>
+        <li>Token generado y guardado en <code>MT5_BRIDGE_TOKEN</code>.</li>
+        <li>Puente arrancado: “Escuchando en http://127.0.0.1:8765”.</li>
+        <li>Configuración: URL y token del perfil guardados, perfil correcto en uso.</li>
+        <li>“Probar conexión” muestra Conectado con la cuenta esperada.</li>
+        <li>Símbolos del broker revisados para BTC, US30 y XAUUSD.</li>
+        <li>Primera operación de prueba confirmada en demo antes de pensar en real.</li>
+      </ul>
+    </section>
+
+    <footer>Flash Signals · fire &amp; shadow · Danilo Chaverra · Guía del puente MT5 (token y puerto) · 2026-10-01</footer>
+  </main>
+
+  <script>
+    document.querySelectorAll('.copy').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const pre = btn.closest('.code').querySelector('pre');
+        try {
+          await navigator.clipboard.writeText(pre.innerText);
+          btn.textContent = 'Copiado';
+        } catch {
+          btn.textContent = 'Selecciona y copia';
+        }
+        setTimeout(() => (btn.textContent = 'Copiar'), 1600);
+      });
+    });
+  </script>
+</body>
+</html>

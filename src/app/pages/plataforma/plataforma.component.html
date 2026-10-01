@@ -1,7 +1,7 @@
 <div class="page plataforma">
   <header class="hero chrome">
     <div class="brand">
-      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
         <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Plataforma</h1>
@@ -9,11 +9,11 @@
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
-      <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
+      <a routerLink="/senales" routerLinkActive="active">Señales</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
       <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
 
@@ -27,7 +27,7 @@
         reglas, ML y neural en una sola plataforma oscura fire &amp; gold.
       </p>
       <div class="splash-cta">
-        <a routerLink="/" class="btn-fire">Correr una señal</a>
+        <a routerLink="/senales" class="btn-fire">Correr una señal</a>
         <a routerLink="/historial" class="btn-ghost">Ver historial</a>
       </div>
       <ul class="market-pills" aria-label="Mercados">
@@ -67,7 +67,7 @@
           <li>{{ s }}</li>
         }
       </ol>
-      <a routerLink="/" class="btn-fire sm">Ir a Señales</a>
+      <a routerLink="/senales" class="btn-fire sm">Ir a Señales</a>
     </div>
     <aside class="how-panel hide-on-phone" aria-label="Flujo">
       <p class="flow-label">Pipeline</p>
@@ -131,7 +131,7 @@
     <h2 id="closing-title">Listo para la siguiente señal</h2>
     <p class="hide-on-phone">Flash Signals · Colombia. Pipeline real. Sin dashboards genéricos.</p>
     <div class="splash-cta">
-      <a routerLink="/" class="btn-fire">Empezar en Señales</a>
+      <a routerLink="/senales" class="btn-fire">Empezar en Señales</a>
       <a routerLink="/historial" class="btn-ghost">Revisar Historial</a>
     </div>
   </section>

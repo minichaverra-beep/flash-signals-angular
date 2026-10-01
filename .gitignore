@@ -57,6 +57,8 @@ data/*.sqlite-*
 data/*.db
 data/history-attachments/
 data/macd-quant-charts/
+# Configuración MT5 de la UI (puede incluir token del puente)
+data/mt5-settings.json
 
 # Temporales en Artifacts (versionar el resto: README y artefactos útiles)
 docs/Artifacts/**/*.tmp
@@ -64,3 +66,5 @@ docs/Artifacts/**/*.temp
 docs/Artifacts/**/*~
 docs/Artifacts/**/*.swp
 docs/Artifacts/**/*.bak
+
+mt5-bridge/__pycache__/

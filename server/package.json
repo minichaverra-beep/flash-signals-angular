@@ -5,7 +5,7 @@
   "main": "index.js",
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test db/history-store.test.js db/wiki-store.test.js db/macd-quant-store.test.js artifacts.test.js job-events.test.js live-freshness.test.js"
+    "test": "node --test db/history-store.test.js db/wiki-store.test.js db/macd-quant-store.test.js artifacts.test.js job-events.test.js live-freshness.test.js mt5.test.js mt5-settings.test.js"
   },
   "keywords": [],
   "author": "",

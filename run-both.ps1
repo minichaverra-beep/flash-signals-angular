@@ -7,7 +7,9 @@
   de PowerShell con logs/debug.
 #>
 [CmdletBinding()]
-param()
+param(
+  [switch]$NoMt5
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -33,9 +35,10 @@ Write-Host "=== Flash Signals - API + Web ===" -ForegroundColor Cyan
 Write-Host "Abriendo dos consolas visibles..." -ForegroundColor Green
 Write-Host "  - Flash Signals API  -> http://localhost:3847"
 Write-Host "  - Flash Signals Web  -> http://localhost:4400"
+if (-not $NoMt5) { Write-Host "  - MT5 Bridge         -> http://127.0.0.1:8765 (y 8766 si hay Conf secundaria)" }
 Write-Host ""
 
-& $apiScript
+& $apiScript -NoMt5:$NoMt5
 & $webScript
 
 Write-Host "Listo. Revisa las ventanas Flash Signals API y Flash Signals Web para ver los logs." -ForegroundColor Cyan

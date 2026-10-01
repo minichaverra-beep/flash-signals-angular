@@ -1,7 +1,7 @@
 <div class="page">
   <header class="hero">
     <div class="brand">
-      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
         <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Wiki</h1>
@@ -9,11 +9,11 @@
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
-      <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
+      <a routerLink="/senales" routerLinkActive="active">Señales</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
       <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
 

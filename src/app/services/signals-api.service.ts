@@ -134,6 +134,110 @@ export interface LatestResponse {
   preview: string;
 }
 
+export interface Mt5PushRequest {
+  historyId?: number;
+  market?: Market;
+  dryRun?: boolean;
+  volume?: number;
+  riskPct?: number;
+  allowMultiple?: boolean;
+}
+
+export type Mt5ManualOrderMode = 'market' | 'limit' | 'stop';
+
+/** Operación manual: sin chequeos de señal (solo token, cuenta REAL y Algo Trading). */
+export interface Mt5ManualRequest {
+  market?: Market;
+  symbol?: string;
+  side: 'LONG' | 'SHORT';
+  orderMode: Mt5ManualOrderMode;
+  entry?: number;
+  sl?: number;
+  tp?: number;
+  volume?: number;
+  dryRun?: boolean;
+}
+
+/** Respuesta del puente MT5 (orden enviada o vista previa con dryRun). */
+export interface Mt5OrderResult {
+  mode: 'market' | 'pending' | 'stop';
+  manual?: boolean;
+  symbol: string;
+  side: 'LONG' | 'SHORT';
+  volume: number;
+  price: number;
+  sl: number | null;
+  tp: number | null;
+  marketPrice: number;
+  signalEntry: number | null;
+  check?: { retcode: number; comment: string } | null;
+  ok?: boolean;
+  dryRun?: boolean;
+  order?: number;
+  account: { login: number; server: string; demo: boolean };
+}
+
+export interface Mt5PushOutcome {
+  status: 'sent' | 'skipped' | 'error';
+  message: string;
+  order?: { symbol: string; side: 'LONG' | 'SHORT'; entry: number; sl: number; tp: number };
+  result?: Mt5OrderResult;
+  /** Perfil de configuración usado (activo al enviar). */
+  profile?: { id: 'principal' | 'secundaria'; label: string };
+}
+
+export type Mt5SignalMarket = 'btc' | 'us30' | 'xauusd';
+
+/** Configuración MT5 (pantalla Configuración). El token nunca vuelve del servidor: solo hasToken. */
+export interface Mt5Settings {
+  bridgeUrl: string;
+  hasToken: boolean;
+  symbols: Record<Mt5SignalMarket, string>;
+  riskPct: number;
+  volume: number | null;
+  maxDeviationPct: number;
+  expiryMinutes: number;
+  deviationPoints: number;
+  allowMultiple: boolean;
+}
+
+export type Mt5SettingsPatch = Partial<Omit<Mt5Settings, 'hasToken'>> & { bridgeToken?: string };
+
+export type Mt5ProfileId = 'principal' | 'secundaria';
+
+/** Dos perfiles (Conf principal / secundaria); `active` es el que se usa al enviar a MT5. */
+export interface Mt5SettingsState {
+  active: Mt5ProfileId;
+  profiles: Record<Mt5ProfileId, Mt5Settings>;
+  labels: Record<Mt5ProfileId, string>;
+  defaults: Mt5Settings;
+}
+
+export interface Mt5SettingsSaveRequest {
+  profile?: Mt5ProfileId;
+  settings?: Mt5SettingsPatch;
+  active?: Mt5ProfileId;
+}
+
+export interface Mt5Health {
+  ok: boolean;
+  profile?: Mt5ProfileId;
+  bridgeUrl: string;
+  error?: string;
+  connected?: boolean;
+  tradeAllowed?: boolean;
+  allowReal?: boolean;
+  magic?: number;
+  account?: {
+    login: number;
+    server: string;
+    demo: boolean;
+    currency: string;
+    balance: number;
+    equity: number;
+  } | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SignalsApiService {
   private readonly http = inject(HttpClient);
@@ -192,6 +296,28 @@ export class SignalsApiService {
 
   status(): Observable<JobStatus> {
     return this.http.get<JobStatus>(`${this.base}/signals/status`);
+  }
+
+  /** dryRun=true: vista previa validada por MT5 sin enviar la orden. */
+  mt5Push(body: Mt5PushRequest): Observable<Mt5PushOutcome> {
+    return this.http.post<Mt5PushOutcome>(`${this.base}/mt5/push`, body);
+  }
+
+  mt5Manual(body: Mt5ManualRequest): Observable<Mt5PushOutcome> {
+    return this.http.post<Mt5PushOutcome>(`${this.base}/mt5/manual`, body);
+  }
+
+  mt5Settings(): Observable<Mt5SettingsState> {
+    return this.http.get<Mt5SettingsState>(`${this.base}/mt5/settings`);
+  }
+
+  mt5SettingsSave(body: Mt5SettingsSaveRequest): Observable<Mt5SettingsState> {
+    return this.http.patch<Mt5SettingsState>(`${this.base}/mt5/settings`, body);
+  }
+
+  mt5Health(profile?: Mt5ProfileId): Observable<Mt5Health> {
+    const params: Record<string, string> = profile ? { profile } : {};
+    return this.http.get<Mt5Health>(`${this.base}/mt5/health`, { params });
   }
 
   latest(market: Market, tier: Tier = 'high'): Observable<LatestResponse> {

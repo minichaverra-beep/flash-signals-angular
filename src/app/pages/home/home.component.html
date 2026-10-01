@@ -1,7 +1,7 @@
 <div class="page">
   <header class="hero">
     <div class="brand">
-      <img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" />
+      <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
         <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
         <h1>Señales BTC / US30 / XAUUSD</h1>
@@ -9,11 +9,11 @@
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Señales</a>
-      <a routerLink="/plataforma" routerLinkActive="active"><span class="nav-long">Plataforma</span><span class="nav-short">Plat</span></a>
-      <a routerLink="/macd-quant" routerLinkActive="active">MACD</a>
+      <a routerLink="/senales" routerLinkActive="active">Señales</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
       <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
 
@@ -107,7 +107,11 @@
           <button type="button" class="ghost" (click)="loadLatest()" [disabled]="busy">
             Recargar último reporte
           </button>
+          <button type="button" class="ghost manual-btn" (click)="openManual()" [disabled]="manualOpen || apiOk === false">
+            Operación manual MT5…
+          </button>
         </div>
+        <p class="msg" *ngIf="mt5Message && !reportSummary" [class.err]="mt5MessageErr" aria-live="polite">{{ mt5Message }}</p>
 
         <p class="msg" *ngIf="statusMessage" [class.err]="job?.status === 'error'" aria-live="polite">{{ statusMessage }}</p>
       </section>
@@ -183,6 +187,13 @@
           <h2>Resultado de la corrida</h2>
         </ng-template>
 
+        <div class="mt5-bar" *ngIf="canSendMt5 || mt5Message">
+          <button type="button" class="mt5-btn" *ngIf="canSendMt5" (click)="openMt5Confirm()" [disabled]="mt5Open">
+            Enviar a MT5…
+          </button>
+          <p class="msg" *ngIf="mt5Message" [class.err]="mt5MessageErr" aria-live="polite">{{ mt5Message }}</p>
+        </div>
+
         <app-signal-report-viewer
           [summary]="s"
           [mode]="reportMode"
@@ -201,4 +212,159 @@
       </footer>
     </div>
   </div>
+
+  <!-- Confirmación de envío a MT5 -->
+  <button
+    type="button"
+    class="mt5-backdrop"
+    *ngIf="mt5Open"
+    aria-label="No enviar a MT5"
+    (click)="cancelMt5()"
+  ></button>
+  <dialog open class="mt5-dialog" *ngIf="mt5Open" aria-modal="true" aria-label="Confirmar envío a MT5">
+    <p class="eyebrow">MetaTrader 5</p>
+    <h2>¿Enviar esta operación?</h2>
+
+    <p class="muted tiny" *ngIf="mt5ProfileLabel">
+      Perfil: <strong>{{ mt5ProfileLabel }}</strong> · <a routerLink="/configuracion">cambiar</a>
+    </p>
+    <p class="muted" *ngIf="mt5Loading"><span class="spinner" aria-hidden="true"></span> Validando con MT5…</p>
+
+    <ng-container *ngIf="mt5Preview as p">
+      <p class="mt5-account" [class.real]="!p.account.demo">
+        Cuenta {{ p.account.demo ? 'DEMO' : 'REAL' }} · {{ p.account.login }} · {{ p.account.server }}
+      </p>
+      <dl class="mt5-list">
+        <dt>Operación</dt>
+        <dd [class.long]="p.side === 'LONG'" [class.short]="p.side === 'SHORT'">{{ p.side }} {{ p.symbol }}</dd>
+        <dt>Tipo</dt>
+        <dd>{{ p.mode === 'market' ? 'A mercado ahora' : (p.side === 'LONG' ? 'BUY' : 'SELL') + ' LIMIT (espera retest)' }}</dd>
+        <dt>Entrada</dt>
+        <dd>{{ p.price }} <small class="muted">· señal {{ p.signalEntry }} · broker {{ p.marketPrice }}</small></dd>
+        <dt>Stop loss</dt>
+        <dd>{{ p.sl }}</dd>
+        <dt>Take profit</dt>
+        <dd>{{ p.tp }}</dd>
+        <dt>Lotes</dt>
+        <dd>
+          <input type="number" class="mt5-volume" min="0" step="0.01" [(ngModel)]="mt5Volume" [disabled]="mt5Sending" />
+        </dd>
+      </dl>
+      <p class="muted tiny">El tipo (mercado o LIMIT) se recalcula con el precio del broker al confirmar.</p>
+    </ng-container>
+
+    <p class="msg err" *ngIf="mt5Error">{{ mt5Error }}</p>
+
+    <div class="mt5-actions">
+      <button type="button" class="ghost" (click)="cancelMt5()" [disabled]="mt5Sending">No enviar</button>
+      <button
+        type="button"
+        class="mt5-btn"
+        (click)="confirmMt5()"
+        [disabled]="!mt5Preview || mt5Loading || mt5Sending"
+      >{{ mt5Sending ? 'Enviando…' : 'Confirmar y enviar' }}</button>
+    </div>
+  </dialog>
+
+  <!-- Operación manual MT5 (sin chequeos de señal) -->
+  <button
+    type="button"
+    class="mt5-backdrop"
+    *ngIf="manualOpen"
+    aria-label="Cerrar operación manual"
+    (click)="cancelManual()"
+  ></button>
+  <dialog open class="mt5-dialog" *ngIf="manualOpen" aria-modal="true" aria-label="Operación manual MT5">
+    <p class="eyebrow">MetaTrader 5 · manual</p>
+    <h2>Operación manual</h2>
+    <p class="muted tiny">
+      Sin restricciones de señal: no exige ENTRAR, no compara con el precio de la señal, no revisa SL/TP ni
+      posiciones abiertas. Solo MT5 valida la orden.
+    </p>
+
+    <div class="manual-grid">
+      <label>Mercado
+        <select [(ngModel)]="manualForm.market" (ngModelChange)="manualChanged()" [disabled]="!!manualForm.symbol.trim()">
+          <option *ngFor="let m of markets" [ngValue]="m.id">{{ m.label }}</option>
+        </select>
+      </label>
+      <label>Símbolo libre <small class="muted">(opcional)</small>
+        <input type="text" maxlength="32" placeholder="del perfil" [(ngModel)]="manualForm.symbol" (ngModelChange)="manualChanged()" />
+      </label>
+
+      <div class="manual-wide">
+        <span class="manual-label">Dirección</span>
+        <div class="seg">
+          <button type="button" class="buy" [class.active]="manualForm.side === 'LONG'" (click)="manualForm.side = 'LONG'; manualChanged()">BUY / LONG</button>
+          <button type="button" class="sell" [class.active]="manualForm.side === 'SHORT'" (click)="manualForm.side = 'SHORT'; manualChanged()">SELL / SHORT</button>
+        </div>
+      </div>
+
+      <div class="manual-wide">
+        <span class="manual-label">Tipo</span>
+        <div class="seg">
+          <button
+            type="button"
+            *ngFor="let m of manualModes"
+            [class.active]="manualForm.orderMode === m.id"
+            (click)="manualForm.orderMode = m.id; manualChanged()"
+          >{{ m.label }}</button>
+        </div>
+      </div>
+
+      <label>Entrada
+        <input type="number" min="0" step="any" [(ngModel)]="manualForm.entry" (ngModelChange)="manualChanged()"
+          [disabled]="manualForm.orderMode === 'market'" [placeholder]="manualForm.orderMode === 'market' ? 'precio actual' : 'obligatoria'" />
+      </label>
+      <label>Lotes
+        <input type="number" min="0" step="0.01" placeholder="por riesgo %" [(ngModel)]="manualForm.volume" (ngModelChange)="manualChanged()" />
+      </label>
+      <label>Stop loss <small class="muted">(opcional)</small>
+        <input type="number" min="0" step="any" [(ngModel)]="manualForm.sl" (ngModelChange)="manualChanged()" />
+      </label>
+      <label>Take profit <small class="muted">(opcional)</small>
+        <input type="number" min="0" step="any" [(ngModel)]="manualForm.tp" (ngModelChange)="manualChanged()" />
+      </label>
+    </div>
+
+    <p class="muted tiny" *ngIf="manualProfileLabel">
+      Perfil: <strong>{{ manualProfileLabel }}</strong> · <a routerLink="/configuracion">cambiar</a>
+    </p>
+    <p class="muted" *ngIf="manualLoading"><span class="spinner" aria-hidden="true"></span> Consultando MT5…</p>
+
+    <ng-container *ngIf="manualPreview as p">
+      <p class="mt5-account" [class.real]="!p.account.demo">
+        Cuenta {{ p.account.demo ? 'DEMO' : 'REAL' }} · {{ p.account.login }} · {{ p.account.server }}
+      </p>
+      <dl class="mt5-list">
+        <dt>Operación</dt>
+        <dd [class.long]="p.side === 'LONG'" [class.short]="p.side === 'SHORT'">{{ p.side }} {{ p.symbol }}</dd>
+        <dt>Tipo</dt>
+        <dd>{{ p.mode === 'market' ? 'A mercado ahora' : (p.side === 'LONG' ? 'BUY' : 'SELL') + (p.mode === 'stop' ? ' STOP' : ' LIMIT') }}</dd>
+        <dt>Precio</dt>
+        <dd>{{ p.price }} <small class="muted">· broker {{ p.marketPrice }}</small></dd>
+        <dt>Stop loss</dt>
+        <dd>{{ p.sl ?? 'sin SL' }}</dd>
+        <dt>Take profit</dt>
+        <dd>{{ p.tp ?? 'sin TP' }}</dd>
+        <dt>Lotes</dt>
+        <dd>{{ p.volume }}</dd>
+      </dl>
+    </ng-container>
+
+    <p class="msg err" *ngIf="manualError">{{ manualError }}</p>
+
+    <div class="mt5-actions">
+      <button type="button" class="ghost" (click)="cancelManual()" [disabled]="manualSending">Cancelar</button>
+      <button type="button" class="ghost" (click)="previewManual()" [disabled]="manualLoading || manualSending">
+        {{ manualPreview ? 'Revisar de nuevo' : 'Previsualizar' }}
+      </button>
+      <button
+        type="button"
+        class="mt5-btn"
+        (click)="confirmManual()"
+        [disabled]="!manualPreview || manualLoading || manualSending"
+      >{{ manualSending ? 'Enviando…' : 'Confirmar y enviar' }}</button>
+    </div>
+  </dialog>
 </div>

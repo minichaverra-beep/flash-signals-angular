@@ -1,0 +1,198 @@
+<div class="page">
+  <header class="hero">
+    <div class="brand">
+      <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
+      <div>
+        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
+        <h1>Configuración</h1>
+        <p class="sub hide-on-phone">Variables para ejecutar señales en MetaTrader 5</p>
+      </div>
+    </div>
+    <nav class="top-nav" aria-label="Navegación principal">
+      <a routerLink="/senales" routerLinkActive="active">Señales</a>
+      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
+      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
+      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
+    </nav>
+  </header>
+
+  <p class="muted" *ngIf="loading"><span class="spinner" aria-hidden="true"></span> Cargando configuración…</p>
+
+  <ng-container *ngIf="state as st">
+    <section class="panel active-panel">
+      <h2>Configuración para operar en MT5</h2>
+      <p class="muted tiny">Las operaciones que confirmes desde Señales se envían con el perfil seleccionado aquí.</p>
+      <div class="profile-toggle" role="radiogroup" aria-label="Perfil activo para MT5">
+        <button
+          type="button"
+          role="radio"
+          *ngFor="let id of profileIds"
+          [attr.aria-checked]="st.active === id"
+          [class.active]="st.active === id"
+          [disabled]="switching"
+          (click)="setActive(id)"
+        >
+          <span class="dot" aria-hidden="true"></span>
+          <span class="toggle-text">
+            <strong>{{ label(id) }}</strong>
+            <small>{{ st.profiles[id].bridgeUrl }} · {{ st.profiles[id].volume ? st.profiles[id].volume + ' lotes' : st.profiles[id].riskPct + '% riesgo' }}</small>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <div class="profile-tabs" role="tablist" aria-label="Perfil a editar">
+      <button
+        type="button"
+        role="tab"
+        *ngFor="let id of profileIds"
+        [attr.aria-selected]="editing === id"
+        [class.active]="editing === id"
+        (click)="edit(id)"
+      >
+        Editar {{ label(id) }}
+        <span class="badge" *ngIf="st.active === id">en uso</span>
+      </button>
+    </div>
+
+    <form *ngIf="draft as d" (ngSubmit)="save()">
+      <section class="panel">
+        <h2>Conexión con MT5 · {{ label(editing) }}</h2>
+        <p class="muted tiny">
+          Puente local <code>mt5-bridge/bridge.py</code> (<code>.\run-mt5-bridge.ps1</code>) con el terminal MT5 abierto y
+          <strong>Algo Trading</strong> activado. Para otra cuenta/terminal usa otro puerto (<code>MT5_BRIDGE_PORT=8766</code>).
+        </p>
+        <div class="grid">
+          <div class="field">
+            <label for="cfg-url">URL del puente</label>
+            <input id="cfg-url" name="bridgeUrl" type="text" [(ngModel)]="d.form.bridgeUrl" placeholder="http://127.0.0.1:8765" />
+          </div>
+          <div class="field">
+            <label for="cfg-token">Token del puente <small>({{ d.form.hasToken ? 'guardado' : 'sin token' }})</small></label>
+            <input
+              id="cfg-token"
+              name="bridgeToken"
+              type="password"
+              autocomplete="new-password"
+              [(ngModel)]="d.tokenInput"
+              [disabled]="d.clearToken"
+              [placeholder]="d.form.hasToken ? '•••••• (vacío = mantener)' : 'opcional (MT5_BRIDGE_TOKEN)'"
+            />
+            <label class="check" *ngIf="d.form.hasToken">
+              <input type="checkbox" name="clearToken" [(ngModel)]="d.clearToken" /> Quitar token
+            </label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" (click)="testConnection()" [disabled]="testing">
+            <span class="spinner" *ngIf="testing" aria-hidden="true"></span>
+            Probar conexión
+          </button>
+          <small class="muted">Usa la configuración guardada de {{ label(editing) }}.</small>
+        </div>
+
+        <div class="health" *ngIf="health as h" [class.bad]="!h.ok">
+          <ng-container *ngIf="h.ok && h.account as a; else healthErr">
+            <p>
+              <strong>Conectado</strong> · cuenta
+              <span [class.demo]="a.demo" [class.real]="!a.demo">{{ a.demo ? 'DEMO' : 'REAL' }}</span>
+              {{ a.login }} · {{ a.server }}
+            </p>
+            <p class="muted tiny">
+              Balance {{ a.balance | number: '1.2-2' }} {{ a.currency }} · Equity {{ a.equity | number: '1.2-2' }} {{ a.currency }}
+            </p>
+            <p class="tiny">
+              Algo Trading: <strong [class.real]="!h.tradeAllowed">{{ h.tradeAllowed ? 'activado' : 'DESACTIVADO' }}</strong>
+              · Cuenta real permitida: <strong>{{ h.allowReal ? 'sí' : 'no' }}</strong>
+              · Magic: {{ h.magic }}
+            </p>
+          </ng-container>
+          <ng-template #healthErr>
+            <p><strong>Sin conexión</strong> · {{ h.error || 'El terminal no tiene cuenta conectada.' }}</p>
+          </ng-template>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Símbolos del broker</h2>
+        <p class="muted tiny">Nombre exacto del símbolo en tu MT5 (ventana Observación del mercado).</p>
+        <div class="grid">
+          <div class="field" *ngFor="let m of markets">
+            <label [for]="'cfg-sym-' + m.id">{{ m.label }}</label>
+            <input
+              [id]="'cfg-sym-' + m.id"
+              [name]="'sym-' + m.id"
+              type="text"
+              [(ngModel)]="d.form.symbols[m.id]"
+              [placeholder]="m.hint"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Tamaño de la posición</h2>
+        <div class="seg">
+          <button type="button" [class.active]="d.lotMode === 'risk'" (click)="d.lotMode = 'risk'">Riesgo % de la cuenta</button>
+          <button type="button" [class.active]="d.lotMode === 'fixed'" (click)="d.lotMode = 'fixed'">Lotes fijos</button>
+        </div>
+        <div class="grid">
+          <div class="field" *ngIf="d.lotMode === 'risk'">
+            <label for="cfg-risk">Riesgo por operación (% equity)</label>
+            <input id="cfg-risk" name="riskPct" type="number" min="0.01" max="5" step="0.05" [(ngModel)]="d.form.riskPct" />
+            <small class="muted">Lotes = equity × riesgo % ÷ pérdida hasta el SL.</small>
+          </div>
+          <div class="field" *ngIf="d.lotMode === 'fixed'">
+            <label for="cfg-volume">Lotes por operación</label>
+            <input id="cfg-volume" name="volume" type="number" min="0.01" max="100" step="0.01" [(ngModel)]="d.fixedVolume" />
+            <small class="muted">Siempre podrás cambiarlos en el diálogo de confirmación.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Ejecución</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="cfg-dev">Distancia máx. broker ↔ señal (%)</label>
+            <input id="cfg-dev" name="maxDeviationPct" type="number" min="0.05" max="10" step="0.05" [(ngModel)]="d.form.maxDeviationPct" />
+            <small class="muted">Si el precio del broker está más lejos de la entrada, no se envía.</small>
+          </div>
+          <div class="field">
+            <label for="cfg-exp">Caducidad orden LIMIT (min)</label>
+            <input id="cfg-exp" name="expiryMinutes" type="number" min="0" max="1440" step="5" [(ngModel)]="d.form.expiryMinutes" />
+            <small class="muted">0 = sin caducidad (hasta cancelarla).</small>
+          </div>
+          <div class="field">
+            <label for="cfg-slip">Deslizamiento máx. a mercado (puntos)</label>
+            <input id="cfg-slip" name="deviationPoints" type="number" min="1" max="1000" step="1" [(ngModel)]="d.form.deviationPoints" />
+          </div>
+        </div>
+        <label class="check">
+          <input type="checkbox" name="allowMultiple" [(ngModel)]="d.form.allowMultiple" />
+          Permitir varias operaciones abiertas en el mismo símbolo (y reenviar una señal ya enviada)
+        </label>
+      </section>
+
+      <section class="panel">
+        <div class="actions">
+          <button class="primary" type="submit" [disabled]="saving">
+            <span class="spinner" *ngIf="saving" aria-hidden="true"></span>
+            {{ saving ? 'Guardando…' : 'Guardar ' + label(editing) }}
+          </button>
+          <button type="button" class="ghost" (click)="discard()" [disabled]="saving">Descartar cambios</button>
+          <button type="button" class="ghost" (click)="copyFromOther()" [disabled]="saving">Copiar de {{ label(otherProfile) }}</button>
+          <button type="button" class="ghost" (click)="restoreDefaults()" [disabled]="saving">Valores por defecto</button>
+        </div>
+        <p class="muted tiny">
+          Solo en el puente (variables de entorno, por seguridad): <code>MT5_ALLOW_REAL=1</code> para cuentas reales,
+          <code>MT5_MAGIC</code>, <code>MT5_TERMINAL_PATH</code>, <code>MT5_LOGIN</code>/<code>MT5_PASSWORD</code>/<code>MT5_SERVER</code>.
+        </p>
+      </section>
+    </form>
+  </ng-container>
+
+  <p class="msg toast" *ngIf="message" [class.err]="messageErr" aria-live="polite">{{ message }}</p>
+</div>
