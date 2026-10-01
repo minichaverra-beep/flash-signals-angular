@@ -6,9 +6,11 @@ import {
   HistoryDetail,
   HistoryListItem,
   HistoryResultado,
+  HistorySortKey,
   HistoryTag,
   Market,
   SignalsApiService,
+  SortDir,
 } from '../../services/signals-api.service';
 import {
   ReportViewMode,
@@ -78,6 +80,21 @@ function readPageSize(): number {
   }
 }
 
+const SORT_KEY = 'historial.sort';
+const DEFAULT_SORT: { by: HistorySortKey; dir: SortDir } = { by: 'createdAt', dir: 'desc' };
+
+function readSort(): { by: HistorySortKey; dir: SortDir } {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
+    if (raw && typeof raw.by === 'string' && (raw.dir === 'asc' || raw.dir === 'desc')) {
+      return { by: raw.by as HistorySortKey, dir: raw.dir };
+    }
+  } catch {
+    /* storage no disponible o JSON inválido */
+  }
+  return { ...DEFAULT_SORT };
+}
+
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** Color por defecto de chips Dirección / Confluencias (coincide con seed SQLite). */
@@ -109,6 +126,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   /** Vista «Resumido» (estilo historial MT5) vs detallada editable. */
   compactMode = readCompactMode();
   pageTotals: SummaryTotals = summaryTotals([]);
+  sortBy: HistorySortKey = readSort().by;
+  sortDir: SortDir = readSort().dir;
   marketFilter: Market | '' = '';
   loading = false;
   error = '';
@@ -256,6 +275,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
         page: this.page,
         pageSize: this.pageSize,
         market: this.marketFilter || undefined,
+        sortBy: this.sortBy,
+        sortDir: this.sortDir,
       })
       .subscribe({
         next: (res) => {
@@ -1061,10 +1082,38 @@ export class HistorialComponent implements OnInit, OnDestroy {
   }
 
   private rebuildDisplayRows(): void {
-    this.displayRows = mergeCalcMarkersIntoRows(this.items, this.calcMarkers, {
+    // Las barras de cambio de cálculo se ubican por fecha: solo tienen sentido en orden cronológico
+    const markers = this.sortBy === 'createdAt' ? this.calcMarkers : [];
+    this.displayRows = mergeCalcMarkersIntoRows(this.items, markers, {
       isLastPage: this.page >= this.totalPages,
     });
     this.pageTotals = summaryTotals(this.items);
+  }
+
+  /** Click en cabecera: misma columna alterna asc/desc; columna nueva empieza en desc. */
+  toggleSort(key: HistorySortKey): void {
+    if (this.sortBy === key) {
+      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortBy = key;
+      this.sortDir = 'desc';
+    }
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify({ by: this.sortBy, dir: this.sortDir }));
+    } catch {
+      /* storage no disponible: solo en memoria */
+    }
+    this.load(1);
+  }
+
+  sortIcon(key: HistorySortKey): string {
+    if (this.sortBy !== key) return '↕';
+    return this.sortDir === 'asc' ? '▲' : '▼';
+  }
+
+  ariaSort(key: HistorySortKey): 'ascending' | 'descending' | 'none' {
+    if (this.sortBy !== key) return 'none';
+    return this.sortDir === 'asc' ? 'ascending' : 'descending';
   }
 
   setCompactMode(on: boolean): void {

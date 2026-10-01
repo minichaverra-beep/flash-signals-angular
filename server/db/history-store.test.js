@@ -114,6 +114,28 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(page2.page, 2);
   });
 
+  it('listHistory: sortBy/sortDir con vacíos al final y fallback seguro', async () => {
+    await store.insertSnapshot(
+      sampleSnap({ summary: { scoreCombined: 50, planDetails: { rr: '1:3' } } })
+    );
+    await store.insertSnapshot(
+      sampleSnap({ summary: { scoreCombined: 70, planDetails: { rr: '1:2' } } })
+    );
+    await store.insertSnapshot(sampleSnap({ summary: { verdict: 'X' } }));
+
+    const asc = await store.listHistory({ sortBy: 'scoreCombined', sortDir: 'asc' });
+    assert.deepEqual(asc.items.map((i) => i.scoreCombined), [50, 70, null]);
+    const desc = await store.listHistory({ sortBy: 'scoreCombined', sortDir: 'desc' });
+    assert.deepEqual(desc.items.map((i) => i.scoreCombined), [70, 50, null]);
+
+    const rr = await store.listHistory({ sortBy: 'plannedRr', sortDir: 'desc' });
+    assert.deepEqual(rr.items.map((i) => i.plannedRr), ['1:3', '1:2', null]);
+
+    const bogus = await store.listHistory({ sortBy: 'id; DROP TABLE x', sortDir: 'zz' });
+    assert.equal(bogus.total, 3);
+    assert.ok(bogus.items[0].id > bogus.items[2].id);
+  });
+
   it('getById: detalle con summary parseado; ids inválidos → null', async () => {
     const { id } = await store.insertSnapshot(
       sampleSnap({

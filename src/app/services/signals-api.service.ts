@@ -211,12 +211,16 @@ export class SignalsApiService {
     page?: number;
     pageSize?: number;
     market?: Market | '';
+    sortBy?: HistorySortKey;
+    sortDir?: SortDir;
   } = {}): Observable<HistoryListResponse> {
     const params: Record<string, string> = {
       page: String(opts.page ?? 1),
       pageSize: String(opts.pageSize ?? 20),
     };
     if (opts.market) params['market'] = opts.market;
+    if (opts.sortBy) params['sortBy'] = opts.sortBy;
+    if (opts.sortDir) params['sortDir'] = opts.sortDir;
     return this.http.get<HistoryListResponse>(`${this.base}/history`, { params });
   }
 
@@ -501,6 +505,26 @@ export interface HistoryTag {
   sortOrder?: number;
   createdAt?: string | null;
 }
+
+/** Columnas ordenables en /api/history (whitelist en history-store.js). */
+export type HistorySortKey =
+  | 'createdAt'
+  | 'id'
+  | 'market'
+  | 'bias'
+  | 'winrate'
+  | 'scoreCombined'
+  | 'status'
+  | 'comment'
+  | 'resultado'
+  | 'pnlUsd'
+  | 'hasResultImage'
+  | 'plannedEntry'
+  | 'plannedSl'
+  | 'plannedTp'
+  | 'plannedRr';
+
+export type SortDir = 'asc' | 'desc';
 
 export interface HistoryListResponse {
   items: HistoryListItem[];

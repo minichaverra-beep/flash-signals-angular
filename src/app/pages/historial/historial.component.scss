@@ -1189,6 +1189,41 @@ textarea.hist-textarea-compact {
   letter-spacing: inherit;
 }
 
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.th-sort .sort-ind {
+  font-size: 0.7em;
+  opacity: 0.35;
+}
+
+.th-sort:hover .sort-ind,
+.th-sort.active .sort-ind {
+  opacity: 1;
+  color: var(--gold);
+}
+
+.th-sort-icon {
+  margin-left: 0.25rem;
+}
+
+th.num .th-sort {
+  justify-content: flex-end;
+}
+
 .th-tip::after {
   top: calc(100% + 0.45rem);
   bottom: auto;

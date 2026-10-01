@@ -1196,6 +1196,8 @@ app.get('/api/history', async (req, res) => {
       page,
       pageSize,
       market: market || null,
+      sortBy: typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined,
+      sortDir: typeof req.query.sortDir === 'string' ? req.query.sortDir : undefined,
     });
     res.json(data);
   } catch (err) {

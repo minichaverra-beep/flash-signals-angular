@@ -138,17 +138,17 @@
       <table class="mt5-table">
         <thead>
           <tr>
-            <th>Hora</th>
-            <th>Ticket</th>
-            <th>Símbolo</th>
-            <th>Tipo</th>
-            <th class="num">Precio</th>
-            <th class="num">S / L</th>
-            <th class="num">T / P</th>
-            <th class="num">R:R</th>
-            <th class="num">Prob.</th>
-            <th>Resultado</th>
-            <th class="num">Beneficio</th>
+            <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Hora <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('id')"><button type="button" class="th-sort" [class.active]="sortBy === 'id'" (click)="toggleSort('id')">Ticket <span class="sort-ind">{{ sortIcon('id') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Símbolo <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Tipo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('plannedEntry')"><button type="button" class="th-sort" [class.active]="sortBy === 'plannedEntry'" (click)="toggleSort('plannedEntry')">Precio <span class="sort-ind">{{ sortIcon('plannedEntry') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('plannedSl')"><button type="button" class="th-sort" [class.active]="sortBy === 'plannedSl'" (click)="toggleSort('plannedSl')">S / L <span class="sort-ind">{{ sortIcon('plannedSl') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('plannedTp')"><button type="button" class="th-sort" [class.active]="sortBy === 'plannedTp'" (click)="toggleSort('plannedTp')">T / P <span class="sort-ind">{{ sortIcon('plannedTp') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('plannedRr')"><button type="button" class="th-sort" [class.active]="sortBy === 'plannedRr'" (click)="toggleSort('plannedRr')">R:R <span class="sort-ind">{{ sortIcon('plannedRr') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('scoreCombined')"><button type="button" class="th-sort" [class.active]="sortBy === 'scoreCombined'" (click)="toggleSort('scoreCombined')">Prob. <span class="sort-ind">{{ sortIcon('scoreCombined') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('resultado')"><button type="button" class="th-sort" [class.active]="sortBy === 'resultado'" (click)="toggleSort('resultado')">Resultado <span class="sort-ind">{{ sortIcon('resultado') }}</span></button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('pnlUsd')"><button type="button" class="th-sort" [class.active]="sortBy === 'pnlUsd'" (click)="toggleSort('pnlUsd')">Beneficio <span class="sort-ind">{{ sortIcon('pnlUsd') }}</span></button></th>
           </tr>
         </thead>
         <tbody>
@@ -204,23 +204,24 @@
       <table class="hist-table">
         <thead>
           <tr>
-            <th>Fecha</th>
-            <th>Mercado</th>
-            <th>Sesgo</th>
-            <th>
+            <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Fecha <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Mercado <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Sesgo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('winrate')">
               <button
                 type="button"
                 class="th-tip has-tip"
                 [attr.data-tooltip]="hitRateColumnTip"
                 [attr.aria-label]="hitRateColumnTip"
               >Tasa de acierto <span class="th-tip-icon" aria-hidden="true">?</span></button>
+              <button type="button" class="th-sort th-sort-icon" [class.active]="sortBy === 'winrate'" (click)="toggleSort('winrate')" aria-label="Ordenar por tasa de acierto"><span class="sort-ind">{{ sortIcon('winrate') }}</span></button>
             </th>
-            <th>Probabilidad</th>
-            <th>Estado</th>
-            <th>Comentarios</th>
-            <th>Resultado</th>
-            <th>$/PnL</th>
-            <th>Captura</th>
+            <th [attr.aria-sort]="ariaSort('scoreCombined')"><button type="button" class="th-sort" [class.active]="sortBy === 'scoreCombined'" (click)="toggleSort('scoreCombined')">Probabilidad <span class="sort-ind">{{ sortIcon('scoreCombined') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('status')"><button type="button" class="th-sort" [class.active]="sortBy === 'status'" (click)="toggleSort('status')">Estado <span class="sort-ind">{{ sortIcon('status') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('comment')"><button type="button" class="th-sort" [class.active]="sortBy === 'comment'" (click)="toggleSort('comment')">Comentarios <span class="sort-ind">{{ sortIcon('comment') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('resultado')"><button type="button" class="th-sort" [class.active]="sortBy === 'resultado'" (click)="toggleSort('resultado')">Resultado <span class="sort-ind">{{ sortIcon('resultado') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('pnlUsd')"><button type="button" class="th-sort" [class.active]="sortBy === 'pnlUsd'" (click)="toggleSort('pnlUsd')">$/PnL <span class="sort-ind">{{ sortIcon('pnlUsd') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('hasResultImage')"><button type="button" class="th-sort" [class.active]="sortBy === 'hasResultImage'" (click)="toggleSort('hasResultImage')">Captura <span class="sort-ind">{{ sortIcon('hasResultImage') }}</span></button></th>
             <th>Captura detalle</th>
             <th>Dirección</th>
             <th>Confluencias</th>

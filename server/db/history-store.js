@@ -891,8 +891,38 @@ async function insertSnapshot(snap) {
   return { id: Number(info.lastInsertRowid) };
 }
 
+/** sortBy permitido → expresión SQL (whitelist: nunca interpolar input del cliente). */
+const HISTORY_SORT_SQL = {
+  createdAt: 'created_at',
+  id: 'id',
+  market: 'market',
+  bias: "json_extract(summary_json, '$.bias')",
+  winrate: "CAST(LTRIM(json_extract(summary_json, '$.winrate'), '~ ') AS REAL)",
+  scoreCombined: 'score_combined',
+  status: 'status',
+  comment: "LOWER(NULLIF(TRIM(comment), ''))",
+  resultado: "NULLIF(resultado, '')",
+  pnlUsd: 'pnl_usd',
+  hasResultImage: 'CASE WHEN result_image_name IS NULL THEN 0 ELSE 1 END',
+  plannedEntry: "CAST(json_extract(summary_json, '$.planDetails.entry') AS REAL)",
+  plannedSl: "CAST(json_extract(summary_json, '$.planDetails.sl') AS REAL)",
+  plannedTp: "CAST(json_extract(summary_json, '$.planDetails.tp') AS REAL)",
+  // R:R guardado como "1:2" o número: ordenar por la parte de reward
+  plannedRr:
+    "CAST(SUBSTR(json_extract(summary_json, '$.planDetails.rr'), " +
+    "INSTR(json_extract(summary_json, '$.planDetails.rr'), ':') + 1) AS REAL)",
+};
+
+function historyOrderBy(sortBy, sortDir) {
+  const expr = HISTORY_SORT_SQL[sortBy] || HISTORY_SORT_SQL.createdAt;
+  const dir = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  // Vacíos siempre al final, en asc y desc
+  return `(${expr}) IS NULL, ${expr} ${dir}, id ${dir}`;
+}
+
 /**
- * @param {{ page?: number, pageSize?: number, market?: string|null }} opts
+ * @param {{ page?: number, pageSize?: number, market?: string|null,
+ *   sortBy?: string, sortDir?: 'asc'|'desc' }} opts
  */
 async function listHistory(opts = {}) {
   const e = await getEngine();
@@ -903,6 +933,7 @@ async function listHistory(opts = {}) {
     opts.market && ['btc', 'us30', 'xauusd'].includes(String(opts.market).toLowerCase())
       ? String(opts.market).toLowerCase()
       : null;
+  const orderBy = historyOrderBy(opts.sortBy, opts.sortDir);
 
   let total;
   let rows;
@@ -924,7 +955,7 @@ async function listHistory(opts = {}) {
               json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
        FROM signal_history
        WHERE market = ?
-       ORDER BY created_at DESC, id DESC
+       ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
       [market, pageSize, offset]
     );
@@ -942,7 +973,7 @@ async function listHistory(opts = {}) {
               json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
               json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
        FROM signal_history
-       ORDER BY created_at DESC, id DESC
+       ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
       [pageSize, offset]
     );
