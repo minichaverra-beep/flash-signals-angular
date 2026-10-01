@@ -1,4 +1,4 @@
-import type { SignalSummary } from '../services/signals-api.service';
+import type { HistoryMt5Real, PlanDetails, SignalSummary } from '../services/signals-api.service';
 
 export type { ChecklistItem } from '../services/signals-api.service';
 
@@ -895,4 +895,55 @@ export function volMarkerPct(
   if (value == null) return 0;
   const max = volAxisMax(s);
   return Math.max(0, Math.min(100, (value / max) * 100));
+}
+
+/** Celdas Entrada / Stop / Objetivo / R:B / Riesgo con la ejecución real de MT5. */
+export interface ExecutionLevels {
+  entry: string;
+  sl: string;
+  exit: string;
+  /** R realizado con signo: (salida − entrada) / |entrada − SL|, a favor de la posición. */
+  realizedR: string;
+  risk: string;
+  /** El SL con que se abrió en MT5 difiere del plan. */
+  slChanged: boolean;
+  ticket: number;
+}
+
+const planNum = (v: string | null | undefined): number => Number(String(v ?? '').replace(',', '.'));
+const planDecimals = (vals: (string | null | undefined)[]): number =>
+  Math.min(5, Math.max(0, ...vals.map((v) => (String(v ?? '').split('.')[1] || '').length)));
+
+/**
+ * Niveles realmente ejecutados (entrada, salida, SL, R realizado) sin tocar el plan; null si no hay
+ * ejecución MT5 completa o el plan no tiene niveles. Riesgo solo cambia si el SL real difiere.
+ */
+export function executionLevels(
+  pd: PlanDetails | null | undefined,
+  real: HistoryMt5Real | null | undefined
+): ExecutionLevels | null {
+  if (!pd || !real?.entry || !real.exit) return null;
+  const [entry, sl] = [planNum(pd.entry), planNum(pd.sl)];
+  if (!(entry > 0) || !(sl > 0)) return null;
+  const dec = planDecimals([pd.entry, pd.sl, pd.tp]);
+  const fmt = (n: number) => n.toFixed(dec);
+  const long = sl < entry;
+  const slReal = real.sl && real.sl > 0 ? real.sl : sl;
+  const slChanged = Math.abs(slReal - sl) >= 10 ** -dec / 2;
+  const risk = Math.abs(real.entry - slReal);
+  const move = (real.exit - real.entry) * (long ? 1 : -1);
+  let realizedR = 'n/d';
+  if (risk > 0) {
+    const r = move / risk;
+    realizedR = `${r < 0 ? '−' : '+'}${Math.abs(r).toFixed(2)}R`;
+  }
+  return {
+    entry: fmt(real.entry),
+    sl: fmt(slReal),
+    exit: fmt(real.exit),
+    realizedR,
+    risk: slChanged ? fmt(risk) : pd.risk || fmt(risk),
+    slChanged,
+    ticket: real.ticket,
+  };
 }

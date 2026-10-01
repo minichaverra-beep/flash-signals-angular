@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input } from '@angular/core';
-import { SignalSummary } from '../services/signals-api.service';
+import { HistoryMt5Real, SignalSummary } from '../services/signals-api.service';
 import {
   chartHref,
+  executionLevels,
   hasChecklistsCard,
   hasDetalleAdicional,
   hasMarketPlan,
@@ -45,7 +46,10 @@ export class SignalReportViewerComponent {
   @Input() chartPath: string | null = null;
   /** Mercado para fallback del PNG si no hay chartUrl. */
   @Input() market = 'btc';
+  /** Ejecución real en MT5 (historial): el panel de niveles muestra lo ejecutado y el plan debajo. */
+  @Input() execution: HistoryMt5Real | null = null;
 
+  readonly executionLevels = executionLevels;
   readonly verdictRows = verdictRows;
   readonly marketRows = marketRows;
   readonly setupRows = setupRows;

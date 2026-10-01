@@ -433,6 +433,13 @@ export class SignalsApiService {
     );
   }
 
+  /** Candado de la fila: bloqueada = solo lectura (el API rechaza cambios con 423). */
+  historySetLocked(id: number, locked: boolean): Observable<{ ok: boolean; item: HistoryDetail }> {
+    return this.http.patch<{ ok: boolean; item: HistoryDetail }>(`${this.base}/history/${id}`, {
+      locked,
+    });
+  }
+
   historyTagsList(): Observable<{ tags: HistoryTag[] }> {
     return this.http.get<{ tags: HistoryTag[] }>(`${this.base}/history/tags`);
   }
@@ -554,6 +561,18 @@ export class SignalsApiService {
     );
   }
 
+  /** Auto captura: PNG con velas reales tras la señal (Entrada/SL/TP) como captura del resultado. */
+  historyAutoCapture(id: number, resultado: HistoryResultado | null): Observable<HistoryAutoCaptureResult> {
+    return this.http.post<HistoryAutoCaptureResult>(`${this.base}/history/${id}/auto-capture`, {
+      resultado,
+    });
+  }
+
+  /** $/PnL real desde MT5 (Auto captura); overwrite=true reemplaza un PnL manual distinto. */
+  historyMt5Pnl(id: number, resultado: HistoryResultado | null, overwrite = false): Observable<HistoryMt5PnlResult> {
+    return this.http.post<HistoryMt5PnlResult>(`${this.base}/history/${id}/mt5-pnl`, { resultado, overwrite });
+  }
+
   historyDeleteResultImage(
     id: number
   ): Observable<{ ok: boolean; item: HistoryDetail }> {
@@ -625,6 +644,69 @@ export class SignalsApiService {
 
 export type HistoryResultado = 'ganada' | 'perdida' | 'no_tomada';
 
+/** Resultado detectado con precio real por la auto captura (app.views.trade_outcome_chart). */
+export interface HistoryAutoCaptureOutcome {
+  outcome: 'tp' | 'sl' | 'ambiguous' | 'not_filled' | 'open';
+  label: string;
+  message: string;
+  reason?: string | null;
+  detected: 'ganada' | 'perdida' | null;
+  direction: 'LONG' | 'SHORT';
+  entryType: string;
+  signalTime: string;
+  fillTime: string | null;
+  exitTime: string | null;
+  lastCandle: string;
+  source: string;
+  shift: number;
+}
+
+export interface HistoryAutoCaptureResult {
+  ok: boolean;
+  item: HistoryDetail;
+  outcome: HistoryAutoCaptureOutcome;
+  detected: 'ganada' | 'perdida' | null;
+  /** El precio contradice el Resultado elegido (no se cambia: solo aviso). */
+  mismatch: boolean;
+  warning: string | null;
+}
+
+export interface HistoryMt5Pnl {
+  /** Neto: profit + commission + swap + fee de todos los deals de la posición. */
+  value: number;
+  source: 'mt5';
+  /** Posición MT5. */
+  ticket: number;
+  deals: number[];
+  login: number | null;
+  breakdown: { profit: number; commission: number; swap: number; fee: number };
+  /** Ejecución real (salida = media ponderada por volumen de los cierres; horas ISO UTC). */
+  execution: { entry: number; exit: number | null; sl: number | null; openedAt: string | null; closedAt: string | null };
+  /** El signo contradice el Resultado elegido (no se cambia: solo aviso). */
+  mismatch: boolean;
+  warning: string | null;
+}
+
+export interface HistoryMt5PnlResult {
+  ok: boolean;
+  /** false si ya coincidía o si hay un PnL manual distinto (needsConfirm). */
+  applied: boolean;
+  needsConfirm: boolean;
+  current: number | null;
+  pnl: HistoryMt5Pnl;
+  item: HistoryDetail;
+}
+
+/** Ejecución real en MT5 guardada en el historial (el plan sigue en summary.planDetails). */
+export interface HistoryMt5Real {
+  ticket: number;
+  entry: number | null;
+  exit: number | null;
+  sl: number | null;
+  openedAt: string | null;
+  closedAt: string | null;
+}
+
 export interface HistoryListItem {
   id: number;
   createdAt: string;
@@ -659,6 +741,10 @@ export interface HistoryListItem {
   resultado?: HistoryResultado | null;
   /** PnL real en USD (nullable; editable en /historial). */
   pnlUsd?: number | null;
+  /** 'mt5' si el $/PnL salió de MT5 (se borra al editarlo a mano). */
+  pnlSource?: string | null;
+  /** Ejecución real en MT5 (Auto captura). */
+  real?: HistoryMt5Real | null;
   /** Hay captura de resultado adjunta. */
   hasResultImage?: boolean;
   resultImageMime?: string | null;
@@ -668,6 +754,15 @@ export interface HistoryListItem {
   tags?: HistoryTag[];
   /** Confluencias (multi-select; catálogo history_confluencias). */
   confluencias?: HistoryTag[];
+  /** Candado manual opcional. */
+  locked?: boolean;
+  lockedAt?: string | null;
+  /** Fila de un día anterior desbloqueada a mano (anula el bloqueo por fecha). */
+  unlockOverride?: boolean;
+  /** Bloqueada por ser de un día anterior (según el API al leerla). */
+  autoLocked?: boolean;
+  /** Solo lectura: manual OR día anterior sin override. */
+  effectiveLocked?: boolean;
 }
 
 export interface HistoryTag {
@@ -702,6 +797,8 @@ export interface HistoryListResponse {
   items: HistoryListItem[];
   /** Barras de cambio de cálculo (corte viejo vs nuevo en el grid). */
   calcMarkers?: CalcChangeMarker[];
+  /** Zona horaria del API para «hoy» (bloqueo de operaciones de días anteriores). */
+  lockTz?: string;
   page: number;
   pageSize: number;
   total: number;

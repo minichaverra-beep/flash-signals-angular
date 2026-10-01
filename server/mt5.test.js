@@ -111,3 +111,27 @@ describe('buildManualOrder', () => {
     assert.match(buildManualOrder({ market: 'xauusd', side: 'LONG', volume: -1 }, settings).error, /volume/);
   });
 });
+
+describe('brokerFeedEnv', () => {
+  const { brokerFeedEnv } = require('./mt5');
+
+  it('pasa puente, token y símbolos del perfil a los scripts de análisis', () => {
+    const env = brokerFeedEnv({
+      bridgeUrl: 'http://127.0.0.1:8765',
+      bridgeToken: 'secreto',
+      symbols: { us30: 'US30m', xauusd: 'XAUUSDm', btc: 'BTCUSDm' },
+    });
+    assert.deepEqual(env, {
+      FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8765',
+      FS_MT5_BRIDGE_TOKEN: 'secreto',
+      FS_MT5_SYMBOL_US30: 'US30m',
+      FS_MT5_SYMBOL_XAUUSD: 'XAUUSDm',
+      FS_MT5_SYMBOL_BTC: 'BTCUSDm',
+    });
+  });
+
+  it('sin token ni símbolo no inventa variables', () => {
+    const env = brokerFeedEnv({ bridgeUrl: 'http://127.0.0.1:8766', symbols: { us30: 'US30' } });
+    assert.deepEqual(env, { FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8766', FS_MT5_SYMBOL_US30: 'US30' });
+  });
+});

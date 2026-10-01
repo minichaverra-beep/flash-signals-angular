@@ -45,6 +45,7 @@ import {
   type ExportBundle,
   type ExportRowHelpers,
 } from './historial-export';
+import { isAutoLocked, isEffectivelyLocked, isPastDay } from './historial-lock';
 import { SignalJobService, jobKind } from '../../services/signal-job.service';
 import { Subscription } from 'rxjs';
 
@@ -70,6 +71,22 @@ function readCompactMode(): boolean {
   } catch {
     return false;
   }
+}
+
+const AUTO_CAPTURE_KEY = 'historial.autoCapture';
+
+function readAutoCapture(): boolean {
+  try {
+    return localStorage.getItem(AUTO_CAPTURE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Aviso de auto captura junto a la celda CAPTURA (mismatch / sin niveles / no ejecutada…). */
+export interface AutoCaptureNote {
+  text: string;
+  tone: 'ok' | 'warn' | 'err';
 }
 
 const PAGE_SIZE_KEY = 'historial.pageSize';
@@ -104,6 +121,17 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** Color por defecto de chips Dirección / Confluencias (coincide con seed SQLite). */
 const DEFAULT_TAG_COLOR = '#4b5563';
 
+/** Campos del candado que devuelve el API tras cualquier cambio de la fila. */
+function lockFields(u: HistoryListItem): Partial<HistoryListItem> {
+  return {
+    locked: u.locked ?? false,
+    lockedAt: u.lockedAt ?? null,
+    unlockOverride: u.unlockOverride ?? false,
+    autoLocked: u.autoLocked ?? false,
+    effectiveLocked: u.effectiveLocked ?? false,
+  };
+}
+
 @Component({
   selector: 'app-historial',
   standalone: true,
@@ -129,6 +157,16 @@ export class HistorialComponent implements OnInit, OnDestroy {
   readonly hitRateColumnTip = HIT_RATE_COLUMN_TOOLTIP;
   /** Vista «Resumido» (estilo historial MT5) vs detallada editable. */
   compactMode = readCompactMode();
+  /** «Auto captura»: al marcar Ganada/Perdida se genera la captura del resultado con precio real. */
+  autoCapture = readAutoCapture();
+  /** Filas generando auto captura. */
+  autoCaptureBusyIds = new Set<number>();
+  /** id → último aviso de auto captura. */
+  autoCaptureNotes = new Map<number, AutoCaptureNote>();
+  /** Filas buscando el $/PnL en MT5 (Auto captura). */
+  mt5PnlBusyIds = new Set<number>();
+  /** id → último aviso del $/PnL de MT5. */
+  mt5PnlNotes = new Map<number, AutoCaptureNote>();
   pageTotals: SummaryTotals = summaryTotals([]);
   sortBy: HistorySortKey = readSort().by;
   sortDir: SortDir = readSort().dir;
@@ -140,6 +178,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
   savingIds = new Set<number>();
   /** id → subiendo/borrando imagen */
   imageBusyIds = new Set<number>();
+  /** id → cambiando el candado */
+  lockBusyIds = new Set<number>();
+  /** Zona del API para «hoy» (bloqueo por fecha); sin dato → zona del navegador. */
+  lockTz: string | undefined;
   /** cache-bust por id de imagen */
   imageBust = new Map<number, number>();
   /** URL con cache-bust de la «Captura detalle» redibujada tras Recalcular (por mercado). */
@@ -313,6 +355,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
         next: (res) => {
           this.items = res.items;
           this.calcMarkers = res.calcMarkers ?? [];
+          this.lockTz = res.lockTz || undefined;
+          this.nowMs = Date.now();
           this.total = res.total;
           this.totalPages = res.totalPages;
           this.page = res.page;
@@ -454,7 +498,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
   /** Lee la orden en MT5 y reajusta Entrada/SL/TP (y Resultado/$PnL si cerró) en el historial. */
   recalcOperation(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
-    if (this.mt5RecalcBusy.has(item.id)) return;
+    if (this.mt5RecalcBusy.has(item.id) || this.rejectIfLocked(item)) return;
     this.mt5RecalcBusy.add(item.id);
     this.api.mt5Recalc(item.id).subscribe({
       next: (r) => {
@@ -874,12 +918,128 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.patchItem(item, { pnlUsd: rounded });
   }
 
+  isMt5PnlBusy(id: number): boolean {
+    return this.mt5PnlBusyIds.has(id);
+  }
+
+  mt5PnlNote(id: number): AutoCaptureNote | null {
+    return this.mt5PnlNotes.get(id) ?? null;
+  }
+
+  /** Tooltip «MT5 #ticket» si el $/PnL vino de MT5. */
+  mt5PnlTitle(item: HistoryListItem): string | null {
+    return item.pnlSource === 'mt5' && item.real?.ticket ? `MT5 #${item.real.ticket}` : null;
+  }
+
+  /**
+   * Busca la operación en MT5: guarda su ejecución real y rellena $/PnL (un PnL manual distinto
+   * solo se reemplaza tras confirmar). `done` se llama al terminar, haya o no coincidencia.
+   */
+  runMt5Pnl(itemId: number, resultado: HistoryResultado, done?: () => void, overwrite = false): void {
+    if (this.mt5PnlBusyIds.has(itemId)) return;
+    this.mt5PnlBusyIds.add(itemId);
+    this.mt5PnlNotes.delete(itemId);
+    this.api.historyMt5Pnl(itemId, resultado, overwrite).subscribe({
+      next: (res) => {
+        this.mt5PnlBusyIds.delete(itemId);
+        this.applyItemPatch(itemId, res.item);
+        const { pnl } = res;
+        const value = formatPnlMoneyInput(pnl.value);
+        if (res.needsConfirm) {
+          const current = formatPnlMoneyInput(res.current);
+          if (confirm(`¿Reemplazar el PnL ${current} por ${value} de MT5 (#${pnl.ticket})?`)) {
+            this.runMt5Pnl(itemId, resultado, done, true);
+            return;
+          }
+          this.mt5PnlNotes.set(itemId, { text: `MT5 #${pnl.ticket}: ${value} (no aplicado)`, tone: 'warn' });
+          done?.();
+          return;
+        }
+        const ok = res.applied ? `MT5 #${pnl.ticket}: ${value}` : `MT5 #${pnl.ticket}: ya coincide`;
+        this.mt5PnlNotes.set(itemId, pnl.warning ? { text: pnl.warning, tone: 'warn' } : { text: ok, tone: 'ok' });
+        if (pnl.warning) this.showRunToast(`PnL #${itemId}: ${pnl.warning}`, true);
+        done?.();
+      },
+      error: (err: unknown) => {
+        this.mt5PnlBusyIds.delete(itemId);
+        const msg = this.errMsg(err, 'No se pudo obtener el PnL de MT5');
+        this.mt5PnlNotes.set(itemId, { text: msg, tone: 'warn' });
+        this.showRunToast(`PnL #${itemId}: ${msg}`, true);
+        done?.();
+      },
+    });
+  }
+
   isSaving(id: number): boolean {
     return this.savingIds.has(id);
   }
 
   isImageBusy(id: number): boolean {
     return this.imageBusyIds.has(id);
+  }
+
+  /**
+   * Solo lectura (ver, abrir detalle y copiar siguen permitidos): candado manual o, sin
+   * desbloqueo puntual, operación de un día anterior. Se recalcula con el reloj (nowMs),
+   * así al pasar la medianoche las filas de ayer se bloquean sin recargar.
+   */
+  isLocked(item: HistoryListItem | null | undefined): boolean {
+    return !!item && isEffectivelyLocked(item, this.nowMs, this.lockTz);
+  }
+
+  /** Bloqueada solo por fecha (no por candado manual). */
+  isDateLocked(item: HistoryListItem): boolean {
+    return !item.locked && isAutoLocked(item, this.nowMs, this.lockTz);
+  }
+
+  isEditBlocked(item: HistoryListItem): boolean {
+    return this.isSaving(item.id) || this.isLocked(item);
+  }
+
+  isImageBlocked(item: HistoryListItem): boolean {
+    return this.isImageBusy(item.id) || this.isLocked(item);
+  }
+
+  isLockBusy(id: number): boolean {
+    return this.lockBusyIds.has(id);
+  }
+
+  lockTip(item: HistoryListItem): string {
+    if (!this.isLocked(item)) return 'Bloquear fila';
+    return this.isDateLocked(item)
+      ? 'Bloqueada: operación de un día anterior — clic para desbloquear'
+      : 'Fila bloqueada — clic para desbloquear';
+  }
+
+  /** Defensa en la UI (el API también responde 423): true si la fila está bloqueada. */
+  private rejectIfLocked(item: HistoryListItem): boolean {
+    if (!this.isLocked(item)) return false;
+    this.error = 'La fila está bloqueada';
+    return true;
+  }
+
+  /** Bloquear no pide confirmación; desbloquear sí (evita desbloqueos accidentales). */
+  toggleLock(item: HistoryListItem, ev?: Event): void {
+    ev?.stopPropagation();
+    if (this.lockBusyIds.has(item.id)) return;
+    const next = !this.isLocked(item);
+    const question = isPastDay(item.createdAt, this.nowMs, this.lockTz)
+      ? 'Esta operación es de un día anterior. ¿Desbloquearla para editar?'
+      : '¿Desbloquear esta fila?';
+    if (!next && !confirm(question)) return;
+    this.lockBusyIds.add(item.id);
+    this.tagPickerOpenId = null;
+    this.confluencePickerOpenId = null;
+    this.api.historySetLocked(item.id, next).subscribe({
+      next: (res) => {
+        this.lockBusyIds.delete(item.id);
+        this.applyItemPatch(item.id, res.item);
+      },
+      error: (err: unknown) => {
+        this.lockBusyIds.delete(item.id);
+        this.error = this.errMsg(err, 'No se pudo cambiar el candado de la fila');
+      },
+    });
   }
 
   resultImageUrl(item: HistoryListItem | HistoryDetail): string | null {
@@ -949,7 +1109,47 @@ export class HistorialComponent implements OnInit, OnDestroy {
     const next: HistoryResultado | null =
       raw === 'ganada' || raw === 'perdida' || raw === 'no_tomada' ? raw : null;
     if ((item.resultado || null) === next) return;
-    this.patchItem(item, { resultado: next });
+    const auto = this.autoCapture && (next === 'ganada' || next === 'perdida') ? next : null;
+    const onSaved = auto
+      ? () => this.runMt5Pnl(item.id, auto, () => this.runAutoCapture(item, auto))
+      : undefined;
+    this.patchItem(item, { resultado: next }, onSaved);
+  }
+
+  isAutoCaptureBusy(id: number): boolean {
+    return this.autoCaptureBusyIds.has(id);
+  }
+
+  autoCaptureNote(id: number): AutoCaptureNote | null {
+    return this.autoCaptureNotes.get(id) ?? null;
+  }
+
+  /** Genera la captura del resultado con velas reales; nunca cambia el Resultado elegido. */
+  runAutoCapture(item: HistoryListItem, resultado: HistoryResultado): void {
+    if (this.autoCaptureBusyIds.has(item.id) || this.rejectIfLocked(item)) return;
+    if (item.hasResultImage && !confirm('¿Reemplazar la captura actual por la auto captura?')) return;
+    this.autoCaptureBusyIds.add(item.id);
+    this.autoCaptureNotes.delete(item.id);
+    this.api.historyAutoCapture(item.id, resultado).subscribe({
+      next: (res) => {
+        this.autoCaptureBusyIds.delete(item.id);
+        this.imageBust.set(item.id, Date.now());
+        this.applyItemPatch(item.id, res.item);
+        const note: AutoCaptureNote = res.warning
+          ? { text: res.warning, tone: 'warn' }
+          : { text: res.outcome.message, tone: 'ok' };
+        this.autoCaptureNotes.set(item.id, note);
+        if (res.warning) this.showRunToast(`Auto captura #${item.id}: ${res.warning}`, res.mismatch);
+        else if (this.runToast.startsWith(`Auto captura #${item.id}:`)) this.runToast = '';
+      },
+      error: (err: unknown) => {
+        this.autoCaptureBusyIds.delete(item.id);
+        const msg = this.errMsg(err, 'No se pudo generar la auto captura');
+        const text = /Adjuntar/.test(msg) ? msg : `${msg} · usa Adjuntar`;
+        this.autoCaptureNotes.set(item.id, { text, tone: 'err' });
+        this.showRunToast(`Auto captura #${item.id}: ${msg}`, true);
+      },
+    });
   }
 
   private patchItem(
@@ -961,8 +1161,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
       pnlUsd?: number | null;
       tagIds?: number[];
       confluenceIds?: number[];
-    }
+    },
+    onSaved?: () => void
   ): void {
+    if (this.rejectIfLocked(item)) return;
     this.savingIds.add(item.id);
     this.saveHint = '';
     this.api.historyPatch(item.id, body).subscribe({
@@ -973,6 +1175,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           if (this.saveHint === 'Guardado') this.saveHint = '';
         }, 1500);
+        onSaved?.();
       },
       error: (err: unknown) => {
         this.savingIds.delete(item.id);
@@ -993,10 +1196,13 @@ export class HistorialComponent implements OnInit, OnDestroy {
         motivoEntradaSalida: updated.motivoEntradaSalida ?? null,
         resultado: updated.resultado ?? null,
         pnlUsd: updated.pnlUsd ?? null,
+        pnlSource: updated.pnlSource ?? null,
+        real: updated.real ?? null,
         hasResultImage: updated.hasResultImage ?? false,
         resultImageMime: updated.resultImageMime ?? null,
         tags: updated.tags ?? [],
         confluencias: updated.confluencias ?? [],
+        ...lockFields(updated),
       };
       this.rebuildDisplayRows();
     }
@@ -1008,12 +1214,15 @@ export class HistorialComponent implements OnInit, OnDestroy {
         motivoEntradaSalida: updated.motivoEntradaSalida ?? null,
         resultado: updated.resultado ?? null,
         pnlUsd: updated.pnlUsd ?? null,
+        pnlSource: updated.pnlSource ?? null,
+        real: updated.real ?? null,
         hasResultImage: updated.hasResultImage ?? false,
         resultImageMime: updated.resultImageMime ?? null,
         plannedRr: updated.plannedRr ?? this.metricsItems[mIdx].plannedRr,
         tags: updated.tags ?? this.metricsItems[mIdx].tags ?? [],
         confluencias:
           updated.confluencias ?? this.metricsItems[mIdx].confluencias ?? [],
+        ...lockFields(updated),
       };
       this.recomputeMetrics();
     }
@@ -1024,10 +1233,13 @@ export class HistorialComponent implements OnInit, OnDestroy {
         motivoEntradaSalida: updated.motivoEntradaSalida ?? null,
         resultado: updated.resultado ?? null,
         pnlUsd: updated.pnlUsd ?? null,
+        pnlSource: updated.pnlSource ?? null,
+        real: updated.real ?? null,
         hasResultImage: updated.hasResultImage ?? false,
         resultImageMime: updated.resultImageMime ?? null,
         tags: updated.tags ?? [],
         confluencias: updated.confluencias ?? [],
+        ...lockFields(updated),
       };
     }
   }
@@ -1070,6 +1282,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
   }
 
   private uploadResultFile(item: HistoryListItem, file: File): void {
+    if (this.rejectIfLocked(item)) return;
     if (!IMAGE_TYPES.has(file.type)) {
       this.error = 'Formato no soportado. Usa PNG, JPG, WebP o GIF.';
       return;
@@ -1112,7 +1325,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   removeResultImage(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
-    if (!item.hasResultImage) return;
+    if (!item.hasResultImage || this.rejectIfLocked(item)) return;
     if (!confirm('¿Quitar la captura del resultado?')) return;
     this.imageBusyIds.add(item.id);
     this.api.historyDeleteResultImage(item.id).subscribe({
@@ -1188,6 +1401,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   deleteOne(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
+    if (this.rejectIfLocked(item)) return;
     this.unlockKind = 'delete';
     this.unlockItem = item;
     this.unlockPassword = '';
@@ -1326,6 +1540,15 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.confluencePickerOpenId = null;
     try {
       localStorage.setItem(COMPACT_MODE_KEY, on ? '1' : '0');
+    } catch {
+      /* storage no disponible: solo en memoria */
+    }
+  }
+
+  setAutoCapture(on: boolean): void {
+    this.autoCapture = on;
+    try {
+      localStorage.setItem(AUTO_CAPTURE_KEY, on ? '1' : '0');
     } catch {
       /* storage no disponible: solo en memoria */
     }

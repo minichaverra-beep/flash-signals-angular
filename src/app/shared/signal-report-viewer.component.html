@@ -15,16 +15,29 @@
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>{{ pd.entry || '—' }}</td>
-                <td>{{ pd.sl || '—' }}</td>
-                <td>{{ pd.tp || '—' }}</td>
-                <td>{{ pd.rr || '—' }}</td>
-                <td>{{ pd.risk || '—' }}</td>
-              </tr>
+              @if (executionLevels(pd, execution); as ex) {
+                <tr [title]="'Ejecución real MT5 #' + ex.ticket">
+                  <td>{{ ex.entry }}<span class="plan-was tiny">plan: {{ pd.entry || '—' }}</span></td>
+                  <td>{{ ex.sl }}@if (ex.slChanged) {<span class="plan-was tiny">plan: {{ pd.sl || '—' }}</span>}</td>
+                  <td>Salida {{ ex.exit }}<span class="plan-was tiny">plan: {{ pd.tp || '—' }}</span></td>
+                  <td>{{ ex.realizedR }}<span class="plan-was tiny">plan: {{ pd.rr || '—' }}</span></td>
+                  <td>{{ ex.risk }}@if (ex.slChanged) {<span class="plan-was tiny">plan: {{ pd.risk || '—' }}</span>}</td>
+                </tr>
+              } @else {
+                <tr>
+                  <td>{{ pd.entry || '—' }}</td>
+                  <td>{{ pd.sl || '—' }}</td>
+                  <td>{{ pd.tp || '—' }}</td>
+                  <td>{{ pd.rr || '—' }}</td>
+                  <td>{{ pd.risk || '—' }}</td>
+                </tr>
+              }
             </tbody>
           </table>
         </div>
+        @if (execution?.entry && execution?.exit) {
+          <p class="plan-mt5 tiny">Ejecución real en MT5 (#{{ execution?.ticket }}) · R:B = R realizado · debajo, el plan de la señal.</p>
+        }
         @if (s.planOriginal; as po) {
           <p class="plan-mt5 tiny">
             Reajustado con la orden real de MT5 · plan original de la señal:

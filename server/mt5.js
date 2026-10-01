@@ -206,6 +206,25 @@ function orderStatus(ticket, settings) {
   return callBridge('POST', '/status', { ticket }, settings);
 }
 
+/** Deals compra/venta de un símbolo en [from, to] (epoch UTC en segundos), horas ya en UTC. */
+function historyDeals({ symbol, from, to }, settings) {
+  return callBridge('POST', '/deals', { symbol, from, to }, settings);
+}
+
+/**
+ * Variables de entorno para los scripts de Cursor Trading: velas del broker (puente /rates)
+ * con los símbolos del perfil activo, para que análisis y chart usen la escala de precio de MT5.
+ */
+function brokerFeedEnv(settings = mt5Settings.get()) {
+  const env = { FS_MT5_BRIDGE_URL: settings.bridgeUrl || '' };
+  if (settings.bridgeToken) env.FS_MT5_BRIDGE_TOKEN = settings.bridgeToken;
+  for (const [market, key] of [['us30', 'US30'], ['xauusd', 'XAUUSD'], ['btc', 'BTC']]) {
+    const symbol = symbolFor(market, settings);
+    if (symbol) env[`FS_MT5_SYMBOL_${key}`] = symbol;
+  }
+  return env;
+}
+
 /** @param {object} order salida de buildOrderFromSummary; overrides: volume, risk_pct, dry_run… */
 function pushOrder(order, { clientId, ...overrides } = {}, settings = mt5Settings.get()) {
   return callBridge(
@@ -222,9 +241,11 @@ function pushOrder(order, { clientId, ...overrides } = {}, settings = mt5Setting
 }
 
 module.exports = {
+  brokerFeedEnv,
   buildManualOrder,
   buildOrderFromSummary,
   bridgeHealth,
+  historyDeals,
   orderStatus,
   padStops,
   pushOrder,

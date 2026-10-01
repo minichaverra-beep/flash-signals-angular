@@ -6,6 +6,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { historyTz, isPastDay, lockState } = require('./history-lock');
+
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 function getDataDir() {
@@ -130,6 +132,17 @@ async function openSqlJs() {
   applyHistoryMigrations(engine);
   return engine;
 }
+
+const MT5_REAL_COLUMNS = [
+  ['entry_price_real', 'REAL'],
+  ['exit_price_real', 'REAL'],
+  ['sl_price_real', 'REAL'],
+  ['opened_at_real', 'TEXT'],
+  ['closed_at_real', 'TEXT'],
+  ['mt5_ticket', 'INTEGER'],
+  ['pnl_source', 'TEXT'],
+];
+const MT5_REAL_SELECT = MT5_REAL_COLUMNS.map(([name]) => name).join(', ');
 
 /**
  * Migración que solo añade columnas a signal_history (si faltan) y se registra.
@@ -305,6 +318,18 @@ function applyHistoryMigrations(e) {
       ['009_calc_change_markers', now]
     );
   }
+  // 010: ejecución real en MT5 (el plan de summary_json no se toca) + origen del $/PnL.
+  applyAddColumnsMigration(e, '010_history_mt5_real', now, MT5_REAL_COLUMNS);
+  // 011: candado opcional por fila (solo lectura mientras locked = 1).
+  applyAddColumnsMigration(e, '011_history_locked', now, [
+    ['locked', 'INTEGER NOT NULL DEFAULT 0'],
+    ['locked_at', 'TEXT'],
+  ]);
+  // 012: desbloqueo puntual de filas de días anteriores (bloqueadas por fecha).
+  applyAddColumnsMigration(e, '012_history_unlock_override', now, [
+    ['unlock_override', 'INTEGER NOT NULL DEFAULT 0'],
+    ['unlock_override_at', 'TEXT'],
+  ]);
   seedDefaultHistoryTags(e, now);
   seedDefaultHistoryConfluencias(e, now);
 }
@@ -436,6 +461,24 @@ function readPnlUsd(row) {
   const n = Number(row.pnl_usd);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
+
+/** Error de las mutaciones sobre una fila con candado (el API lo traduce a 423). */
+const LOCKED_ERROR = 'locked';
+
+/** Reloj inyectable (solo tests) para fijar "ahora" en inserciones y en el candado por fecha. */
+let clock = () => new Date();
+
+function _setClockForTests(fn) {
+  clock = typeof fn === 'function' ? fn : () => new Date();
+}
+
+/** Columnas que necesita lockState (candado manual + bloqueo por fecha). */
+const LOCK_COLUMNS = 'created_at, locked, unlock_override';
+
+const rowLockState = (row) => lockState(row, clock(), historyTz());
+
+/** Candado efectivo: manual OR (día anterior AND sin desbloqueo puntual). */
+const isRowLocked = (row) => rowLockState(row).effectiveLocked;
 
 async function getEngine() {
   if (engine) return engine;
@@ -780,6 +823,20 @@ function readScore(raw) {
   return raw != null && raw !== '' ? Number(raw) : null;
 }
 
+function readMt5Real(row) {
+  const ticket = Number(row.mt5_ticket);
+  if (!Number.isInteger(ticket) || ticket <= 0) return null;
+  const price = (v) => (v != null && v !== '' && Number(v) > 0 ? Number(v) : null);
+  return {
+    ticket,
+    entry: price(row.entry_price_real),
+    exit: price(row.exit_price_real),
+    sl: price(row.sl_price_real),
+    openedAt: trimOrNull(row.opened_at_real),
+    closedAt: trimOrNull(row.closed_at_real),
+  };
+}
+
 function rowToListItem(row) {
   if (!row) return null;
   const flags = parseJson(row.flags_json, {});
@@ -814,12 +871,22 @@ function rowToListItem(row) {
     resultado: readResultado(row.resultado),
     /** PnL real en USD (nullable; editable desde /historial). */
     pnlUsd: readPnlUsd(row),
+    /** 'mt5' si el $/PnL salió de MT5 (se borra al editarlo a mano). */
+    pnlSource: trimOrNull(row.pnl_source),
+    /** Ejecución real en MT5 (el plan sigue en summary.planDetails). */
+    real: readMt5Real(row),
     hasResultImage: trimOrNull(row.result_image_name) != null,
     resultImageMime: trimOrNull(row.result_image_mime),
     /** Ruta del chart anotado del detalle (si la corrida lo generó). */
     chartPath: trimOrNull(row.chart_path),
     tags: Array.isArray(row._tags) ? row._tags : [],
     confluencias: Array.isArray(row._confluencias) ? row._confluencias : [],
+    /**
+     * Candado: locked = manual; autoLocked = día anterior sin desbloqueo puntual;
+     * effectiveLocked = solo lectura (el servidor rechaza cambios con 423).
+     */
+    ...rowLockState(row),
+    lockedAt: trimOrNull(row.locked_at),
   };
 }
 
@@ -854,7 +921,7 @@ function rowToDetail(row) {
  */
 async function insertSnapshot(snap) {
   const e = await getEngine();
-  const now = new Date().toISOString();
+  const now = clock().toISOString();
   const summary = snap.summary || null;
   const verdict = summary?.verdict || snap.verdict || null;
   const scoreCombined =
@@ -946,7 +1013,7 @@ async function listHistory(opts = {}) {
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
               pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
-              chart_path,
+              chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
               json_extract(summary_json, '$.bias') AS summary_bias,
               json_extract(summary_json, '$.winrate') AS summary_winrate,
               json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
@@ -965,7 +1032,7 @@ async function listHistory(opts = {}) {
       `SELECT id, created_at, started_at, finished_at, market, tier, status,
               flags_json, entry, verdict, score_combined, error, comment, resultado,
               pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
-              chart_path,
+              chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
               json_extract(summary_json, '$.bias') AS summary_bias,
               json_extract(summary_json, '$.winrate') AS summary_winrate,
               json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
@@ -997,6 +1064,8 @@ async function listHistory(opts = {}) {
   return {
     items,
     calcMarkers,
+    /** Zona de "hoy" para el bloqueo por fecha (el cliente usa la misma). */
+    lockTz: historyTz(),
     page,
     pageSize,
     total: count,
@@ -1023,9 +1092,10 @@ async function deleteById(id) {
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) return { deleted: 0 };
   const existing = e.get(
-    `SELECT result_image_name FROM signal_history WHERE id = ?`,
+    `SELECT result_image_name, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`,
     [n]
   );
+  if (isRowLocked(existing)) return { deleted: 0, error: LOCKED_ERROR };
   if (existing?.result_image_name) {
     const abs = path.join(
       getAttachmentsDir(),
@@ -1083,10 +1153,55 @@ function annotationPatchSets(patch) {
     if (p === undefined) {
       return { sets, params, error: 'pnlUsd inválido (usa número, p.ej. 125.5 o -40)' };
     }
-    sets.push('pnl_usd = ?');
+    sets.push('pnl_usd = ?', 'pnl_source = NULL');
     params.push(p);
   }
   return { sets, params };
+}
+
+const positiveOrNull = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null);
+const isoTextOrNull = (v) => (v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null);
+
+/**
+ * Guarda la ejecución real de MT5 (entrada, salida, SL inicial, horas, ticket) sin tocar el plan.
+ * Con pnlUsd además fija el $/PnL con origen 'mt5'.
+ * @param {number} id
+ * @param {{ ticket: number, entry?: number, exit?: number, sl?: number|null, openedAt?: string, closedAt?: string, pnlUsd?: number }} real
+ */
+async function updateMt5Execution(id, real = {}) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: 'id inválido' };
+  const ticket = Number(real.ticket);
+  if (!Number.isInteger(ticket) || ticket <= 0) return { ok: false, error: 'ticket MT5 inválido' };
+  const existing = e.get(`SELECT id, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`, [n]);
+  if (!existing) return { ok: false, error: 'not_found' };
+  if (isRowLocked(existing)) return { ok: false, error: LOCKED_ERROR };
+  const sets = [
+    'mt5_ticket = ?',
+    'entry_price_real = ?',
+    'exit_price_real = ?',
+    'sl_price_real = ?',
+    'opened_at_real = ?',
+    'closed_at_real = ?',
+  ];
+  const params = [
+    ticket,
+    positiveOrNull(real.entry),
+    positiveOrNull(real.exit),
+    positiveOrNull(real.sl),
+    isoTextOrNull(real.openedAt),
+    isoTextOrNull(real.closedAt),
+  ];
+  if (real.pnlUsd !== undefined) {
+    const pnl = normalizePnlUsd(real.pnlUsd);
+    if (pnl == null) return { ok: false, error: 'pnlUsd inválido' };
+    sets.push('pnl_usd = ?', "pnl_source = 'mt5'");
+    params.push(pnl);
+  }
+  params.push(n);
+  e.run(`UPDATE signal_history SET ${sets.join(', ')} WHERE id = ?`, params);
+  return { ok: true, item: await getById(n) };
 }
 
 async function updateAnnotation(id, patch = {}) {
@@ -1095,9 +1210,12 @@ async function updateAnnotation(id, patch = {}) {
   if (!Number.isInteger(n) || n < 1) {
     return { ok: false, error: 'id inválido' };
   }
-  const existing = e.get(`SELECT id FROM signal_history WHERE id = ?`, [n]);
+  const existing = e.get(`SELECT id, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`, [n]);
   if (!existing) {
     return { ok: false, error: 'not_found' };
+  }
+  if (isRowLocked(existing)) {
+    return { ok: false, error: LOCKED_ERROR };
   }
 
   const hasOwn = (key) => Object.hasOwn(patch, key);
@@ -1137,6 +1255,49 @@ async function updateAnnotation(id, patch = {}) {
 }
 
 /**
+ * Candado de la fila: bloquear o desbloquear siempre se permite.
+ * Fila de un día anterior: desbloquear activa el desbloqueo puntual; bloquear lo limpia y
+ * vuelve al bloqueo por fecha (sin candado manual). Fila de hoy: solo candado manual.
+ * @param {number} id
+ * @param {boolean} locked
+ */
+async function setLocked(id, locked) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: 'id inválido' };
+  if (typeof locked !== 'boolean') return { ok: false, error: 'locked debe ser true o false' };
+  const row = e.get(`SELECT id, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`, [n]);
+  if (!row) return { ok: false, error: 'not_found' };
+  const now = clock().toISOString();
+  const pastDay = isPastDay(row.created_at, clock(), historyTz());
+  if (locked && pastDay) {
+    e.run(
+      `UPDATE signal_history
+       SET locked = 0, locked_at = NULL, unlock_override = 0, unlock_override_at = NULL
+       WHERE id = ?`,
+      [n]
+    );
+  } else if (locked) {
+    e.run(
+      `UPDATE signal_history
+       SET locked = 1, locked_at = ?, unlock_override = 0, unlock_override_at = NULL
+       WHERE id = ?`,
+      [now, n]
+    );
+  } else if (pastDay) {
+    e.run(
+      `UPDATE signal_history
+       SET locked = 0, locked_at = NULL, unlock_override = 1, unlock_override_at = ?
+       WHERE id = ?`,
+      [now, n]
+    );
+  } else {
+    e.run(`UPDATE signal_history SET locked = 0, locked_at = NULL WHERE id = ?`, [n]);
+  }
+  return { ok: true, item: await getById(n) };
+}
+
+/**
  * Reajusta Entry/SL/TP del plan (summary.planDetails) con los niveles reales de MT5.
  * El plan original de la señal se conserva una sola vez en summary.planOriginal.
  * @param {number} id
@@ -1146,8 +1307,9 @@ async function updatePlanLevels(id, levels = {}) {
   const e = await getEngine();
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) return { ok: false, error: 'id inválido' };
-  const row = e.get(`SELECT summary_json FROM signal_history WHERE id = ?`, [n]);
+  const row = e.get(`SELECT summary_json, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`, [n]);
   if (!row) return { ok: false, error: 'not_found' };
+  if (isRowLocked(row)) return { ok: false, error: LOCKED_ERROR };
   const summary = parseJson(row.summary_json, {}) || {};
   const plan = { ...summary.planDetails };
   if (!summary.planOriginal) {
@@ -1222,11 +1384,14 @@ async function saveResultImage(id, buffer, mime) {
     return { ok: false, error: 'id inválido' };
   }
   const existing = e.get(
-    `SELECT id, result_image_name FROM signal_history WHERE id = ?`,
+    `SELECT id, result_image_name, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`,
     [n]
   );
   if (!existing) {
     return { ok: false, error: 'not_found' };
+  }
+  if (isRowLocked(existing)) {
+    return { ok: false, error: LOCKED_ERROR };
   }
   const mimeNorm = String(mime || '')
     .trim()
@@ -1272,11 +1437,14 @@ async function deleteResultImage(id) {
     return { ok: false, error: 'id inválido' };
   }
   const existing = e.get(
-    `SELECT id, result_image_name FROM signal_history WHERE id = ?`,
+    `SELECT id, result_image_name, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`,
     [n]
   );
   if (!existing) {
     return { ok: false, error: 'not_found' };
+  }
+  if (isRowLocked(existing)) {
+    return { ok: false, error: LOCKED_ERROR };
   }
   if (existing.result_image_name) {
     const abs = path.join(getAttachmentsDir(), String(existing.result_image_name));
@@ -1541,7 +1709,9 @@ module.exports = {
   getById,
   deleteById,
   updateAnnotation,
+  updateMt5Execution,
   updatePlanLevels,
+  setLocked,
   listTags,
   createTag,
   listConfluencias,
@@ -1557,7 +1727,10 @@ module.exports = {
   clearAll,
   getBackendKind,
   _resetForTests,
+  _setClockForTests,
+  historyTz,
   MAX_RESULT_IMAGE_BYTES,
+  LOCKED_ERROR,
   DEFAULT_HISTORY_TAGS,
   DEFAULT_HISTORY_CONFLUENCIAS,
   get DATA_DIR() {

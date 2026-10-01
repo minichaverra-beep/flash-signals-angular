@@ -352,6 +352,11 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* «Auto captura» a la izquierda de «Resumido» (empuja ambos a la derecha) */
+.auto-capture-toggle + .compact-toggle {
+  margin-left: 0;
+}
+
 /* Tabla resumida estilo historial MT5 */
 .mt5-table {
   width: 100%;
@@ -669,6 +674,19 @@ button:disabled {
   gap: 0.25rem;
 }
 
+/** $/PnL tomado de MT5 (tooltip «MT5 #ticket»). */
+.mt5-pnl-badge {
+  display: inline-block;
+  margin-top: 0.2rem;
+  padding: 0 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
+  border-radius: 0.25rem;
+  color: var(--ok);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: help;
+}
+
 .pnl-field-label {
   font-size: 0.72rem;
   letter-spacing: 0.04em;
@@ -726,6 +744,60 @@ button:disabled {
   align-items: center;
   gap: 0.55rem;
   margin-top: 0.15rem;
+}
+
+/* Auto captura: spinner mientras se genera + aviso (mismatch / sin niveles / no ejecutada) */
+.auto-capture-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--gold);
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.auto-capture-note {
+  margin: 0.25rem 0 0;
+  max-width: 9rem;
+  line-height: 1.25;
+  text-align: left;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  &.tone-ok { color: var(--ok); }
+  &.tone-warn { color: var(--warn); }
+  &.tone-err { color: color-mix(in srgb, var(--err) 55%, white); }
+}
+
+.card-annotate .auto-capture-note,
+.cards .auto-capture-note {
+  max-width: none;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
 }
 
 .btn-attach {
@@ -800,6 +872,86 @@ textarea.hist-textarea-compact {
 .hist-input:disabled,
 .hist-select:disabled {
   opacity: 0.55;
+}
+
+/* Candado opcional por fila: solo lectura (texto seleccionable/copiable). */
+.lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+  &:hover:not(:disabled) {
+    color: color-mix(in srgb, var(--gold) 80%, white);
+    border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  }
+
+  &.on {
+    color: var(--gold);
+    border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+    background: color-mix(in srgb, var(--gold) 16%, transparent);
+  }
+
+  /* Bloqueada por fecha (día anterior): punto discreto en la esquina. */
+  &.by-date {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--gold) 55%, var(--muted));
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+  }
+}
+
+.lock-ind {
+  margin-left: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.row-locked {
+  .hist-input[readonly] {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .hist-input[readonly]:focus {
+    outline-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  }
+}
+
+tr.row-locked > td:first-child,
+.hist-card.row-locked {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--gold) 70%, transparent);
+}
+
+.detail-annotate .hist-input[readonly] {
+  opacity: 0.6;
+}
+
+.btn-attach:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .hist-select.res-win {

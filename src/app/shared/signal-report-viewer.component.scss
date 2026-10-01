@@ -459,6 +459,13 @@
   color: color-mix(in srgb, var(--accent) 75%, white);
 }
 
+/** Valor del plan bajo el valor real ejecutado (panel de niveles). */
+.plan-was {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .vol-chart {
   margin-top: 0.75rem;
   padding: 0.85rem 1rem;

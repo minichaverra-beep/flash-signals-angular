@@ -75,6 +75,20 @@
     <div class="meta-row">
       <p class="muted">{{ total }} entrada{{ total === 1 ? '' : 's' }} · página {{ page }} / {{ totalPages }}</p>
       <p class="muted tiny save-hint" *ngIf="saveHint">{{ saveHint }}</p>
+      <label
+        class="compact-toggle auto-capture-toggle"
+        title="Auto captura: al marcar Ganada/Perdida se genera la captura del resultado con las velas reales tras la señal (Entrada/SL/TP)"
+      >
+        <input
+          type="checkbox"
+          role="switch"
+          [checked]="autoCapture"
+          [attr.aria-checked]="autoCapture"
+          (change)="setAutoCapture($any($event.target).checked)"
+        />
+        <span class="compact-toggle-track" aria-hidden="true"><span class="compact-toggle-thumb"></span></span>
+        <span class="compact-toggle-label">Auto captura</span>
+      </label>
       <label class="compact-toggle" title="Resumido: vista tipo historial MT5, solo lo esencial">
         <input
           type="checkbox"
@@ -171,7 +185,10 @@
                 (keydown.enter)="openDetail(item)"
               >
                 <td class="mono">{{ item.createdAt | date: 'yyyy.MM.dd HH:mm' }}</td>
-                <td class="mono muted">#{{ item.id }}</td>
+                <td class="mono muted">
+                  #{{ item.id }}
+                  <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>
+                </td>
                 <td><strong>{{ item.market | uppercase }}</strong></td>
                 <td><span class="mt5-type" [attr.data-type]="s.type">{{ s.typeLabel }}</span></td>
                 <td class="num mono">{{ s.price }}</td>
@@ -272,7 +289,7 @@
               </td>
             </tr>
             <ng-container *ngIf="asItem(row) as item">
-            <tr [attr.data-id]="item.id" [class.row-no-tomada]="isNoTomada(item)">
+            <tr [attr.data-id]="item.id" [class.row-no-tomada]="isNoTomada(item)" [class.row-locked]="isLocked(item)">
             <td>
               <div class="when">
                 <span class="no-tomada-badge" *ngIf="isNoTomada(item)">No tomada</span>
@@ -322,7 +339,7 @@
                     type="button"
                     class="recalc-btn sm has-tip"
                     data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
-                    [disabled]="mt5RecalcBusy.has(item.id)"
+                    [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
                     (click)="recalcOperation(item, $event)"
                   >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
                 </div>
@@ -354,7 +371,7 @@
               <select
                 class="hist-select"
                 [ngClass]="resultadoClass(item.resultado)"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isEditBlocked(item)"
                 (change)="onResultadoChange(item, $event)"
                 aria-label="Resultado de la operación"
               >
@@ -372,16 +389,29 @@
                 class="hist-input pnl-input"
                 [ngClass]="pnlMoneyClass(item.pnlUsd)"
                 [value]="pnlMoneyDisplay(item)"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isSaving(item.id) || isMt5PnlBusy(item.id)"
+                [readonly]="isLocked(item)"
+                [title]="mt5PnlTitle(item) ?? ''"
                 placeholder="±0.00"
                 aria-label="Dinero ganado o perdido en USD"
                 (blur)="onPnlMoneyBlur(item, $event)"
                 (keydown.enter)="blurEventTarget($event)"
               />
+              <span class="mt5-pnl-badge tiny" *ngIf="isMt5PnlBusy(item.id)" role="status" title="Buscando PnL en MT5…">MT5…</span>
+              <span class="mt5-pnl-badge tiny" *ngIf="!isMt5PnlBusy(item.id) && mt5PnlTitle(item) as mt5Title" [title]="mt5Title">MT5</span>
+              <p
+                class="auto-capture-note tiny"
+                *ngIf="mt5PnlNote(item.id) as note"
+                [ngClass]="'tone-' + note.tone"
+                [title]="note.text"
+              >{{ note.text }}</p>
             </td>
             <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+              <span class="auto-capture-spinner" *ngIf="isAutoCaptureBusy(item.id)" role="status" title="Generando auto captura…">
+                <span class="spinner" aria-hidden="true"></span><span class="tiny">Generando…</span>
+              </span>
               <button
-                *ngIf="item.hasResultImage && resultImageUrl(item) as thumb"
+                *ngIf="!isAutoCaptureBusy(item.id) && item.hasResultImage && resultImageUrl(item) as thumb"
                 type="button"
                 class="shot-thumb"
                 (click)="openLightbox(item, $event)"
@@ -390,7 +420,7 @@
                 <img [src]="thumb" alt="Captura resultado" />
               </button>
               <label
-                *ngIf="!item.hasResultImage"
+                *ngIf="!isAutoCaptureBusy(item.id) && !item.hasResultImage"
                 class="btn-attach sm"
                 [class.busy]="isImageBusy(item.id)"
                 title="Adjuntar captura"
@@ -400,10 +430,16 @@
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
                   hidden
-                  [disabled]="isImageBusy(item.id)"
+                  [disabled]="isImageBlocked(item)"
                   (change)="onFilePicked(item, $event)"
                 />
               </label>
+              <p
+                class="auto-capture-note tiny"
+                *ngIf="autoCaptureNote(item.id) as note"
+                [ngClass]="'tone-' + note.tone"
+                [title]="note.text"
+              >{{ note.text }}</p>
             </td>
             <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <ng-container *ngIf="detailImageUrl(item) as detailThumb; else noDetailShot">
@@ -432,7 +468,7 @@
                     <button
                       type="button"
                       class="tag-x"
-                      [disabled]="isSaving(item.id)"
+                      [disabled]="isEditBlocked(item)"
                       (click)="removeTag(item, t, $event)"
                       aria-label="Quitar dirección"
                     >×</button>
@@ -440,7 +476,7 @@
                   <button
                     type="button"
                     class="tag-add"
-                    [disabled]="isSaving(item.id)"
+                    [disabled]="isEditBlocked(item)"
                     (click)="toggleTagPicker(item, $event)"
                     title="Dirección (una opción)"
                   >+ Dir</button>
@@ -453,7 +489,7 @@
                     *ngFor="let t of catalogTags"
                     [class.active]="isTagSelected(item, t.id)"
                     [style.--tag-bg]="t.color || defaultTagColor"
-                    [disabled]="isSaving(item.id)"
+                    [disabled]="isEditBlocked(item)"
                     (click)="toggleTag(item, t, $event)"
                   >
                     <span class="tag-swatch" [style.background]="t.color || defaultTagColor"></span>
@@ -475,7 +511,7 @@
                     <button
                       type="button"
                       class="ghost sm"
-                      [disabled]="!newTagDraft.trim() || isSaving(item.id)"
+                      [disabled]="!newTagDraft.trim() || isEditBlocked(item)"
                       (click)="createAndAssignTag(item, $event)"
                     >Crear</button>
                   </div>
@@ -494,7 +530,7 @@
                     <button
                       type="button"
                       class="tag-x"
-                      [disabled]="isSaving(item.id)"
+                      [disabled]="isEditBlocked(item)"
                       (click)="removeConfluence(item, t, $event)"
                       aria-label="Quitar confluencia"
                     >×</button>
@@ -502,7 +538,7 @@
                   <button
                     type="button"
                     class="tag-add"
-                    [disabled]="isSaving(item.id)"
+                    [disabled]="isEditBlocked(item)"
                     (click)="toggleConfluencePicker(item, $event)"
                     title="Confluencias (varias)"
                   >+ Conf</button>
@@ -518,7 +554,7 @@
                     class="tag-option tag-option-pill"
                     *ngFor="let t of catalogConfluencias"
                     [class.active]="isConfluenceSelected(item, t.id)"
-                    [disabled]="isSaving(item.id)"
+                    [disabled]="isEditBlocked(item)"
                     (click)="toggleConfluence(item, t, $event)"
                   >
                     <span class="tag-drag" aria-hidden="true">⠿</span>
@@ -543,7 +579,7 @@
                     <button
                       type="button"
                       class="ghost sm"
-                      [disabled]="!newConfluenceDraft.trim() || isSaving(item.id)"
+                      [disabled]="!newConfluenceDraft.trim() || isEditBlocked(item)"
                       (click)="createAndAssignConfluence(item, $event)"
                     >Crear</button>
                   </div>
@@ -551,8 +587,9 @@
               </div>
             </td>
             <td class="actions-cell">
+              <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
               <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
-              <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
+              <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
             </td>
             <td class="comment-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <textarea
@@ -561,6 +598,7 @@
                 [attr.id]="'hist-comment-' + item.id"
                 [value]="item.comment || ''"
                 [disabled]="isSaving(item.id)"
+                [readonly]="isLocked(item)"
                 placeholder="Nota…"
                 maxlength="2000"
                 aria-label="Comentario"
@@ -601,7 +639,7 @@
             <button type="button" class="ghost sm" (click)="cancelEditMarker()">Cancelar</button>
           </div>
         </article>
-        <article class="hist-card" *ngIf="asItem(row) as item" [class.row-no-tomada]="isNoTomada(item)">
+        <article class="hist-card" *ngIf="asItem(row) as item" [class.row-no-tomada]="isNoTomada(item)" [class.row-locked]="isLocked(item)">
         <header>
           <span class="pill market">{{ item.market | uppercase }}</span>
           <span class="header-badges">
@@ -650,6 +688,7 @@
             [attr.id]="'card-comment-' + item.id"
             [value]="item.comment || ''"
             [disabled]="isSaving(item.id)"
+            [readonly]="isLocked(item)"
             placeholder="Comentario…"
             maxlength="2000"
             aria-label="Comentario"
@@ -659,7 +698,7 @@
           <select
             class="hist-select"
             [ngClass]="resultadoClass(item.resultado)"
-            [disabled]="isSaving(item.id)"
+            [disabled]="isEditBlocked(item)"
             (change)="onResultadoChange(item, $event)"
             aria-label="Resultado"
           >
@@ -677,19 +716,36 @@
               class="hist-input pnl-input"
               [ngClass]="pnlMoneyClass(item.pnlUsd)"
               [value]="pnlMoneyDisplay(item)"
-              [disabled]="isSaving(item.id)"
+              [disabled]="isSaving(item.id) || isMt5PnlBusy(item.id)"
+              [readonly]="isLocked(item)"
+              [title]="mt5PnlTitle(item) ?? ''"
               placeholder="+125 o -40"
               aria-label="Dinero ganado o perdido"
               (blur)="onPnlMoneyBlur(item, $event)"
               (keydown.enter)="blurEventTarget($event)"
             />
+            <span class="mt5-pnl-badge tiny" *ngIf="isMt5PnlBusy(item.id)" role="status">MT5…</span>
+            <span class="mt5-pnl-badge tiny" *ngIf="!isMt5PnlBusy(item.id) && mt5PnlTitle(item) as mt5Title" [title]="mt5Title">MT5</span>
           </label>
-          <div class="card-shot" *ngIf="item.hasResultImage && resultImageUrl(item) as thumb">
+          <p
+            class="auto-capture-note tiny"
+            *ngIf="mt5PnlNote(item.id) as note"
+            [ngClass]="'tone-' + note.tone"
+          >{{ note.text }}</p>
+          <span class="auto-capture-spinner" *ngIf="isAutoCaptureBusy(item.id)" role="status">
+            <span class="spinner" aria-hidden="true"></span><span class="tiny">Generando auto captura…</span>
+          </span>
+          <div class="card-shot" *ngIf="!isAutoCaptureBusy(item.id) && item.hasResultImage && resultImageUrl(item) as thumb">
             <button type="button" class="shot-thumb" (click)="openLightbox(item, $event)">
               <img [src]="thumb" alt="Captura" />
             </button>
             <span class="muted tiny hide-on-phone">Captura adjunta</span>
           </div>
+          <p
+            class="auto-capture-note tiny"
+            *ngIf="autoCaptureNote(item.id) as note"
+            [ngClass]="'tone-' + note.tone"
+          >{{ note.text }}</p>
           <label
             class="btn-attach"
             [class.busy]="isImageBusy(item.id)"
@@ -699,7 +755,7 @@
               type="file"
               accept="image/png,image/jpeg,image/webp,image/gif"
               hidden
-              [disabled]="isImageBusy(item.id)"
+              [disabled]="isImageBlocked(item)"
               (change)="onFilePicked(item, $event)"
             />
           </label>
@@ -720,7 +776,7 @@
                 <button
                   type="button"
                   class="tag-x"
-                  [disabled]="isSaving(item.id)"
+                  [disabled]="isEditBlocked(item)"
                   (click)="removeTag(item, t, $event)"
                   aria-label="Quitar dirección"
                 >×</button>
@@ -728,7 +784,7 @@
               <button
                 type="button"
                 class="tag-add"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isEditBlocked(item)"
                 (click)="toggleTagPicker(item, $event)"
               >+ Dirección</button>
             </div>
@@ -739,7 +795,7 @@
                 class="tag-option"
                 *ngFor="let t of catalogTags"
                 [class.active]="isTagSelected(item, t.id)"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isEditBlocked(item)"
                 (click)="toggleTag(item, t, $event)"
               >
                 <span class="tag-swatch" [style.background]="t.color || defaultTagColor"></span>
@@ -761,7 +817,7 @@
                 <button
                   type="button"
                   class="ghost sm"
-                  [disabled]="!newTagDraft.trim() || isSaving(item.id)"
+                  [disabled]="!newTagDraft.trim() || isEditBlocked(item)"
                   (click)="createAndAssignTag(item, $event)"
                 >Crear</button>
               </div>
@@ -778,7 +834,7 @@
                 <button
                   type="button"
                   class="tag-x"
-                  [disabled]="isSaving(item.id)"
+                  [disabled]="isEditBlocked(item)"
                   (click)="removeConfluence(item, t, $event)"
                   aria-label="Quitar confluencia"
                 >×</button>
@@ -786,7 +842,7 @@
               <button
                 type="button"
                 class="tag-add"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isEditBlocked(item)"
                 (click)="toggleConfluencePicker(item, $event)"
               >+ Confluencias</button>
             </div>
@@ -801,7 +857,7 @@
                 class="tag-option tag-option-pill"
                 *ngFor="let t of catalogConfluencias"
                 [class.active]="isConfluenceSelected(item, t.id)"
-                [disabled]="isSaving(item.id)"
+                [disabled]="isEditBlocked(item)"
                 (click)="toggleConfluence(item, t, $event)"
               >
                 <span class="tag-drag" aria-hidden="true">⠿</span>
@@ -826,7 +882,7 @@
                 <button
                   type="button"
                   class="ghost sm"
-                  [disabled]="!newConfluenceDraft.trim() || isSaving(item.id)"
+                  [disabled]="!newConfluenceDraft.trim() || isEditBlocked(item)"
                   (click)="createAndAssignConfluence(item, $event)"
                 >Crear</button>
               </div>
@@ -839,7 +895,7 @@
             type="button"
             class="recalc-btn sm"
             *ngIf="sentInfo(item)"
-            [disabled]="mt5RecalcBusy.has(item.id)"
+            [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
             (click)="recalcOperation(item, $event)"
           >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
           <button
@@ -851,8 +907,9 @@
             [attr.title]="runTip()"
             (click)="openRun(item, $event)"
           >▶ Run</button>
+          <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
           <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
-          <button type="button" class="ghost sm danger-text" (click)="deleteOne(item, $event)">Borrar</button>
+          <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
         </div>
       </article>
       </ng-container>
@@ -1071,6 +1128,9 @@
         <p class="muted tiny phone-only" *ngIf="detail">{{ relativeTime(detail.createdAt) }}</p>
       </div>
       <div class="drawer-head-actions">
+        <ng-container *ngIf="detail as d">
+          <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: d }"></ng-container>
+        </ng-container>
         <button
           type="button"
           class="ghost"
@@ -1130,6 +1190,7 @@
             rows="1"
             [value]="d.motivoEntradaSalida || ''"
             [disabled]="isSaving(d.id)"
+            [readonly]="isLocked(d)"
             placeholder="Por qué entraste / saliste…"
             maxlength="2000"
             (input)="onAnnotateTextareaInput($event)"
@@ -1143,6 +1204,7 @@
             rows="1"
             [value]="d.comment || ''"
             [disabled]="isSaving(d.id)"
+            [readonly]="isLocked(d)"
             placeholder="Nota del trade…"
             maxlength="2000"
             (input)="onAnnotateTextareaInput($event)"
@@ -1154,7 +1216,7 @@
           <select
             class="hist-select"
             [ngClass]="resultadoClass(d.resultado)"
-            [disabled]="isSaving(d.id)"
+            [disabled]="isEditBlocked(d)"
             (change)="onResultadoChange(d, $event)"
           >
             <option
@@ -1173,6 +1235,7 @@
             [ngClass]="pnlMoneyClass(d.pnlUsd)"
             [value]="pnlMoneyDisplay(d)"
             [disabled]="isSaving(d.id)"
+            [readonly]="isLocked(d)"
             placeholder="+125.50 o -40"
             (blur)="onPnlMoneyBlur(d, $event)"
             (keydown.enter)="blurEventTarget($event)"
@@ -1204,7 +1267,7 @@
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 hidden
-                [disabled]="isImageBusy(d.id)"
+                [disabled]="isImageBlocked(d)"
                 (change)="onFilePicked(d, $event)"
               />
             </label>
@@ -1218,7 +1281,7 @@
               *ngIf="d.hasResultImage"
               type="button"
               class="ghost sm danger-text"
-              [disabled]="isImageBusy(d.id)"
+              [disabled]="isImageBlocked(d)"
               (click)="removeResultImage(d, $event)"
             >Quitar</button>
           </div>
@@ -1241,7 +1304,7 @@
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 hidden
-                [disabled]="isImageBusy(d.id)"
+                [disabled]="isImageBlocked(d)"
                 (change)="onFilePicked(d, $event)"
               />
             </label>
@@ -1252,6 +1315,7 @@
       <app-signal-report-viewer
         *ngIf="d.summary"
         [summary]="d.summary"
+        [execution]="d.real ?? null"
         [mode]="detailMode"
         [preview]="detailMode === 'trader' ? d.preview ?? null : null"
         [chartUrl]="detailMode === 'inversor' ? null : chartUrlFor(d)"
@@ -1466,3 +1530,29 @@
 
   <p class="run-toast" *ngIf="runToast" [class.err]="runToastErr" role="status">{{ runToast }}</p>
 </div>
+
+<!-- Candado por fila (tabla, tarjeta móvil y panel detalle): manual o por día anterior. -->
+<ng-template #lockBtn let-item>
+  <button
+    type="button"
+    class="lock-btn has-tip"
+    [class.on]="isLocked(item)"
+    [class.by-date]="isDateLocked(item)"
+    [disabled]="isLockBusy(item.id)"
+    [attr.aria-pressed]="isLocked(item)"
+    [attr.aria-label]="lockTip(item)"
+    [attr.data-tooltip]="lockTip(item)"
+    (click)="toggleLock(item, $event)"
+  >
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false">
+      <rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor" />
+      <path
+        [attr.d]="isLocked(item) ? 'M8 11V7a4 4 0 0 1 8 0v4' : 'M8 11V7a4 4 0 0 1 7.7-1.5'"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      />
+    </svg>
+  </button>
+</ng-template>

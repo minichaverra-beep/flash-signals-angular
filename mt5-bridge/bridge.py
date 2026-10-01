@@ -12,6 +12,7 @@ Solo escucha en 127.0.0.1. Cuentas REAL bloqueadas salvo MT5_ALLOW_REAL=1.
 import json
 import math
 import os
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import MetaTrader5 as mt5
@@ -492,6 +493,167 @@ def _history_status(ticket):
             **_levels(o.price_open, o.sl, o.tp)}
 
 
+OFFSET_STEP_SEC = 1800
+MAX_TICK_LAG_SEC = 120
+MAX_OFFSET_SEC = 14 * 3600
+DEALS_MARGIN_SEC = 86400
+MAX_DEALS_RANGE_SEC = 62 * 86400
+
+
+def estimate_offset(server_ts, utc_now):
+    """Desfase hora servidor − UTC (múltiplo de 30 min) desde un tick reciente; None si el tick está viejo."""
+    raw = server_ts - utc_now
+    offset = round(raw / OFFSET_STEP_SEC) * OFFSET_STEP_SEC
+    if abs(raw - offset) > MAX_TICK_LAG_SEC or abs(offset) > MAX_OFFSET_SEC:
+        return None
+    return int(offset)
+
+
+def server_offset():
+    """Las horas de los deals MT5 vienen en hora del servidor: desfase desde el tick más reciente de Market Watch."""
+    env = os.environ.get("MT5_SERVER_UTC_OFFSET_SEC")
+    if env:
+        return int(env), "env"
+    latest = 0
+    for s in mt5.symbols_get() or ():
+        if not s.visible:
+            continue
+        tick = mt5.symbol_info_tick(s.name)
+        if tick is not None and tick.time > latest:
+            latest = tick.time
+    offset = estimate_offset(latest, time.time()) if latest else None
+    return (offset, "tick") if offset is not None else (0, "default")
+
+
+def deal_to_dict(d, offset):
+    return {
+        "ticket": d.ticket,
+        "position": d.position_id,
+        "symbol": d.symbol,
+        "type": "BUY" if d.type == mt5.DEAL_TYPE_BUY else "SELL",
+        "entry": {mt5.DEAL_ENTRY_IN: "in", mt5.DEAL_ENTRY_OUT: "out", mt5.DEAL_ENTRY_OUT_BY: "out"}.get(d.entry, "inout"),
+        "volume": d.volume,
+        "price": d.price,
+        "profit": d.profit,
+        "commission": d.commission,
+        "swap": d.swap,
+        "fee": getattr(d, "fee", 0.0),
+        "time": d.time - offset,
+        "magic": d.magic,
+        "comment": d.comment,
+    }
+
+
+def history_deals(payload):
+    """Deals de compra/venta de un símbolo en [from, to] (epoch UTC, s); horas devueltas en UTC."""
+    symbol = str(payload.get("symbol") or "").strip()
+    if not symbol:
+        raise BridgeError(400, "Falta 'symbol'")
+    try:
+        date_from = int(payload.get("from"))
+        date_to = int(payload.get("to") or time.time())
+    except (TypeError, ValueError):
+        raise BridgeError(400, "'from' y 'to' deben ser epoch en segundos") from None
+    if date_to <= date_from or date_to - date_from > MAX_DEALS_RANGE_SEC:
+        raise BridgeError(400, "Rango 'from'/'to' inválido (máx 62 días)")
+    ensure_connected()
+    acc = mt5.account_info()
+    if acc is None:
+        raise BridgeError(503, f"MT5 sin cuenta conectada: {mt5.last_error()}")
+    offset, offset_source = server_offset()
+    deals = mt5.history_deals_get(date_from + offset - DEALS_MARGIN_SEC, date_to + offset + DEALS_MARGIN_SEC)
+    if deals is None:
+        raise BridgeError(502, f"history_deals_get falló: {mt5.last_error()}")
+    trade_types = (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL)
+    rows = [
+        deal_to_dict(d, offset)
+        for d in deals
+        if d.symbol.upper() == symbol.upper() and d.type in trade_types
+    ]
+    rows = [r for r in rows if date_from <= r["time"] <= date_to]
+    return {
+        "ok": True,
+        "account": account_info(acc, acc.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO),
+        "serverOffsetSec": offset,
+        "offsetSource": offset_source,
+        "deals": rows,
+        "positions": {str(pid): opening_levels(pid) for pid in {r["position"] for r in rows if r["position"]}},
+    }
+
+
+TIMEFRAMES = {
+    "M1": mt5.TIMEFRAME_M1,
+    "M5": mt5.TIMEFRAME_M5,
+    "M15": mt5.TIMEFRAME_M15,
+    "H1": mt5.TIMEFRAME_H1,
+    "H4": mt5.TIMEFRAME_H4,
+}
+MAX_RATES = 5000
+
+
+def rate_to_dict(r, offset):
+    return {
+        "time": int(r["time"]) - offset,
+        "open": float(r["open"]),
+        "high": float(r["high"]),
+        "low": float(r["low"]),
+        "close": float(r["close"]),
+        "volume": int(r["tick_volume"]),
+    }
+
+
+def parse_rates_request(payload):
+    symbol = str(payload.get("symbol") or "").strip()
+    if not symbol:
+        raise BridgeError(400, "Falta 'symbol'")
+    tf_name = str(payload.get("timeframe") or "M5").upper()
+    if tf_name not in TIMEFRAMES:
+        raise BridgeError(400, f"'timeframe' debe ser {' | '.join(TIMEFRAMES)}")
+    try:
+        count = int(payload["count"]) if payload.get("count") not in (None, "") else 200
+        to = int(payload["to"]) if payload.get("to") not in (None, "") else None
+    except (TypeError, ValueError):
+        raise BridgeError(400, "'count' y 'to' deben ser enteros (to = epoch UTC en segundos)") from None
+    if not 1 <= count <= MAX_RATES:
+        raise BridgeError(400, f"'count' debe estar entre 1 y {MAX_RATES}")
+    return symbol, tf_name, count, to
+
+
+def market_rates(payload):
+    """Velas OHLC (bid) de un símbolo, solo lectura; horas en UTC. Con 'to': última vela ≤ to."""
+    symbol, tf_name, count, to = parse_rates_request(payload)
+    ensure_connected()
+    info, tick = symbol_quote(symbol)
+    offset, offset_source = server_offset()
+    if to is None:
+        rates = mt5.copy_rates_from_pos(symbol, TIMEFRAMES[tf_name], 0, count)
+    else:
+        rates = mt5.copy_rates_from(symbol, TIMEFRAMES[tf_name], to + offset, count)
+    if rates is None:
+        raise BridgeError(502, f"copy_rates falló para {symbol}: {mt5.last_error()}")
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "timeframe": tf_name,
+        "digits": info.digits,
+        "serverOffsetSec": offset,
+        "offsetSource": offset_source,
+        "bid": tick.bid,
+        "ask": tick.ask,
+        "tickTime": int(tick.time) - offset,
+        "rates": [rate_to_dict(r, offset) for r in rates],
+    }
+
+
+def opening_levels(position_id):
+    """SL/TP con que se abrió la posición (orden de apertura); None si no constan."""
+    orders = sorted(mt5.history_orders_get(position=position_id) or (), key=lambda o: o.time_setup)
+    if not orders:
+        return {"sl": None, "tp": None}
+    first = orders[0]
+    return {"sl": first.sl or None, "tp": first.tp or None}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, body):
         data = json.dumps(body, default=str).encode("utf-8")
@@ -526,7 +688,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._authorized():
             return
-        routes = {"/order": place_order, "/status": order_status}
+        routes = {"/order": place_order, "/status": order_status, "/deals": history_deals, "/rates": market_rates}
         handler = routes.get(self.path)
         if handler is None:
             self._send(404, {"ok": False, "error": "Ruta no encontrada"})

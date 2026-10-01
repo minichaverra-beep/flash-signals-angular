@@ -15,7 +15,9 @@ const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
 const mt5Sent = require('./mt5-sent');
+const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
+const autoCapture = require('./auto-capture');
 const {
   pickLatestChart,
   isChartStale,
@@ -174,6 +176,11 @@ function parseHistoryId(raw) {
     return null;
   }
   return n;
+}
+
+/** Fila con candado (manual o de un día anterior): cualquier cambio salvo el candado responde 423. */
+function sendHistoryLocked(res) {
+  return res.status(423).json({ error: 'La fila está bloqueada', code: 'locked' });
 }
 
 /**
@@ -1463,6 +1470,7 @@ app.delete('/api/history/:id', async (req, res) => {
   if (!requireHistoryUnlock(req, res)) return;
   try {
     const result = await historyStore.deleteById(id);
+    if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!result.deleted) {
       return res.status(404).json({ error: 'Entrada no encontrada' });
     }
@@ -1473,13 +1481,32 @@ app.delete('/api/history/:id', async (req, res) => {
   }
 });
 
-/** Anotaciones trader: comment + motivoEntradaSalida + resultado + pnlUsd. */
+/** Candado: body { locked: true|false } sin otros campos; desbloquear siempre se permite. */
+async function patchHistoryLock(id, body, res) {
+  if (Object.keys(body).length > 1) {
+    return res.status(400).json({ error: 'Envía locked solo, sin otros campos' });
+  }
+  try {
+    const result = await historyStore.setLocked(id, body.locked);
+    if (!result.ok && result.error === 'not_found') {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ ok: true, item: result.item });
+  } catch (err) {
+    console.error('[history] lock:', err);
+    res.status(500).json({ error: 'No se pudo cambiar el candado de la fila' });
+  }
+}
+
+/** Anotaciones trader: comment + motivoEntradaSalida + resultado + pnlUsd (o candado: locked). */
 app.patch('/api/history/:id', async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {
     return res.status(400).json({ error: 'id inválido' });
   }
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  if (Object.hasOwn(body, 'locked')) return patchHistoryLock(id, body, res);
   const patch = {};
   const hasOwn = (key) => Object.hasOwn(body, key);
   if (hasOwn('comment')) {
@@ -1526,6 +1553,7 @@ app.patch('/api/history/:id', async (req, res) => {
     if (!result.ok && result.error === 'not_found') {
       return res.status(404).json({ error: 'Entrada no encontrada' });
     }
+    if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!result.ok) {
       return res.status(400).json({ error: result.error || 'No se pudo actualizar' });
     }
@@ -1568,6 +1596,7 @@ app.post('/api/history/:id/result-image', async (req, res) => {
     if (!result.ok && result.error === 'not_found') {
       return res.status(404).json({ error: 'Entrada no encontrada' });
     }
+    if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!result.ok) {
       return res.status(400).json({ error: result.error || 'No se pudo guardar la imagen' });
     }
@@ -1575,6 +1604,117 @@ app.post('/api/history/:id/result-image', async (req, res) => {
   } catch (err) {
     console.error('[history] result-image post:', err);
     res.status(500).json({ error: 'No se pudo guardar la imagen del resultado' });
+  }
+});
+
+/** Filas con auto captura en curso (evita dos scripts sobre la misma fila). */
+const autoCaptureInFlight = new Set();
+
+/**
+ * Auto captura: PNG de las velas reales tras la señal con Entrada/SL/TP, guardado como captura
+ * del resultado. Body: { resultado? } (si falta, el de la fila). Nunca cambia el Resultado:
+ * si el precio lo contradice devuelve mismatch + warning.
+ */
+app.post('/api/history/:id/auto-capture', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  if (autoCaptureInFlight.has(id)) {
+    return res.status(409).json({ error: 'Ya se está generando la captura de esta señal' });
+  }
+  if (!fs.existsSync(TRADING_ROOT)) {
+    return res.status(503).json({ error: 'CURSOR_TRADING_ROOT no existe o no es accesible' });
+  }
+  autoCaptureInFlight.add(id);
+  try {
+    const row = await historyStore.getById(id);
+    if (row?.effectiveLocked) return sendHistoryLocked(res);
+    const resolved = autoCapture.resolveAutoCaptureInput(row);
+    if (!resolved.ok) {
+      const status = resolved.code === 'not_found' ? 404 : 422;
+      return res.status(status).json({ error: resolved.error, code: resolved.code });
+    }
+    const run = await autoCapture.runAutoCapture({
+      input: resolved.input,
+      tradingRoot: TRADING_ROOT,
+      workDir: path.join(historyStore.DATA_DIR, 'auto-capture'),
+    });
+    if (!run.ok) {
+      console.warn(`[history] auto-capture #${id}:`, run.error);
+      return res.status(422).json({ error: run.error, code: run.code || 'script' });
+    }
+    const saved = await historyStore.saveResultImage(id, run.buffer, 'image/png');
+    if (saved.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
+    if (!saved.ok) {
+      return res.status(400).json({ error: saved.error || 'No se pudo guardar la imagen' });
+    }
+    const resultado = req.body?.resultado ?? row.resultado;
+    const check = autoCapture.compareOutcome(run.outcome, resultado);
+    res.json({ ok: true, item: saved.item, outcome: run.outcome, ...check });
+  } catch (err) {
+    console.error('[history] auto-capture:', err);
+    res.status(500).json({ error: 'No se pudo generar la captura automática' });
+  } finally {
+    autoCaptureInFlight.delete(id);
+  }
+});
+
+const MT5_PNL_STATUS = { not_found: 404, mt5_offline: 503, no_match: 404, open: 409, ambiguous: 409 };
+
+/** Perfiles MT5 a consultar: el activo primero; uno por puente. */
+function mt5PnlProfiles(historyId) {
+  const active = mt5Settings.getActive();
+  const ids = [active, ...mt5Settings.PROFILES.filter((p) => p !== active)];
+  const byUrl = new Map();
+  for (const id of ids) {
+    const settings = mt5Settings.get(id);
+    if (byUrl.has(settings.bridgeUrl)) continue;
+    byUrl.set(settings.bridgeUrl, { id, settings, sentOrder: mt5Sent.get(id, `h${historyId}`)?.order ?? null });
+  }
+  return [...byUrl.values()];
+}
+
+/**
+ * $/PnL real desde MT5 (Auto captura): suma profit+commission+swap+fee de la operación cerrada
+ * que coincide con la señal y guarda su ejecución real (entrada, salida, horas, ticket).
+ * Body: { resultado?, overwrite? }. Un PnL manual distinto solo se reemplaza con overwrite=true
+ * (si no → needsConfirm). Nunca cambia el Resultado ni el plan.
+ */
+app.post('/api/history/:id/mt5-pnl', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const row = await historyStore.getById(id);
+    if (row?.effectiveLocked) return sendHistoryLocked(res);
+    const found = await mt5Pnl.lookupMt5Pnl({
+      row,
+      resultado: req.body?.resultado,
+      profiles: mt5PnlProfiles(id),
+      fetchDeals: mt5.historyDeals,
+    });
+    if (!found.ok) {
+      return res.status(MT5_PNL_STATUS[found.code] || 422).json({ error: found.warning, code: found.code });
+    }
+    const { pnl } = found;
+    const action = mt5Pnl.decideApply(row.pnlUsd, pnl.value, req.body?.overwrite === true);
+    const real = { ticket: pnl.ticket, ...pnl.execution };
+    const saved = await historyStore.updateMt5Execution(id, action === 'confirm' ? real : { ...real, pnlUsd: pnl.value });
+    if (saved.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
+    if (!saved.ok) return res.status(400).json({ error: saved.error || 'No se pudo guardar el PnL' });
+    res.json({
+      ok: true,
+      applied: action === 'fill',
+      needsConfirm: action === 'confirm',
+      current: row.pnlUsd,
+      pnl,
+      item: saved.item,
+    });
+  } catch (err) {
+    console.error('[history] mt5-pnl:', err);
+    res.status(500).json({ error: 'No se pudo obtener el PnL de MT5' });
   }
 });
 
@@ -1607,6 +1747,7 @@ app.delete('/api/history/:id/result-image', async (req, res) => {
     if (!result.ok && result.error === 'not_found') {
       return res.status(404).json({ error: 'Entrada no encontrada' });
     }
+    if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!result.ok) {
       return res.status(400).json({ error: result.error || 'No se pudo borrar la imagen' });
     }
@@ -1970,7 +2111,7 @@ const CHART_DECIMALS = { btc: 1, us30: 1, xauusd: 2 };
  * Solo para la última señal de su mercado: el PNG de live/ es el de esa corrida.
  * @returns {Promise<{ updated: boolean, reason?: string, chartUrl?: string }>}
  */
-async function rerenderDetailChart(id, levels, sent) {
+async function rerenderDetailChart(id, levels, sent, settings = mt5Settings.get()) {
   const row = await historyStore.getById(id);
   const asset = row && CHART_ASSET[row.market];
   if (!asset || !row.chartPath) return { updated: false, reason: 'sin captura detalle' };
@@ -1996,6 +2137,7 @@ async function rerenderDetailChart(id, levels, sent) {
     '--until', row.finishedAt || row.createdAt,
     '--decimals', String(CHART_DECIMALS[row.market]),
   ];
+  if (sent.state) args.push('--order-state', String(sent.state));
   const direction = sent.side || row.summary?.direction;
   if (direction) args.push('--direction', String(direction).toUpperCase());
   if (row.verdict) args.push('--verdict', String(row.verdict));
@@ -2006,7 +2148,7 @@ async function rerenderDetailChart(id, levels, sent) {
   const out = await new Promise((resolve) => {
     const child = spawn(py, args, {
       cwd: TRADING_ROOT,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      env: { ...process.env, ...mt5.brokerFeedEnv(settings), PYTHONIOENCODING: 'utf-8' },
       windowsHide: true,
     });
     let stdout = '';
@@ -2040,16 +2182,18 @@ app.post('/api/mt5/recalc', async (req, res) => {
     return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${mt5Settings.PROFILE_LABELS[profileId]}` });
   }
   try {
+    if ((await historyStore.getById(id))?.effectiveLocked) return sendHistoryLocked(res);
     const status = await mt5.orderStatus(sent.order, settings);
     const rec = mt5.reconcileOrder(sent, status);
     const plan = await historyStore.updatePlanLevels(id, rec.levels);
+    if (plan.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!plan.ok) return res.status(plan.error === 'not_found' ? 404 : 400).json({ error: plan.error });
     if (rec.annotation) {
       const ann = await historyStore.updateAnnotation(id, rec.annotation);
       if (!ann.ok) return res.status(400).json({ error: ann.error });
     }
     const updated = mt5Sent.update(profileId, key, rec.sentPatch);
-    const chart = await rerenderDetailChart(id, rec.levels, updated).catch((err) => ({
+    const chart = await rerenderDetailChart(id, rec.levels, updated, settings).catch((err) => ({
       updated: false,
       reason: err.message,
     }));
@@ -2185,7 +2329,7 @@ app.post('/api/signals/run', (req, res) => {
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptResolved, ...psArgs],
     {
       cwd: TRADING_ROOT,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+      env: { ...process.env, ...mt5.brokerFeedEnv(), PYTHONIOENCODING: 'utf-8' },
       windowsHide: true,
       shell: false,
     }

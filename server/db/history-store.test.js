@@ -353,6 +353,45 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(bad.ok, false);
   });
 
+  it('updateMt5Execution guarda la ejecución real sin tocar el plan; editar el PnL a mano quita el origen MT5', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const before = await store.getById(id);
+    assert.equal(before.real, null);
+    assert.equal(before.pnlSource, null);
+
+    const real = {
+      ticket: 680126942,
+      entry: 84792.7,
+      exit: 84610.17,
+      sl: 85001.08,
+      openedAt: '2026-10-01T20:21:00Z',
+      closedAt: '2026-10-01T20:54:12Z',
+    };
+    const a = await store.updateMt5Execution(id, { ...real, pnlUsd: 74.84 });
+    assert.equal(a.ok, true);
+    assert.deepEqual(a.item.real, {
+      ...real,
+      openedAt: '2026-10-01T20:21:00.000Z',
+      closedAt: '2026-10-01T20:54:12.000Z',
+    });
+    assert.equal(a.item.pnlUsd, 74.84);
+    assert.equal(a.item.pnlSource, 'mt5');
+    assert.deepEqual(a.item.summary.planDetails, before.summary.planDetails);
+
+    const listed = (await store.listHistory({ pageSize: 5 })).items.find((i) => i.id === id);
+    assert.equal(listed.real.exit, 84610.17);
+    assert.equal(listed.pnlSource, 'mt5');
+
+    const manual = await store.updateAnnotation(id, { pnlUsd: 70 });
+    assert.equal(manual.item.pnlSource, null);
+    assert.equal(manual.item.real.ticket, 680126942);
+
+    const onlyReal = await store.updateMt5Execution(id, real);
+    assert.equal(onlyReal.item.pnlUsd, 70);
+    assert.equal((await store.updateMt5Execution(id, { ticket: 0 })).ok, false);
+    assert.equal((await store.updateMt5Execution(999999, real)).error, 'not_found');
+  });
+
   it('updateAnnotation guarda motivoEntradaSalida', async () => {
     const { id } = await store.insertSnapshot(sampleSnap());
     const a = await store.updateAnnotation(id, {
@@ -459,6 +498,152 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(deleted.item?.hasResultImage, false);
     assert.equal(await store.getResultImageFile(id), null);
   });
+
+  it('migración 011: columnas locked/locked_at y filas nuevas desbloqueadas', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const item = await store.getById(id);
+    assert.equal(item.locked, false);
+    assert.equal(item.lockedAt, null);
+    const listed = await store.listHistory({ pageSize: 5 });
+    assert.equal(listed.items.find((i) => i.id === id)?.locked, false);
+  });
+
+  it('setLocked bloquea/desbloquea; valida id, boolean y existencia', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const locked = await store.setLocked(id, true);
+    assert.equal(locked.ok, true);
+    assert.equal(locked.item.locked, true);
+    assert.ok(locked.item.lockedAt);
+    const listed = await store.listHistory({ pageSize: 5 });
+    assert.equal(listed.items.find((i) => i.id === id)?.locked, true);
+
+    const unlocked = await store.setLocked(id, false);
+    assert.equal(unlocked.ok, true);
+    assert.equal(unlocked.item.locked, false);
+    assert.equal(unlocked.item.lockedAt, null);
+
+    assert.equal((await store.setLocked(id, 'yes')).ok, false);
+    assert.equal((await store.setLocked(0, true)).error, 'id inválido');
+    assert.equal((await store.setLocked(99999, true)).error, 'not_found');
+  });
+
+  it('fila bloqueada rechaza anotaciones, imagen, MT5, plan y borrado; desbloquear vuelve a permitir', async () => {
+    const { id } = await store.insertSnapshot(
+      sampleSnap({ summary: { verdict: 'OPERAR_LONG', planDetails: { entry: '100', sl: '90', tp: '120' } } })
+    );
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    await store.updateAnnotation(id, { comment: 'antes' });
+    await store.setLocked(id, true);
+    const L = store.LOCKED_ERROR;
+
+    assert.equal((await store.updateAnnotation(id, { comment: 'después' })).error, L);
+    assert.equal((await store.updateAnnotation(id, { tagIds: [] })).error, L);
+    assert.equal((await store.updateAnnotation(id, { confluenceIds: [] })).error, L);
+    assert.equal((await store.saveResultImage(id, png, 'image/png')).error, L);
+    assert.equal((await store.deleteResultImage(id)).error, L);
+    assert.equal((await store.updateMt5Execution(id, { ticket: 7, entry: 101, pnlUsd: 5 })).error, L);
+    assert.equal((await store.updatePlanLevels(id, { entry: 105 })).error, L);
+    const del = await store.deleteById(id);
+    assert.equal(del.deleted, 0);
+    assert.equal(del.error, L);
+
+    const still = await store.getById(id);
+    assert.equal(still.comment, 'antes');
+    assert.equal(still.hasResultImage, false);
+    assert.equal(still.real, null);
+    assert.equal(still.summary.planDetails.entry, '100');
+
+    await store.setLocked(id, false);
+    assert.equal((await store.updateAnnotation(id, { comment: 'después' })).ok, true);
+    assert.equal((await store.deleteById(id)).deleted, 1);
+  });
+
+  describe('bloqueo por fecha (día local anterior)', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    afterEach(() => {
+      store._setClockForTests(null);
+      delete process.env.HISTORY_TZ;
+    });
+
+    async function insertAt(iso) {
+      store._setClockForTests(() => new Date(iso));
+      const { id } = await store.insertSnapshot(sampleSnap());
+      store._setClockForTests(null);
+      return id;
+    }
+
+    it('frontera: 23:59 de ayer bloqueada, 00:01 de hoy y día UTC siguiente editables', async () => {
+      process.env.HISTORY_TZ = 'America/Bogota';
+      const yesterday = await insertAt('2026-10-01T04:59:00.000Z'); // 30-sep 23:59 local
+      const today = await insertAt('2026-10-01T05:01:00.000Z'); // 01-oct 00:01 local
+      const utcNext = await insertAt('2026-10-02T03:30:00.000Z'); // 01-oct 22:30 local
+      store._setClockForTests(() => new Date('2026-10-02T04:30:00.000Z')); // 01-oct 23:30 local
+
+      const listed = await store.listHistory({ pageSize: 10 });
+      assert.equal(listed.lockTz, 'America/Bogota');
+      const byId = new Map(listed.items.map((i) => [i.id, i]));
+      assert.equal(byId.get(yesterday).autoLocked, true);
+      assert.equal(byId.get(yesterday).effectiveLocked, true);
+      assert.equal(byId.get(yesterday).locked, false);
+      assert.equal(byId.get(today).effectiveLocked, false);
+      assert.equal(byId.get(utcNext).effectiveLocked, false);
+
+      assert.equal((await store.updateAnnotation(yesterday, { comment: 'x' })).error, store.LOCKED_ERROR);
+      assert.equal((await store.updateAnnotation(today, { comment: 'x' })).ok, true);
+      assert.equal((await store.updateAnnotation(utcNext, { comment: 'x' })).ok, true);
+    });
+
+    it('fila de un día anterior rechaza todas las mutaciones', async () => {
+      const id = await insertAt(new Date(Date.now() - 3 * DAY).toISOString());
+      const png = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64'
+      );
+      const L = store.LOCKED_ERROR;
+      assert.equal((await store.updateAnnotation(id, { resultado: 'ganada' })).error, L);
+      assert.equal((await store.saveResultImage(id, png, 'image/png')).error, L);
+      assert.equal((await store.updateMt5Execution(id, { ticket: 9, pnlUsd: 3 })).error, L);
+      assert.equal((await store.updatePlanLevels(id, { entry: 1 })).error, L);
+      assert.equal((await store.deleteById(id)).error, L);
+    });
+
+    it('desbloquear guarda override; volver a bloquear lo limpia', async () => {
+      const id = await insertAt(new Date(Date.now() - 3 * DAY).toISOString());
+
+      const unlocked = await store.setLocked(id, false);
+      assert.equal(unlocked.item.unlockOverride, true);
+      assert.equal(unlocked.item.autoLocked, false);
+      assert.equal(unlocked.item.effectiveLocked, false);
+      assert.equal((await store.updateAnnotation(id, { comment: 'editada' })).ok, true);
+
+      // Re-bloquear una fila antigua vuelve al bloqueo por fecha (estado original, sin manual).
+      const relocked = await store.setLocked(id, true);
+      assert.equal(relocked.item.unlockOverride, false);
+      assert.equal(relocked.item.locked, false);
+      assert.equal(relocked.item.autoLocked, true);
+      assert.equal(relocked.item.effectiveLocked, true);
+      assert.equal((await store.updateAnnotation(id, { comment: 'no' })).error, store.LOCKED_ERROR);
+
+      const again = await store.setLocked(id, false);
+      assert.equal(again.item.unlockOverride, true);
+      assert.equal(again.item.effectiveLocked, false);
+    });
+
+    it('filas de hoy: solo candado manual, sin override', async () => {
+      const { id } = await store.insertSnapshot(sampleSnap());
+      const item = await store.getById(id);
+      assert.equal(item.autoLocked, false);
+      assert.equal(item.effectiveLocked, false);
+      await store.setLocked(id, true);
+      const off = await store.setLocked(id, false);
+      assert.equal(off.item.unlockOverride, false);
+      assert.equal(off.item.effectiveLocked, false);
+    });
+  });
 });
 
 describe('history-store fallback sql.js', () => {
@@ -517,6 +702,10 @@ describe('history-store fallback sql.js', () => {
     const detail = await store.getById(id);
     assert.equal(detail?.summary?.verdict, 'NO_OPERAR');
     assert.equal(detail?.preview, '# preview');
+
+    assert.equal((await store.setLocked(id, true)).item.locked, true);
+    assert.equal((await store.deleteById(id)).error, store.LOCKED_ERROR);
+    assert.equal((await store.setLocked(id, false)).item.locked, false);
 
     const del = await store.deleteById(id);
     assert.equal(del.deleted, 1);

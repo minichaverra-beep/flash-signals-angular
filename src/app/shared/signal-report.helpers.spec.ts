@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import type { SignalSummary } from '../services/signals-api.service';
 import {
   chartHref,
+  executionLevels,
   verdictRows,
   verdictTone,
   displayScoreLabel,
@@ -213,5 +214,40 @@ describe('signal-report.helpers', () => {
     assert.ok(card.barPct >= 33 && card.barPct <= 66, `barPct=${card.barPct}`);
     assert.match(riskGaugeHint(card), /Templado/);
     assert.match(riskGaugeHint(card), /300\.5/);
+  });
+});
+
+describe('executionLevels (ejecución real MT5)', () => {
+  const pd = { entry: '84792.7', sl: '84971.08', tp: '84395.85', rr: '1:2.2', risk: '178.38' };
+  const real = {
+    ticket: 680126942,
+    entry: 84792.7,
+    exit: 84610.17,
+    sl: null,
+    openedAt: '2026-10-01T20:21:00.000Z',
+    closedAt: '2026-10-01T20:54:12.000Z',
+  };
+
+  it('SHORT: salida real, R realizado con signo y riesgo del plan si el SL no cambia', () => {
+    const ex = executionLevels(pd, real);
+    assert.equal(ex?.entry, '84792.70');
+    assert.equal(ex?.exit, '84610.17');
+    assert.equal(ex?.realizedR, '+1.02R');
+    assert.equal(ex?.risk, '178.38');
+    assert.equal(ex?.slChanged, false);
+  });
+
+  it('SL real distinto → riesgo y R con el SL real', () => {
+    const ex = executionLevels(pd, { ...real, sl: 85001.08 });
+    assert.equal(ex?.slChanged, true);
+    assert.equal(ex?.sl, '85001.08');
+    assert.equal(ex?.risk, '208.38');
+    assert.equal(ex?.realizedR, '+0.88R');
+  });
+
+  it('pérdida → R negativo; sin ejecución completa → null', () => {
+    assert.equal(executionLevels(pd, { ...real, exit: 84880 })?.realizedR, '−0.49R');
+    assert.equal(executionLevels(pd, { ...real, exit: null }), null);
+    assert.equal(executionLevels(pd, null), null);
   });
 });
