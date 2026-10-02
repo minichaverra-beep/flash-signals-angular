@@ -3,6 +3,7 @@ import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/cor
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import {
   CalcChangeMarker,
+  HistoryCatalogFilter,
   HistoryDetail,
   HistoryListItem,
   HistoryResultado,
@@ -237,6 +238,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   runToastErr = false;
   /** Filas con Recalcular en curso (lee MT5 y reajusta el historial). */
   mt5RecalcBusy = new Set<number>();
+  /** Filas con Duplicar en curso (segunda operación con el mismo lote). */
+  mt5DuplicateBusy = new Set<number>();
 
   /** Diálogo de desbloqueo para borrar (modo lock). */
   unlockOpen = false;
@@ -264,6 +267,9 @@ export class HistorialComponent implements OnInit, OnDestroy {
   catalogTags: HistoryTag[] = [];
   /** Catálogo Confluencias (SQLite history_confluencias). */
   catalogConfluencias: HistoryTag[] = [];
+  /** Filtro por columna: Dirección (cualquiera de las elegidas) y Confluencias (todas las elegidas). */
+  catalogFilter: Required<HistoryCatalogFilter> = { tagIds: [], tagNone: false, confluenciaIds: [], confluenciaNone: false };
+  colFilterOpen: 'tags' | 'confluencias' | null = null;
   /** Fila cuyo picker de Dirección está abierto. */
   tagPickerOpenId: number | null = null;
   /** Fila cuyo picker de Confluencias está abierto. */
@@ -285,6 +291,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     // no llega a document; sin capture Confluencias (multi-select) queda abierta.
     const onDocClick = (ev: MouseEvent) => {
       const t = ev.target;
+      if (t instanceof Element && !t.closest('.col-filter')) this.colFilterOpen = null;
       if (t instanceof Element && t.closest('.tag-picker')) return;
       this.tagPickerOpenId = null;
       this.confluencePickerOpenId = null;
@@ -319,6 +326,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     }
     this.tagPickerOpenId = null;
     this.confluencePickerOpenId = null;
+    this.colFilterOpen = null;
   }
 
   ngOnDestroy(): void {
@@ -350,6 +358,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
         market: this.marketFilter || undefined,
         sortBy: this.sortBy,
         sortDir: this.sortDir,
+        ...this.catalogFilter,
       })
       .subscribe({
         next: (res) => {
@@ -425,22 +434,57 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   sentTip(s: Mt5SentEntry): string {
     const how = s.mode === 'market' ? 'mercado' : 'LIMIT';
+    const head = `${s.side ?? ''} ${s.symbol ?? ''} · ${how}${this.ticketState(s)}`;
+    const body = s.checkedAt
+      ? [
+          `Enviada: ${this.sentLevels(s.original ?? s)} (${this.absoluteTime(s.at)})`,
+          `Ahora en MT5: ${this.sentLevels(s)} (revisada ${this.absoluteTime(s.checkedAt)})`,
+          s.lastChanges?.length ? `Último reajuste: ${s.lastChanges.join(' · ')}` : 'Último reajuste: sin cambios',
+        ]
+      : [`Enviada: ${this.sentLevels(s)} (${this.absoluteTime(s.at)})`, 'Pulsa Recalcular para leer el estado actual en MT5.'];
+    const d = s.duplicate;
+    const dup = d ? [`Duplicada${this.ticketState(d)}: ${this.sentLevels(d)} (${this.absoluteTime(d.at)})`] : [];
+    return [head, ...body, ...this.pnlLine('PnL', s), ...dup, ...(d ? this.pnlLine('PnL duplicada', d) : [])].join('\n');
+  }
+
+  private sentLevels(l: { price: number | null; sl: number | null; tp: number | null; volume: number | null }): string {
+    return `${l.price ?? '—'} · SL ${l.sl ?? '—'} · TP ${l.tp ?? '—'} · ${l.volume ?? '—'} lotes`;
+  }
+
+  private ticketState(s: Mt5SentEntry): string {
     const state = this.sentStateLabel(s);
-    const levels = (l: { price: number | null; sl: number | null; tp: number | null; volume: number | null }) =>
-      `${l.price ?? '—'} · SL ${l.sl ?? '—'} · TP ${l.tp ?? '—'} · ${l.volume ?? '—'} lotes`;
-    const head = `${s.side ?? ''} ${s.symbol ?? ''} · ${how}${s.order ? ' · ticket ' + s.order : ''}${state ? ' · ' + state : ''}`;
-    const lines = [head];
-    if (s.checkedAt) {
-      const orig = s.original ?? s;
-      lines.push(`Enviada: ${levels(orig)} (${this.absoluteTime(s.at)})`);
-      lines.push(`Ahora en MT5: ${levels(s)} (revisada ${this.absoluteTime(s.checkedAt)})`);
-      lines.push(s.lastChanges?.length ? `Último reajuste: ${s.lastChanges.join(' · ')}` : 'Último reajuste: sin cambios');
-    } else {
-      lines.push(`Enviada: ${levels(s)} (${this.absoluteTime(s.at)})`);
-      lines.push('Pulsa Recalcular para leer el estado actual en MT5.');
-    }
-    if (s.profit != null) lines.push(`PnL: ${s.profit} USD${s.closeReason ? ' · cierre por ' + s.closeReason.toUpperCase() : ''}`);
-    return lines.join('\n');
+    return `${s.order ? ' · ticket ' + s.order : ''}${state ? ' · ' + state : ''}`;
+  }
+
+  private pnlLine(label: string, s: Mt5SentEntry): string[] {
+    if (s.profit == null) return [];
+    return [`${label}: ${s.profit} USD${s.closeReason ? ' · cierre por ' + s.closeReason.toUpperCase() : ''}`];
+  }
+
+  /** Duplicar solo una vez y mientras la operación original siga viva (pendiente/abierta o sin leer aún). */
+  canDuplicate(s: Mt5SentEntry): boolean {
+    return !s.duplicate && !!s.order && (!s.state || s.state === 'pending' || s.state === 'open');
+  }
+
+  duplicateOperation(item: HistoryListItem, ev?: Event): void {
+    ev?.stopPropagation();
+    const s = this.sentInfo(item);
+    if (!s || !this.canDuplicate(s) || this.mt5DuplicateBusy.has(item.id) || this.rejectIfLocked(item)) return;
+    const how = s.state === 'open' ? 'a mercado' : 'como LIMIT';
+    if (!confirm(`¿Abrir una segunda operación ${s.side ?? ''} ${s.symbol ?? ''} ${how} con ${s.volume ?? '—'} lotes y el mismo SL/TP?`)) return;
+    this.mt5DuplicateBusy.add(item.id);
+    this.api.mt5Duplicate(item.id).subscribe({
+      next: (r) => {
+        this.mt5DuplicateBusy.delete(item.id);
+        this.showRunToast(`#${item.id} · ${r.message}`);
+        this.loadMt5Sent();
+      },
+      error: (err: unknown) => {
+        this.mt5DuplicateBusy.delete(item.id);
+        this.showRunToast(`#${item.id} · ${this.runErrMsg(err, 'MT5 no aceptó la operación duplicada.')}`, true);
+        this.loadMt5Sent();
+      },
+    });
   }
 
   openRun(item: HistoryListItem, ev?: Event): void {
@@ -505,7 +549,14 @@ export class HistorialComponent implements OnInit, OnDestroy {
         this.mt5RecalcBusy.delete(item.id);
         if (r.chart?.updated && r.chart.chartUrl) this.detailChartUrl.set(item.market, r.chart.chartUrl);
         const chartMsg = r.chart?.updated ? ' · captura detalle actualizada' : '';
-        this.showRunToast(`#${item.id} · ${r.message}${chartMsg}`);
+        let captureMsg = '';
+        if (r.capture?.ok) {
+          this.imageBust.set(item.id, Date.now());
+          captureMsg = ` · captura automática guardada${r.capture.warning ? ' (' + r.capture.warning + ')' : ''}`;
+        } else if (r.capture) {
+          captureMsg = ` · auto captura falló: ${r.capture.error ?? 'error desconocido'}`;
+        }
+        this.showRunToast(`#${item.id} · ${r.message}${chartMsg}${captureMsg}`, r.capture?.ok === false);
         this.load();
         if (this.drawerOpen && this.detail?.id === item.id) {
           this.api.historyGet(item.id).subscribe({ next: (d) => (this.detail = d) });
@@ -548,7 +599,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     const market = this.marketFilter || undefined;
     const acc: HistoryListItem[] = [];
     const fetchPage = (page: number) => {
-      this.api.historyList({ page, pageSize: 100, market }).subscribe({
+      this.api.historyList({ page, pageSize: 100, market, ...this.catalogFilter }).subscribe({
         next: (res) => {
           acc.push(...res.items);
           if (res.page < res.totalPages) {
@@ -771,6 +822,52 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   setMarket(m: Market | ''): void {
     this.marketFilter = m;
+    this.load(1);
+  }
+
+  toggleColFilter(col: 'tags' | 'confluencias', ev: Event): void {
+    ev.stopPropagation();
+    this.tagPickerOpenId = null;
+    this.confluencePickerOpenId = null;
+    this.colFilterOpen = this.colFilterOpen === col ? null : col;
+  }
+
+  colFilterCount(col: 'tags' | 'confluencias'): number {
+    const f = this.catalogFilter;
+    const [ids, none] = col === 'tags' ? [f.tagIds, f.tagNone] : [f.confluenciaIds, f.confluenciaNone];
+    return ids.length + Number(none);
+  }
+
+  isColFilterOn(col: 'tags' | 'confluencias', id: number | 'none'): boolean {
+    const f = this.catalogFilter;
+    if (col === 'tags') return id === 'none' ? f.tagNone : f.tagIds.includes(id);
+    return id === 'none' ? f.confluenciaNone : f.confluenciaIds.includes(id);
+  }
+
+  /** «Sin confluencias» excluye a las concretas (y viceversa): juntas no darían resultados. */
+  toggleColFilterValue(col: 'tags' | 'confluencias', id: number | 'none'): void {
+    const f = { ...this.catalogFilter };
+    const flip = (ids: number[], v: number) => (ids.includes(v) ? ids.filter((x) => x !== v) : [...ids, v]);
+    if (col === 'tags') {
+      if (id === 'none') f.tagNone = !f.tagNone;
+      else f.tagIds = flip(f.tagIds, id);
+    } else if (id === 'none') {
+      f.confluenciaNone = !f.confluenciaNone;
+      if (f.confluenciaNone) f.confluenciaIds = [];
+    } else {
+      f.confluenciaIds = flip(f.confluenciaIds, id);
+      if (f.confluenciaIds.length) f.confluenciaNone = false;
+    }
+    this.catalogFilter = f;
+    this.load(1);
+  }
+
+  clearColFilter(col: 'tags' | 'confluencias'): void {
+    this.catalogFilter =
+      col === 'tags'
+        ? { ...this.catalogFilter, tagIds: [], tagNone: false }
+        : { ...this.catalogFilter, confluenciaIds: [], confluenciaNone: false };
+    this.colFilterOpen = null;
     this.load(1);
   }
 

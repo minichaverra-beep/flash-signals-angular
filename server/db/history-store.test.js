@@ -472,6 +472,29 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.deepEqual(cleared.item?.confluencias, []);
   });
 
+  it('listHistory: filtro Dirección (cualquiera / sin) y Confluencias (todas / ninguna)', async () => {
+    const tags = await store.listTags();
+    const [t1, t2] = tags;
+    const [c1, c2] = await store.listConfluencias();
+    const { id: a } = await store.insertSnapshot(sampleSnap());
+    const { id: b } = await store.insertSnapshot(sampleSnap({ market: 'us30' }));
+    const { id: c } = await store.insertSnapshot(sampleSnap());
+    await store.updateAnnotation(a, { tagIds: [t1.id], confluenceIds: [c1.id, c2.id] });
+    await store.updateAnnotation(b, { tagIds: [t2.id], confluenceIds: [c1.id] });
+    const ids = async (opts) => (await store.listHistory({ pageSize: 10, ...opts })).items.map((i) => i.id).sort();
+
+    assert.deepEqual(await ids({ tagIds: [t1.id] }), [a]);
+    assert.deepEqual(await ids({ tagIds: [t1.id, t2.id] }), [a, b]);
+    assert.deepEqual(await ids({ tagNone: true }), [c]);
+    assert.deepEqual(await ids({ tagIds: [t2.id], tagNone: true }), [b, c]);
+    assert.deepEqual(await ids({ confluenciaIds: [c1.id] }), [a, b]);
+    assert.deepEqual(await ids({ confluenciaIds: [c1.id, c2.id] }), [a]);
+    assert.deepEqual(await ids({ confluenciaNone: true }), [c]);
+    assert.deepEqual(await ids({ market: 'btc', confluenciaIds: [c1.id] }), [a]);
+    assert.equal((await store.listHistory({ tagIds: [t1.id] })).total, 1);
+    assert.deepEqual(await ids({ tagIds: ['x', -1, '1;DROP'] }), [a, b, c]);
+  });
+
   it('saveResultImage / getResultImageFile / deleteResultImage', async () => {
     const { id } = await store.insertSnapshot(sampleSnap());
     // PNG 1x1 mínimo

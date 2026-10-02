@@ -104,6 +104,47 @@ function buildManualOrder(body = {}, settings = mt5Settings.get()) {
   return { order };
 }
 
+/**
+ * Duplicar: segunda operación con el mismo lote y Entrada/SL/TP actuales de la original
+ * (LIMIT si sigue pendiente, a mercado si ya está abierta). Va como orden manual: sin chequeos de señal.
+ * @param {object} sent entrada de mt5-sent de la original
+ * @param {object} status estado real de la original (puente /status)
+ * @returns {{ order?: object, error?: string }}
+ */
+function buildDuplicateOrder(sent = {}, status = {}) {
+  if (status.state !== 'pending' && status.state !== 'open') {
+    return { error: `La operación original está ${STATE_LABELS[status.state] || status.state || 'desconocida'}: no se puede duplicar` };
+  }
+  const side = String(sent.side || '').toUpperCase();
+  if (side !== 'LONG' && side !== 'SHORT') return { error: 'La operación original no tiene lado LONG/SHORT' };
+  const volume = positiveNumber(status.volume) ?? positiveNumber(sent.volume);
+  if (!volume) return { error: 'La operación original no tiene lote' };
+  const order = { symbol: status.symbol || sent.symbol, side, volume, manual: true };
+  const sl = positiveNumber(status.sl) ?? positiveNumber(sent.sl);
+  const tp = positiveNumber(status.tp) ?? positiveNumber(sent.tp);
+  if (sl) order.sl = sl;
+  if (tp) order.tp = tp;
+  if (status.state === 'pending') {
+    const entry = positiveNumber(status.entry) ?? positiveNumber(sent.price);
+    if (!entry) return { error: 'La orden pendiente original no tiene precio de entrada' };
+    Object.assign(order, { order_mode: 'limit', entry });
+  } else {
+    order.order_mode = 'market';
+  }
+  return { order };
+}
+
+/**
+ * Resultado conjunto de la original y su duplicado: solo cuando ambas terminaron.
+ * PnL = suma; no tomada si ninguna se ejecutó.
+ */
+function combineAnnotations(main, dup) {
+  if (!main || !dup) return null;
+  if (main.resultado === 'no_tomada' && dup.resultado === 'no_tomada') return { resultado: 'no_tomada' };
+  const pnl = Math.round(((main.pnlUsd ?? 0) + (dup.pnlUsd ?? 0)) * 100) / 100;
+  return { resultado: pnl >= 0 ? 'ganada' : 'perdida', pnlUsd: pnl };
+}
+
 const STATE_LABELS = {
   pending: 'pendiente (LIMIT)',
   open: 'abierta',
@@ -242,7 +283,9 @@ function pushOrder(order, { clientId, ...overrides } = {}, settings = mt5Setting
 
 module.exports = {
   brokerFeedEnv,
+  buildDuplicateOrder,
   buildManualOrder,
+  combineAnnotations,
   buildOrderFromSummary,
   bridgeHealth,
   historyDeals,

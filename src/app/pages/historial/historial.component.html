@@ -240,10 +240,14 @@
             <th [attr.aria-sort]="ariaSort('scoreCombined')"><button type="button" class="th-sort" [class.active]="sortBy === 'scoreCombined'" (click)="toggleSort('scoreCombined')">Probabilidad <span class="sort-ind">{{ sortIcon('scoreCombined') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('resultado')"><button type="button" class="th-sort" [class.active]="sortBy === 'resultado'" (click)="toggleSort('resultado')">Resultado <span class="sort-ind">{{ sortIcon('resultado') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('pnlUsd')"><button type="button" class="th-sort" [class.active]="sortBy === 'pnlUsd'" (click)="toggleSort('pnlUsd')">$/PnL <span class="sort-ind">{{ sortIcon('pnlUsd') }}</span></button></th>
-            <th [attr.aria-sort]="ariaSort('hasResultImage')"><button type="button" class="th-sort" [class.active]="sortBy === 'hasResultImage'" (click)="toggleSort('hasResultImage')">Captura <span class="sort-ind">{{ sortIcon('hasResultImage') }}</span></button></th>
             <th>Captura detalle</th>
-            <th>Dirección</th>
-            <th>Confluencias</th>
+            <th [attr.aria-sort]="ariaSort('hasResultImage')"><button type="button" class="th-sort" [class.active]="sortBy === 'hasResultImage'" (click)="toggleSort('hasResultImage')">Captura <span class="sort-ind">{{ sortIcon('hasResultImage') }}</span></button></th>
+            <th>
+              <ng-container *ngTemplateOutlet="colFilterTpl; context: { col: 'tags', label: 'Dirección', options: catalogTags, noneLabel: 'Sin dirección', hint: 'Muestra filas con cualquiera de las elegidas' }"></ng-container>
+            </th>
+            <th>
+              <ng-container *ngTemplateOutlet="colFilterTpl; context: { col: 'confluencias', label: 'Confluencias', options: catalogConfluencias, noneLabel: 'Sin confluencias', hint: 'Muestra filas que tengan todas las elegidas' }"></ng-container>
+            </th>
             <th></th>
             <th [attr.aria-sort]="ariaSort('comment')"><button type="button" class="th-sort" [class.active]="sortBy === 'comment'" (click)="toggleSort('comment')">Comentarios <span class="sort-ind">{{ sortIcon('comment') }}</span></button></th>
           </tr>
@@ -335,13 +339,26 @@
                   <span class="run-state muted tiny" *ngIf="sentStateLabel(s) as st">
                     {{ st }}<ng-container *ngIf="s.profit != null"> · {{ s.profit | number:'1.2-2' }} USD</ng-container>
                   </span>
-                  <button
-                    type="button"
-                    class="recalc-btn sm has-tip"
-                    data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
-                    [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
-                    (click)="recalcOperation(item, $event)"
-                  >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
+                  <span class="run-state muted tiny" *ngIf="s.duplicate as d">
+                    + duplicada<ng-container *ngIf="d.order"> #{{ d.order }}</ng-container><ng-container *ngIf="sentStateLabel(d) as dst"> · {{ dst }}</ng-container><ng-container *ngIf="d.profit != null"> · {{ d.profit | number:'1.2-2' }} USD</ng-container>
+                  </span>
+                  <div class="run-sent-actions">
+                    <button
+                      type="button"
+                      class="dup-btn sm has-tip"
+                      *ngIf="canDuplicate(s)"
+                      data-tooltip="Abre una segunda operación en MT5 con el mismo lote, SL y TP (solo una vez)"
+                      [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
+                      (click)="duplicateOperation(item, $event)"
+                    >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>
+                    <button
+                      type="button"
+                      class="recalc-btn sm has-tip"
+                      data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
+                      [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
+                      (click)="recalcOperation(item, $event)"
+                    >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
+                  </div>
                 </div>
               </ng-container>
               <ng-template #runBtn>
@@ -407,6 +424,21 @@
               >{{ note.text }}</p>
             </td>
             <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+              <ng-container *ngIf="detailImageUrl(item) as detailThumb; else noDetailShot">
+                <button
+                  type="button"
+                  class="shot-thumb"
+                  (click)="openDetailImageLightbox(item, $event)"
+                  title="Ver captura del detalle"
+                >
+                  <img [src]="detailThumb" alt="Captura detalle" />
+                </button>
+              </ng-container>
+              <ng-template #noDetailShot>
+                <span class="muted tiny">—</span>
+              </ng-template>
+            </td>
+            <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <span class="auto-capture-spinner" *ngIf="isAutoCaptureBusy(item.id)" role="status" title="Generando auto captura…">
                 <span class="spinner" aria-hidden="true"></span><span class="tiny">Generando…</span>
               </span>
@@ -440,21 +472,6 @@
                 [ngClass]="'tone-' + note.tone"
                 [title]="note.text"
               >{{ note.text }}</p>
-            </td>
-            <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-              <ng-container *ngIf="detailImageUrl(item) as detailThumb; else noDetailShot">
-                <button
-                  type="button"
-                  class="shot-thumb"
-                  (click)="openDetailImageLightbox(item, $event)"
-                  title="Ver captura del detalle"
-                >
-                  <img [src]="detailThumb" alt="Captura detalle" />
-                </button>
-              </ng-container>
-              <ng-template #noDetailShot>
-                <span class="muted tiny">—</span>
-              </ng-template>
             </td>
             <td class="tags-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <div class="tag-picker" [class.open]="tagPickerOpenId === item.id">
@@ -890,7 +907,14 @@
           </div>
         </div>
         <div class="card-actions">
-          <span class="run-sent" *ngIf="sentInfo(item) as s">✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small></span>
+          <span class="run-sent" *ngIf="sentInfo(item) as s">✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small><small *ngIf="s.duplicate?.order"> + #{{ s.duplicate?.order }}</small></span>
+          <button
+            type="button"
+            class="dup-btn sm"
+            *ngIf="sentInfo(item) && canDuplicate(sentInfo(item)!)"
+            [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
+            (click)="duplicateOperation(item, $event)"
+          >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>
           <button
             type="button"
             class="recalc-btn sm"
@@ -1509,6 +1533,7 @@
         <dt>Lotes</dt>
         <dd>{{ p.volume }}</dd>
       </dl>
+      <p class="run-volume-note" *ngIf="p.volumeNote">⚠ {{ p.volumeNote }}</p>
       <p class="muted tiny">
         SL y TP incluyen el margen extra en pips de Configuración. Mercado o LIMIT se recalcula con el precio
         del broker al confirmar. Solo se puede enviar una vez.
@@ -1555,4 +1580,36 @@
       />
     </svg>
   </button>
+</ng-template>
+
+<ng-template #colFilterTpl let-col="col" let-label="label" let-options="options" let-noneLabel="noneLabel" let-hint="hint">
+  <div class="col-filter" [class.open]="colFilterOpen === col">
+    <button
+      type="button"
+      class="th-sort col-filter-btn"
+      [class.active]="colFilterCount(col) > 0"
+      [attr.aria-expanded]="colFilterOpen === col"
+      [attr.aria-label]="'Filtrar por ' + label"
+      (click)="toggleColFilter(col, $event)"
+    >
+      {{ label }}
+      <span class="col-filter-icon" aria-hidden="true">⏷</span>
+      <span class="col-filter-count" *ngIf="colFilterCount(col) as n">{{ n }}</span>
+    </button>
+    <div class="col-filter-menu" *ngIf="colFilterOpen === col" role="dialog" [attr.aria-label]="'Filtro ' + label">
+      <p class="col-filter-hint tiny muted">{{ hint }}</p>
+      <label class="col-filter-opt" *ngFor="let t of options">
+        <input type="checkbox" [checked]="isColFilterOn(col, t.id)" (change)="toggleColFilterValue(col, t.id)" />
+        <span class="col-filter-dot" [style.background]="t.color || defaultTagColor"></span>
+        <span>{{ t.name }}</span>
+      </label>
+      <label class="col-filter-opt none">
+        <input type="checkbox" [checked]="isColFilterOn(col, 'none')" (change)="toggleColFilterValue(col, 'none')" />
+        <span>{{ noneLabel }}</span>
+      </label>
+      <button type="button" class="ghost sm col-filter-clear" [disabled]="!colFilterCount(col)" (click)="clearColFilter(col)">
+        Quitar filtro
+      </button>
+    </div>
+  </div>
 </ng-template>

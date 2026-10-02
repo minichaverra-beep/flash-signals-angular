@@ -164,6 +164,8 @@ export interface Mt5OrderResult {
   dryRun?: boolean;
   order?: number;
   account: { login: number; server: string; demo: boolean };
+  /** Lote subido al mínimo del broker: incluye el riesgo real resultante. */
+  volumeNote?: string | null;
 }
 
 export interface Mt5PushOutcome {
@@ -173,6 +175,14 @@ export interface Mt5PushOutcome {
   result?: Mt5OrderResult;
   /** Perfil de configuración usado (activo al enviar). */
   profile?: { id: 'principal' | 'secundaria'; label: string };
+}
+
+/** Filtro del historial por Dirección (cualquiera / sin dirección) y Confluencias (todas / ninguna). */
+export interface HistoryCatalogFilter {
+  tagIds?: number[];
+  tagNone?: boolean;
+  confluenciaIds?: number[];
+  confluenciaNone?: boolean;
 }
 
 /** Envío ya registrado de una señal del historial (anti doble ejecución). */
@@ -196,6 +206,8 @@ export interface Mt5SentEntry {
   profit?: number | null;
   closeReason?: string | null;
   checkedAt?: string;
+  /** Segunda operación con el mismo lote (botón Duplicar; solo una por señal). */
+  duplicate?: Mt5SentEntry;
 }
 
 export interface Mt5RecalcResult {
@@ -206,6 +218,14 @@ export interface Mt5RecalcResult {
   annotation: { resultado?: string; pnlUsd?: number } | null;
   /** «Captura detalle» redibujada con los niveles de MT5 (solo última señal del mercado). */
   chart?: { updated: boolean; reason?: string; chartUrl?: string };
+  /** Auto captura lanzada al cambiar el Resultado de una operación cerrada. */
+  capture?: { ok: boolean; warning?: string | null; error?: string } | null;
+}
+
+export interface Mt5DuplicateResult {
+  ok: boolean;
+  message: string;
+  sent: Mt5SentEntry;
 }
 
 /** Única señal ejecutable desde Run operation (la última) y su ventana de tiempo. */
@@ -353,6 +373,10 @@ export class SignalsApiService {
     return this.http.post<Mt5RecalcResult>(`${this.base}/mt5/recalc`, { historyId });
   }
 
+  mt5Duplicate(historyId: number): Observable<Mt5DuplicateResult> {
+    return this.http.post<Mt5DuplicateResult>(`${this.base}/mt5/duplicate`, { historyId });
+  }
+
   mt5Settings(): Observable<Mt5SettingsState> {
     return this.http.get<Mt5SettingsState>(`${this.base}/mt5/settings`);
   }
@@ -385,7 +409,7 @@ export class SignalsApiService {
     market?: Market | '';
     sortBy?: HistorySortKey;
     sortDir?: SortDir;
-  } = {}): Observable<HistoryListResponse> {
+  } & HistoryCatalogFilter = {}): Observable<HistoryListResponse> {
     const params: Record<string, string> = {
       page: String(opts.page ?? 1),
       pageSize: String(opts.pageSize ?? 20),
@@ -393,6 +417,10 @@ export class SignalsApiService {
     if (opts.market) params['market'] = opts.market;
     if (opts.sortBy) params['sortBy'] = opts.sortBy;
     if (opts.sortDir) params['sortDir'] = opts.sortDir;
+    if (opts.tagIds?.length) params['tagIds'] = opts.tagIds.join(',');
+    if (opts.tagNone) params['tagNone'] = '1';
+    if (opts.confluenciaIds?.length) params['confluenciaIds'] = opts.confluenciaIds.join(',');
+    if (opts.confluenciaNone) params['confluenciaNone'] = '1';
     return this.http.get<HistoryListResponse>(`${this.base}/history`, { params });
   }
 

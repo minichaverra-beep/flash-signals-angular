@@ -39,9 +39,9 @@ function has(profile, key) {
   return Object.hasOwn(state(), keyOf(profile, key));
 }
 
-/** @param {object} result respuesta del puente (orden enviada). */
-function record(profile, key, result = {}) {
-  const entry = {
+/** @param {object} result respuesta del puente (orden enviada) → entrada registrada. */
+function entryOf(result = {}) {
+  return {
     at: new Date().toISOString(),
     symbol: result.symbol ?? null,
     side: result.side ?? null,
@@ -54,6 +54,11 @@ function record(profile, key, result = {}) {
     deal: result.deal ?? null,
     login: result.account?.login ?? null,
   };
+}
+
+/** @param {object} result respuesta del puente (orden enviada). */
+function record(profile, key, result = {}) {
+  const entry = entryOf(result);
   persist({ ...state(), [keyOf(profile, key)]: entry });
   return entry;
 }
@@ -88,4 +93,4 @@ function _resetForTests() {
   cache = null;
 }
 
-module.exports = { has, get, record, update, historyMap, _resetForTests };
+module.exports = { has, get, entryOf, record, update, historyMap, _resetForTests };

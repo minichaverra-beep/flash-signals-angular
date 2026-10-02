@@ -280,6 +280,10 @@ async function runnableHistory() {
 /** Envíos en curso (perfil:clave): evita doble ejecución por clics/peticiones simultáneas. */
 const mt5InFlight = new Set();
 
+function volumeNoteSuffix(result) {
+  return result?.volumeNote ? ` · ⚠ ${result.volumeNote}` : '';
+}
+
 /**
  * Envía el plan Entry/SL/TP de una señal al puente MT5.
  * @returns {Promise<{ status: 'sent'|'skipped'|'error', message: string, result?: object, order?: object }>}
@@ -306,7 +310,7 @@ async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdic
     const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
     return {
       status: 'sent',
-      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}`,
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}`,
       order,
       result,
       profile,
@@ -1243,6 +1247,11 @@ app.get('/api/zentinel', (req, res) => {
   res.json(readZentinel(market));
 });
 
+/** "3,7,12" → [3, 7, 12] (el store descarta lo que no sea id entero positivo). */
+function queryIdList(raw) {
+  return typeof raw === 'string' && raw ? raw.split(',') : [];
+}
+
 /** Historial local (SQLite hive box) — solo snapshots reales del pipeline. */
 app.get('/api/history', async (req, res) => {
   try {
@@ -1264,6 +1273,10 @@ app.get('/api/history', async (req, res) => {
       market: market || null,
       sortBy: typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined,
       sortDir: typeof req.query.sortDir === 'string' ? req.query.sortDir : undefined,
+      tagIds: queryIdList(req.query.tagIds),
+      tagNone: req.query.tagNone === '1',
+      confluenciaIds: queryIdList(req.query.confluenciaIds),
+      confluenciaNone: req.query.confluenciaNone === '1',
     });
     res.json(data);
   } catch (err) {
@@ -1615,25 +1628,25 @@ const autoCaptureInFlight = new Set();
  * del resultado. Body: { resultado? } (si falta, el de la fila). Nunca cambia el Resultado:
  * si el precio lo contradice devuelve mismatch + warning.
  */
-app.post('/api/history/:id/auto-capture', async (req, res) => {
-  const id = parseHistoryId(req.params.id);
-  if (id == null) {
-    return res.status(400).json({ error: 'id inválido' });
-  }
+/**
+ * Genera y guarda la auto captura de una fila. → { status, body } (body.locked si la fila está bloqueada).
+ * @param {number} id
+ * @param {string|null|undefined} resultadoOverride resultado a comparar (por defecto el de la fila)
+ */
+async function autoCaptureRow(id, resultadoOverride) {
   if (autoCaptureInFlight.has(id)) {
-    return res.status(409).json({ error: 'Ya se está generando la captura de esta señal' });
+    return { status: 409, body: { error: 'Ya se está generando la captura de esta señal' } };
   }
   if (!fs.existsSync(TRADING_ROOT)) {
-    return res.status(503).json({ error: 'CURSOR_TRADING_ROOT no existe o no es accesible' });
+    return { status: 503, body: { error: 'CURSOR_TRADING_ROOT no existe o no es accesible' } };
   }
   autoCaptureInFlight.add(id);
   try {
     const row = await historyStore.getById(id);
-    if (row?.effectiveLocked) return sendHistoryLocked(res);
+    if (row?.effectiveLocked) return { status: 423, body: { locked: true } };
     const resolved = autoCapture.resolveAutoCaptureInput(row);
     if (!resolved.ok) {
-      const status = resolved.code === 'not_found' ? 404 : 422;
-      return res.status(status).json({ error: resolved.error, code: resolved.code });
+      return { status: resolved.code === 'not_found' ? 404 : 422, body: { error: resolved.error, code: resolved.code } };
     }
     const run = await autoCapture.runAutoCapture({
       input: resolved.input,
@@ -1642,21 +1655,30 @@ app.post('/api/history/:id/auto-capture', async (req, res) => {
     });
     if (!run.ok) {
       console.warn(`[history] auto-capture #${id}:`, run.error);
-      return res.status(422).json({ error: run.error, code: run.code || 'script' });
+      return { status: 422, body: { error: run.error, code: run.code || 'script' } };
     }
     const saved = await historyStore.saveResultImage(id, run.buffer, 'image/png');
-    if (saved.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
-    if (!saved.ok) {
-      return res.status(400).json({ error: saved.error || 'No se pudo guardar la imagen' });
-    }
-    const resultado = req.body?.resultado ?? row.resultado;
-    const check = autoCapture.compareOutcome(run.outcome, resultado);
-    res.json({ ok: true, item: saved.item, outcome: run.outcome, ...check });
+    if (saved.error === historyStore.LOCKED_ERROR) return { status: 423, body: { locked: true } };
+    if (!saved.ok) return { status: 400, body: { error: saved.error || 'No se pudo guardar la imagen' } };
+    const check = autoCapture.compareOutcome(run.outcome, resultadoOverride ?? row.resultado);
+    return { status: 200, body: { ok: true, item: saved.item, outcome: run.outcome, ...check } };
+  } finally {
+    autoCaptureInFlight.delete(id);
+  }
+}
+
+app.post('/api/history/:id/auto-capture', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) {
+    return res.status(400).json({ error: 'id inválido' });
+  }
+  try {
+    const { status, body } = await autoCaptureRow(id, req.body?.resultado);
+    if (body.locked) return sendHistoryLocked(res);
+    res.status(status).json(body);
   } catch (err) {
     console.error('[history] auto-capture:', err);
     res.status(500).json({ error: 'No se pudo generar la captura automática' });
-  } finally {
-    autoCaptureInFlight.delete(id);
   }
 });
 
@@ -2182,24 +2204,117 @@ app.post('/api/mt5/recalc', async (req, res) => {
     return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${mt5Settings.PROFILE_LABELS[profileId]}` });
   }
   try {
-    if ((await historyStore.getById(id))?.effectiveLocked) return sendHistoryLocked(res);
+    const row = await historyStore.getById(id);
+    if (row?.effectiveLocked) return sendHistoryLocked(res);
     const status = await mt5.orderStatus(sent.order, settings);
     const rec = mt5.reconcileOrder(sent, status);
+    const dup = await reconcileDuplicate(sent.duplicate, settings);
+    const annotation = sent.duplicate?.order
+      ? mt5.combineAnnotations(rec.annotation, dup.rec?.annotation)
+      : rec.annotation;
+
     const plan = await historyStore.updatePlanLevels(id, rec.levels);
     if (plan.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!plan.ok) return res.status(plan.error === 'not_found' ? 404 : 400).json({ error: plan.error });
-    if (rec.annotation) {
-      const ann = await historyStore.updateAnnotation(id, rec.annotation);
+    if (annotation) {
+      const ann = await historyStore.updateAnnotation(id, annotation);
       if (!ann.ok) return res.status(400).json({ error: ann.error });
     }
-    const updated = mt5Sent.update(profileId, key, rec.sentPatch);
+    const patch = dup.rec ? { ...rec.sentPatch, duplicate: { ...sent.duplicate, ...dup.rec.sentPatch } } : rec.sentPatch;
+    const updated = mt5Sent.update(profileId, key, patch);
     const chart = await rerenderDetailChart(id, rec.levels, updated, settings).catch((err) => ({
       updated: false,
       reason: err.message,
     }));
-    res.json({ ok: true, message: rec.message, changes: rec.changes, status, sent: updated, annotation: rec.annotation, chart });
+    const capture = await autoCaptureOnResult(id, row, annotation);
+    res.json({
+      ok: true,
+      message: recalcMessage(rec, dup, sent.duplicate?.order ? annotation : null),
+      changes: rec.changes,
+      status,
+      sent: updated,
+      annotation,
+      chart,
+      capture,
+    });
   } catch (err) {
     res.status(err.status || 502).json({ error: err.message, details: err.details });
+  }
+});
+
+/** Estado real del duplicado (si existe). → { rec?, error? } */
+async function reconcileDuplicate(duplicate, settings) {
+  if (!duplicate?.order) return {};
+  try {
+    const status = await mt5.orderStatus(duplicate.order, settings);
+    return { rec: mt5.reconcileOrder(duplicate, status) };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+function recalcMessage(rec, dup, combined) {
+  const parts = [rec.message];
+  if (dup.rec) parts.push(`Duplicada: ${dup.rec.message}`);
+  else if (dup.error) parts.push(`Duplicada: ${dup.error}`);
+  if (combined?.pnlUsd != null) parts.push(`Total ${combined.pnlUsd} USD (${combined.resultado})`);
+  return parts.join(' · ');
+}
+
+/**
+ * Auto captura al cerrarse la operación: solo si Recalcular cambia el Resultado a ganada/perdida
+ * y la fila aún no tiene captura (no pisa una subida a mano).
+ */
+async function autoCaptureOnResult(id, row, annotation) {
+  const resultado = annotation?.resultado;
+  if (!row || (resultado !== 'ganada' && resultado !== 'perdida')) return null;
+  if (resultado === row.resultado || row.hasResultImage) return null;
+  try {
+    const { body } = await autoCaptureRow(id, resultado);
+    if (body.ok) return { ok: true, warning: body.warning ?? null };
+    return { ok: false, error: body.locked ? 'Fila bloqueada' : body.error };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/** Duplicados en curso (perfil:clave): evita dos segundas operaciones por doble clic. */
+const mt5DuplicateInFlight = new Set();
+
+/**
+ * Duplicar una operación ya enviada: segunda orden con el mismo lote y los niveles actuales de la
+ * original (LIMIT si sigue pendiente, mercado si ya está abierta). Solo una vez por señal.
+ * Body: { historyId }.
+ */
+app.post('/api/mt5/duplicate', async (req, res) => {
+  const id = parseHistoryId(req.body?.historyId);
+  if (id == null) return res.status(400).json({ error: 'historyId inválido' });
+  const profileId = mt5Settings.getActive();
+  const settings = mt5Settings.get(profileId);
+  const label = mt5Settings.PROFILE_LABELS[profileId];
+  const key = `h${id}`;
+  const sent = mt5Sent.get(profileId, key);
+  if (!sent?.order) return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${label}` });
+  if (sent.duplicate) return res.status(409).json({ error: `La señal #${id} ya está duplicada` });
+  const lockKey = `${profileId}:${key}`;
+  if (mt5DuplicateInFlight.has(lockKey)) return res.status(409).json({ error: 'Ya se está duplicando esta operación' });
+  mt5DuplicateInFlight.add(lockKey);
+  try {
+    const status = await mt5.orderStatus(sent.order, settings);
+    const { order, error } = mt5.buildDuplicateOrder(sent, status);
+    if (!order) return res.status(409).json({ error });
+    const result = await mt5.pushOrder(order, { clientId: `${key}d` }, settings);
+    const updated = mt5Sent.update(profileId, key, { duplicate: mt5Sent.entryOf(result) });
+    const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
+    res.json({
+      ok: true,
+      message: `Duplicada: ${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl ?? '—'} · TP ${result.tp ?? '—'} · ticket ${result.order}`,
+      sent: updated,
+    });
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message, details: err.details });
+  } finally {
+    mt5DuplicateInFlight.delete(lockKey);
   }
 });
 
@@ -2223,7 +2338,7 @@ app.post('/api/mt5/manual', async (req, res) => {
     const stops = `SL ${result.sl ?? '—'} · TP ${result.tp ?? '—'}`;
     res.json({
       status: 'sent',
-      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · ${stops} · ${profile.label}${dryRun ? ' (dry-run)' : ''}`,
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · ${stops} · ${profile.label}${dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}`,
       order,
       result,
       profile,

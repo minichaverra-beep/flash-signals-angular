@@ -112,24 +112,37 @@ def step_decimals(step):
     return len(text.split(".")[1]) if "." in text else 0
 
 
+def loss_per_lot(symbol, is_long, price, sl):
+    order_type = mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL
+    loss = mt5.order_calc_profit(order_type, symbol, 1.0, price, sl)
+    if loss is None or loss >= 0:
+        raise BridgeError(422, f"No se pudo calcular el riesgo por lote: {mt5.last_error()}")
+    return abs(loss)
+
+
 def calc_volume(symbol, info, is_long, price, sl, equity, volume, risk_pct):
+    """(lotes, aviso). Bajo el lote mínimo del broker se usa el mínimo y el aviso da el riesgo real."""
     if volume:
         raw = volume
     else:
-        order_type = mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL
-        loss_one_lot = mt5.order_calc_profit(order_type, symbol, 1.0, price, sl)
-        if loss_one_lot is None or loss_one_lot >= 0:
-            raise BridgeError(422, f"No se pudo calcular el riesgo por lote: {mt5.last_error()}")
-        raw = (equity * risk_pct / 100.0) / abs(loss_one_lot)
+        raw = (equity * risk_pct / 100.0) / loss_per_lot(symbol, is_long, price, sl)
 
     step = info.volume_step
     vol = round(math.floor(raw / step + 1e-9) * step, step_decimals(step))
-    if vol < info.volume_min:
-        raise BridgeError(
-            422,
-            f"Volumen calculado {raw:.4f} < lote mínimo {info.volume_min}. Sube el riesgo o usa 'volume' fijo.",
-        )
-    return min(vol, info.volume_max)
+    if vol >= info.volume_min:
+        return min(vol, info.volume_max), None
+    note = f"Lote calculado {raw:.4f} < mínimo {info.volume_min}: se usa {info.volume_min}"
+    if sl:
+        risk_usd = loss_per_lot(symbol, is_long, price, sl) * info.volume_min
+        risk_real = risk_usd / equity * 100.0 if equity else 0.0
+        note += f" (riesgo real {risk_real:.2f} % = {risk_usd:.2f} {account_currency()}"
+        note += f" en vez de {risk_pct:g} %)" if not volume else ")"
+    return info.volume_min, note
+
+
+def account_currency():
+    acc = mt5.account_info()
+    return getattr(acc, "currency", "") or "USD"
 
 
 def filling_candidates(info):
@@ -140,12 +153,6 @@ def filling_candidates(info):
         preferred.append(mt5.ORDER_FILLING_IOC)
     preferred.append(mt5.ORDER_FILLING_RETURN)
     return preferred
-
-
-def own_exposure(symbol):
-    positions = [p for p in (mt5.positions_get(symbol=symbol) or ()) if p.magic == MAGIC]
-    orders = [o for o in (mt5.orders_get(symbol=symbol) or ()) if o.magic == MAGIC]
-    return len(positions), len(orders)
 
 
 def send(request, fillings):
@@ -220,15 +227,6 @@ def check_signal_market(is_long, entry, sl, tp, market_price, max_dev_pct):
         raise BridgeError(409, f"Precio {market_price} ya fuera del rango SL/TP: señal invalidada o TP alcanzado.")
 
 
-def check_exposure(symbol):
-    positions, orders = own_exposure(symbol)
-    if positions or orders:
-        raise BridgeError(
-            409,
-            f"Ya hay {positions} posición(es) y {orders} orden(es) de Flash Signals en {symbol}.",
-        )
-
-
 def account_info(acc, is_demo):
     return {"login": acc.login, "server": acc.server, "demo": is_demo}
 
@@ -249,7 +247,7 @@ def place_order(payload):
         raise BridgeError(400, "Falta 'symbol'")
     if side not in ("LONG", "SHORT"):
         raise BridgeError(400, "'side' debe ser LONG o SHORT")
-    # manual: sin chequeos de señal (coherencia, desvío, rango SL/TP, exposición); MT5 valida el resto.
+    # manual: sin chequeos de señal (coherencia, desvío, rango SL/TP); MT5 valida el resto.
     manual = bool(payload.get("manual"))
     order_mode = parse_order_mode(payload, manual)
     if manual:
@@ -307,8 +305,6 @@ def place_signal(payload, symbol, side):
 
     market_price = tick.ask if is_long else tick.bid
     check_signal_market(is_long, entry, sl, tp, market_price, max_dev_pct)
-    if not payload.get("allow_multiple"):
-        check_exposure(symbol)
 
     min_dist = info.trade_stops_level * info.point
     use_market = signal_uses_market(is_long, entry, market_price, min_dist)
@@ -317,9 +313,10 @@ def place_signal(payload, symbol, side):
         raise BridgeError(422, f"SL/TP demasiado cerca del precio (stops level {info.trade_stops_level} pts).")
 
     digits = info.digits
+    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
     request = {
         "symbol": symbol,
-        "volume": calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"]),
+        "volume": volume,
         "price": round(price, digits),
         "sl": round(sl, digits),
         "tp": round(tp, digits),
@@ -333,6 +330,7 @@ def place_signal(payload, symbol, side):
         fillings = as_pending(request, info, tick, limit_type, opts["expiry_minutes"])
 
     summary = order_summary("market" if use_market else "pending", side, request, market_price, entry, acc, is_demo)
+    summary["volumeNote"] = volume_note
     return execute(request, fillings, summary, opts["dry_run"])
 
 
@@ -378,9 +376,10 @@ def place_manual(payload, symbol, side, order_mode):
     price = market_price if use_market else entry
 
     digits = info.digits
+    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
     request = {
         "symbol": symbol,
-        "volume": calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"]),
+        "volume": volume,
         "price": round(price, digits),
         "sl": round_or_zero(sl, digits),
         "tp": round_or_zero(tp, digits),
@@ -395,7 +394,11 @@ def place_manual(payload, symbol, side, order_mode):
         fillings = as_pending(request, info, tick, pending_order_type(is_long, stop), opts["expiry_minutes"])
         mode = "stop" if stop else "pending"
 
-    summary = {**order_summary(mode, side, request, market_price, entry, acc, is_demo), "manual": True}
+    summary = {
+        **order_summary(mode, side, request, market_price, entry, acc, is_demo),
+        "manual": True,
+        "volumeNote": volume_note,
+    }
     return execute(request, fillings, summary, opts["dry_run"])
 
 def round_or_zero(value, digits):

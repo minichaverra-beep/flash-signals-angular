@@ -142,7 +142,10 @@
           <div class="field" *ngIf="d.lotMode === 'risk'">
             <label for="cfg-risk">Riesgo por operación (% equity)</label>
             <input id="cfg-risk" name="riskPct" type="number" min="0.01" max="5" step="0.05" [(ngModel)]="d.form.riskPct" />
-            <small class="muted">Lotes = equity × riesgo % ÷ pérdida hasta el SL.</small>
+            <small class="muted">
+              Lotes = equity × riesgo % ÷ pérdida hasta el SL (con el margen extra). Si sale menos que el lote
+              mínimo del broker se envía el mínimo y se avisa el riesgo real.
+            </small>
           </div>
           <div class="field" *ngIf="d.lotMode === 'fixed'">
             <label for="cfg-volume">Lotes por operación</label>
@@ -206,7 +209,7 @@
         </div>
         <label class="check">
           <input type="checkbox" name="allowMultiple" [(ngModel)]="d.form.allowMultiple" />
-          Permitir varias operaciones abiertas en el mismo símbolo (y reenviar una señal ya enviada)
+          Permitir reenviar una señal ya enviada
         </label>
       </section>
 

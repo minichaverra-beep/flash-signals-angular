@@ -958,6 +958,48 @@ async function insertSnapshot(snap) {
   return { id: Number(info.lastInsertRowid) };
 }
 
+/** Ids enteros positivos (filtros de catálogo); descarta todo lo demás. */
+function readFilterIds(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return [...new Set(list.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+}
+
+const TAG_SUB = 'SELECT history_id FROM signal_history_tags';
+const CONF_SUB = 'SELECT history_id FROM signal_history_confluencias';
+
+/** Dirección: cualquiera de las elegidas y/o «sin dirección». */
+function tagClause(tagIds, tagNone) {
+  const any = tagIds.length ? `id IN (${TAG_SUB} WHERE tag_id IN (${tagIds.map(() => '?').join(',')}))` : null;
+  const none = tagNone ? `id NOT IN (${TAG_SUB})` : null;
+  if (any && none) return `(${any} OR ${none})`;
+  return any || none;
+}
+
+/**
+ * WHERE del listado: mercado · Dirección · Confluencias (debe tener todas las elegidas,
+ * o ninguna si confluenciaNone). Solo fragmentos fijos + parámetros enlazados.
+ */
+function historyListWhere(market, opts) {
+  const clauses = [];
+  const params = [];
+  if (market) {
+    clauses.push('market = ?');
+    params.push(market);
+  }
+  const tagIds = readFilterIds(opts.tagIds);
+  const tags = tagClause(tagIds, opts.tagNone === true);
+  if (tags) {
+    clauses.push(tags);
+    params.push(...tagIds);
+  }
+  for (const cid of readFilterIds(opts.confluenciaIds)) {
+    clauses.push(`id IN (${CONF_SUB} WHERE confluencia_id = ?)`);
+    params.push(cid);
+  }
+  if (opts.confluenciaNone === true) clauses.push(`id NOT IN (${CONF_SUB})`);
+  return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
+}
+
 /** sortBy permitido → expresión SQL (whitelist: nunca interpolar input del cliente). */
 const HISTORY_SORT_SQL = {
   createdAt: 'created_at',
@@ -989,7 +1031,8 @@ function historyOrderBy(sortBy, sortDir) {
 
 /**
  * @param {{ page?: number, pageSize?: number, market?: string|null,
- *   sortBy?: string, sortDir?: 'asc'|'desc' }} opts
+ *   sortBy?: string, sortDir?: 'asc'|'desc',
+ *   tagIds?: number[], tagNone?: boolean, confluenciaIds?: number[], confluenciaNone?: boolean }} opts
  */
 async function listHistory(opts = {}) {
   const e = await getEngine();
@@ -1001,50 +1044,26 @@ async function listHistory(opts = {}) {
       ? String(opts.market).toLowerCase()
       : null;
   const orderBy = historyOrderBy(opts.sortBy, opts.sortDir);
+  const { where, params } = historyListWhere(market, opts);
 
-  let total;
-  let rows;
-  if (market) {
-    total = e.get(
-      `SELECT COUNT(*) AS c FROM signal_history WHERE market = ?`,
-      [market]
-    );
-    rows = e.all(
-      `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error, comment, resultado,
-              pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
-              chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
-              json_extract(summary_json, '$.bias') AS summary_bias,
-              json_extract(summary_json, '$.winrate') AS summary_winrate,
-              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
-              json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
-              json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
-              json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
-       FROM signal_history
-       WHERE market = ?
-       ORDER BY ${orderBy}
-       LIMIT ? OFFSET ?`,
-      [market, pageSize, offset]
-    );
-  } else {
-    total = e.get(`SELECT COUNT(*) AS c FROM signal_history`);
-    rows = e.all(
-      `SELECT id, created_at, started_at, finished_at, market, tier, status,
-              flags_json, entry, verdict, score_combined, error, comment, resultado,
-              pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
-              chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
-              json_extract(summary_json, '$.bias') AS summary_bias,
-              json_extract(summary_json, '$.winrate') AS summary_winrate,
-              json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
-              json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
-              json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
-              json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
-       FROM signal_history
-       ORDER BY ${orderBy}
-       LIMIT ? OFFSET ?`,
-      [pageSize, offset]
-    );
-  }
+  const total = e.get(`SELECT COUNT(*) AS c FROM signal_history ${where}`, params);
+  const rows = e.all(
+    `SELECT id, created_at, started_at, finished_at, market, tier, status,
+            flags_json, entry, verdict, score_combined, error, comment, resultado,
+            pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
+            chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
+            json_extract(summary_json, '$.bias') AS summary_bias,
+            json_extract(summary_json, '$.winrate') AS summary_winrate,
+            json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
+            json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
+            json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
+            json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
+     FROM signal_history
+     ${where}
+     ORDER BY ${orderBy}
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  );
 
   const count = Number(total?.c ?? 0);
   const items = (rows || []).map(rowToListItem);
