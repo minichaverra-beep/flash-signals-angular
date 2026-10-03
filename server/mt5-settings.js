@@ -34,7 +34,8 @@ function defaults() {
     riskPct: envNumber('MT5_RISK_PCT') ?? 0.5,
     volume: envNumber('MT5_VOLUME'),
     maxDeviationPct: envNumber('MT5_MAX_DEVIATION_PCT') ?? 1,
-    expiryMinutes: envNumber('MT5_EXPIRY_MINUTES') ?? 30,
+    /** 0 = la orden LIMIT no caduca (GTC). */
+    expiryMinutes: envNumber('MT5_EXPIRY_MINUTES') ?? 0,
     deviationPoints: 20,
     allowMultiple: false,
     /** Margen extra sobre el SL/TP de la señal, en pips (0 = niveles exactos de la señal). */

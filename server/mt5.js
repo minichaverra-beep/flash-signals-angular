@@ -229,7 +229,8 @@ async function callBridge(method, path, body, settings = mt5Settings.get()) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) {
-    const error = new Error(data.error || `Puente MT5 respondió ${res.status}`);
+    const checkMsg = data.check?.comment ? `MT5 rechazó la orden (check ${data.check.retcode}): ${data.check.comment}` : null;
+    const error = new Error(data.error || checkMsg || `Puente MT5 respondió ${res.status} sin detalle`);
     error.status = res.status >= 400 ? res.status : 502;
     error.details = data;
     throw error;

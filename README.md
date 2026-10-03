@@ -273,7 +273,7 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 - Al terminar una señal `ENTRAR` se abre el diálogo **¿Enviar esta operación?** con la vista previa validada por MT5 (`dryRun`): cuenta demo/real, lado, mercado o LIMIT, entrada, SL, TP y lotes (editables). **No enviar** la descarta.
 - El botón **Enviar a MT5…** del resultado permite enviarla más tarde (último reporte del mercado visible).
 - Precio del broker **en o mejor** que la entrada óptima → orden **a mercado**.
-- Precio aún **no llega** a la entrada → **BUY/SELL LIMIT** en la entrada (expira a los `MT5_EXPIRY_MINUTES`).
+- Precio aún **no llega** a la entrada → **BUY/SELL LIMIT** en la entrada (expira a los `MT5_EXPIRY_MINUTES`; por defecto 0 = no caduca).
 - SL y TP van siempre adjuntos. El lado (LONG/SHORT) se deduce de SL/TP; un plan incoherente no se envía.
 - Lotaje por riesgo: `equity × MT5_RISK_PCT %` / pérdida hasta el SL (o `MT5_VOLUME` fijo).
 - Bloqueos: cuenta REAL (salvo `MT5_ALLOW_REAL=1`), precio broker a más de `MT5_MAX_DEVIATION_PCT` % de la entrada, precio ya fuera de SL/TP, posición/orden abierta del mismo magic en el símbolo, misma señal enviada dos veces.
@@ -300,7 +300,7 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 | `MT5_RISK_PCT` | `0.5` | % de equity arriesgado hasta el SL |
 | `MT5_VOLUME` | — | Lotes fijos (ignora el riesgo %) |
 | `MT5_MAX_DEVIATION_PCT` | `1` | Máx. distancia broker ↔ entrada de la señal |
-| `MT5_EXPIRY_MINUTES` | `30` | Caducidad de la orden LIMIT |
+| `MT5_EXPIRY_MINUTES` | `0` | Caducidad de la orden LIMIT (0 = no caduca) |
 | `MT5_BRIDGE_URL` / `MT5_BRIDGE_TOKEN` | `http://127.0.0.1:8765` / — | Ubicación y token compartido del puente |
 | `MT5_ALLOW_REAL`, `MT5_MAGIC`, `MT5_TERMINAL_PATH`, `MT5_LOGIN`/`MT5_PASSWORD`/`MT5_SERVER` | — | Solo en el puente (`bridge.py`) |
 

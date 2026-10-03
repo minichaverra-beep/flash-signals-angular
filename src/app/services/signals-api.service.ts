@@ -166,6 +166,7 @@ export interface Mt5OrderResult {
   account: { login: number; server: string; demo: boolean };
   /** Lote subido al mínimo del broker: incluye el riesgo real resultante. */
   volumeNote?: string | null;
+  checkWarning?: string | null;
 }
 
 export interface Mt5PushOutcome {

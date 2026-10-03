@@ -1534,6 +1534,7 @@
         <dd>{{ p.volume }}</dd>
       </dl>
       <p class="run-volume-note" *ngIf="p.volumeNote">⚠ {{ p.volumeNote }}</p>
+      <p class="run-volume-note" *ngIf="p.checkWarning">⚠ {{ p.checkWarning }}</p>
       <p class="muted tiny">
         SL y TP incluyen el margen extra en pips de Configuración. Mercado o LIMIT se recalcula con el precio
         del broker al confirmar. Solo se puede enviar una vez.

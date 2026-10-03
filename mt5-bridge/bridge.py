@@ -140,6 +140,20 @@ def calc_volume(symbol, info, is_long, price, sl, equity, volume, risk_pct):
     return info.volume_min, note
 
 
+def require_margin(symbol, is_long, price, volume):
+    """El lote del riesgo configurado nunca se reduce: sin margen libre suficiente la orden no se envía."""
+    acc = mt5.account_info()
+    order_type = mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL
+    needed = mt5.order_calc_margin(order_type, symbol, volume, price)
+    if acc is None or not needed or needed <= acc.margin_free:
+        return
+    raise BridgeError(
+        422,
+        f"Sin margen para {volume} lotes: necesita {needed:.2f} {account_currency()} y hay {acc.margin_free:.2f} libres. "
+        "No se reduce el lote: cierra posiciones/órdenes pendientes o sube el apalancamiento.",
+    )
+
+
 def account_currency():
     acc = mt5.account_info()
     return getattr(acc, "currency", "") or "USD"
@@ -314,6 +328,7 @@ def place_signal(payload, symbol, side):
 
     digits = info.digits
     volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
+    require_margin(symbol, is_long, price, volume)
     request = {
         "symbol": symbol,
         "volume": volume,
@@ -336,12 +351,25 @@ def place_signal(payload, symbol, side):
 
 def execute(request, fillings, summary, dry_run):
     if dry_run:
-        request["type_filling"] = fillings[0]
-        check = mt5.order_check(request)
+        # La vista previa nunca bloquea el envío: el aviso de order_check se muestra y el envío real decide.
+        check = None
+        for filling in fillings:
+            request["type_filling"] = filling
+            check = mt5.order_check(request)
+            if check is None or check.retcode != mt5.TRADE_RETCODE_INVALID_FILL:
+                break
+        passed = check is not None and check.retcode in (0, mt5.TRADE_RETCODE_DONE)
+        warning = None
+        if not passed:
+            warning = (
+                f"order_check falló: {mt5.last_error()}" if check is None
+                else f"MT5 avisa (check {check.retcode}): {check.comment}"
+            )
         return {
-            "ok": check is not None and check.retcode in (0, mt5.TRADE_RETCODE_DONE),
+            "ok": True,
             "dryRun": True,
             "check": None if check is None else {"retcode": check.retcode, "comment": check.comment},
+            "checkWarning": warning,
             **summary,
         }
 
@@ -377,6 +405,7 @@ def place_manual(payload, symbol, side, order_mode):
 
     digits = info.digits
     volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
+    require_margin(symbol, is_long, price, volume)
     request = {
         "symbol": symbol,
         "volume": volume,
