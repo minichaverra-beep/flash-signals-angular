@@ -347,7 +347,7 @@
                       type="button"
                       class="dup-btn sm has-tip"
                       *ngIf="canDuplicate(s)"
-                      data-tooltip="Abre una segunda operación en MT5 con el mismo lote, SL y TP (solo una vez)"
+                      [attr.data-tooltip]="duplicateTip(s)"
                       [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
                       (click)="duplicateOperation(item, $event)"
                     >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>
@@ -912,6 +912,7 @@
             type="button"
             class="dup-btn sm"
             *ngIf="sentInfo(item) && canDuplicate(sentInfo(item)!)"
+            [attr.title]="duplicateTip(sentInfo(item)!)"
             [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
             (click)="duplicateOperation(item, $event)"
           >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>

@@ -79,6 +79,11 @@ describe('API /api/history/:id con candado', () => {
     store._resetForTests();
     delete require.cache[storePath];
     delete process.env.HISTORY_DATA_DIR;
+    const sent = {};
+    for (const profile of ['principal', 'secundaria']) {
+      sent[`${profile}:h${pastId}`] = { order: 555, symbol: 'BTCUSD', side: 'BUY', volume: 0.01 };
+    }
+    fs.writeFileSync(path.join(tempDir, 'mt5-sent.json'), JSON.stringify(sent), 'utf8');
 
     const port = await freePort();
     base = `http://127.0.0.1:${port}`;
@@ -173,6 +178,22 @@ describe('API /api/history/:id con candado', () => {
     const list = await call('GET', '/api/history?pageSize=10');
     assert.equal(typeof list.body.lockTz, 'string');
     assert.equal(list.body.items.find((i) => i.id === id).autoLocked, false);
+  });
+
+  it('recálculos no alteran filas bloqueadas: Recalcular MT5 → 423, Actualizar Probabilidad las omite', async () => {
+    const prev = await call('GET', `/api/history/${pastId}`);
+    assert.equal(prev.body.effectiveLocked, true);
+
+    const mt5Recalc = await call('POST', '/api/mt5/recalc', { historyId: pastId });
+    assert.equal(mt5Recalc.status, 423);
+
+    const bulk = await call('POST', '/api/history/recalc-probabilidad', { force: true });
+    assert.equal(bulk.status, 200);
+    assert.ok(bulk.body.skippedLocked >= 1);
+
+    const next = await call('GET', `/api/history/${pastId}`);
+    assert.deepEqual(next.body.summary, prev.body.summary);
+    assert.equal(next.body.scoreCombined, prev.body.scoreCombined);
   });
 
   it('locked no booleano → 400; id inexistente → 404', async () => {

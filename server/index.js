@@ -2136,6 +2136,7 @@ const CHART_DECIMALS = { btc: 1, us30: 1, xauusd: 2 };
 async function rerenderDetailChart(id, levels, sent, settings = mt5Settings.get()) {
   const row = await historyStore.getById(id);
   const asset = row && CHART_ASSET[row.market];
+  if (row?.effectiveLocked) return { updated: false, reason: 'fila bloqueada' };
   if (!asset || !row.chartPath) return { updated: false, reason: 'sin captura detalle' };
   const latest = await historyStore.listHistory({
     page: 1, pageSize: 1, market: row.market, sortBy: 'createdAt', sortDir: 'desc',
@@ -2213,13 +2214,9 @@ app.post('/api/mt5/recalc', async (req, res) => {
       ? mt5.combineAnnotations(rec.annotation, dup.rec?.annotation)
       : rec.annotation;
 
-    const plan = await historyStore.updatePlanLevels(id, rec.levels);
-    if (plan.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
-    if (!plan.ok) return res.status(plan.error === 'not_found' ? 404 : 400).json({ error: plan.error });
-    if (annotation) {
-      const ann = await historyStore.updateAnnotation(id, annotation);
-      if (!ann.ok) return res.status(400).json({ error: ann.error });
-    }
+    const failed = await applyRecalcToRow(id, rec.levels, annotation);
+    if (failed?.locked) return sendHistoryLocked(res);
+    if (failed) return res.status(failed.status).json({ error: failed.error });
     const patch = dup.rec ? { ...rec.sentPatch, duplicate: { ...sent.duplicate, ...dup.rec.sentPatch } } : rec.sentPatch;
     const updated = mt5Sent.update(profileId, key, patch);
     const chart = await rerenderDetailChart(id, rec.levels, updated, settings).catch((err) => ({
@@ -2241,6 +2238,20 @@ app.post('/api/mt5/recalc', async (req, res) => {
     res.status(err.status || 502).json({ error: err.message, details: err.details });
   }
 });
+
+/**
+ * Recalcular → fila: niveles del plan y, si hay, Resultado/$/PnL. El store rechaza filas con candado.
+ * @returns {Promise<null | { locked: true } | { status: number, error: string }>} null si se aplicó
+ */
+async function applyRecalcToRow(id, levels, annotation) {
+  const plan = await historyStore.updatePlanLevels(id, levels);
+  if (plan.error === historyStore.LOCKED_ERROR) return { locked: true };
+  if (!plan.ok) return { status: plan.error === 'not_found' ? 404 : 400, error: plan.error };
+  if (!annotation) return null;
+  const ann = await historyStore.updateAnnotation(id, annotation);
+  if (ann.error === historyStore.LOCKED_ERROR) return { locked: true };
+  return ann.ok ? null : { status: 400, error: ann.error };
+}
 
 /** Estado real del duplicado (si existe). → { rec?, error? } */
 async function reconcileDuplicate(duplicate, settings) {
@@ -2283,7 +2294,8 @@ const mt5DuplicateInFlight = new Set();
 
 /**
  * Duplicar una operación ya enviada: segunda orden con el mismo lote y los niveles actuales de la
- * original (LIMIT si sigue pendiente, mercado si ya está abierta). Solo una vez por señal.
+ * original (LIMIT si sigue pendiente o expiró, mercado si ya está abierta). Solo una vez por señal,
+ * salvo que el duplicado anterior expirara: se reemplaza y el viejo queda en duplicateHistory.
  * Body: { historyId }.
  */
 app.post('/api/mt5/duplicate', async (req, res) => {
@@ -2295,7 +2307,9 @@ app.post('/api/mt5/duplicate', async (req, res) => {
   const key = `h${id}`;
   const sent = mt5Sent.get(profileId, key);
   if (!sent?.order) return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${label}` });
-  if (sent.duplicate) return res.status(409).json({ error: `La señal #${id} ya está duplicada` });
+  if (sent.duplicate && sent.duplicate.state !== 'expired') {
+    return res.status(409).json({ error: `La señal #${id} ya está duplicada` });
+  }
   const lockKey = `${profileId}:${key}`;
   if (mt5DuplicateInFlight.has(lockKey)) return res.status(409).json({ error: 'Ya se está duplicando esta operación' });
   mt5DuplicateInFlight.add(lockKey);
@@ -2303,8 +2317,12 @@ app.post('/api/mt5/duplicate', async (req, res) => {
     const status = await mt5.orderStatus(sent.order, settings);
     const { order, error } = mt5.buildDuplicateOrder(sent, status);
     if (!order) return res.status(409).json({ error });
-    const result = await mt5.pushOrder(order, { clientId: `${key}d` }, settings);
-    const updated = mt5Sent.update(profileId, key, { duplicate: mt5Sent.entryOf(result) });
+    const history = sent.duplicate ? [...(sent.duplicateHistory ?? []), sent.duplicate] : sent.duplicateHistory;
+    const clientId = history?.length ? `${key}d${history.length + 1}` : `${key}d`;
+    const result = await mt5.pushOrder(order, { clientId }, settings);
+    const patch = { duplicate: mt5Sent.entryOf(result) };
+    if (history) patch.duplicateHistory = history;
+    const updated = mt5Sent.update(profileId, key, patch);
     const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
     res.json({
       ok: true,

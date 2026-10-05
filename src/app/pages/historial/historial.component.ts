@@ -461,17 +461,29 @@ export class HistorialComponent implements OnInit, OnDestroy {
     return [`${label}: ${s.profit} USD${s.closeReason ? ' · cierre por ' + s.closeReason.toUpperCase() : ''}`];
   }
 
-  /** Duplicar solo una vez y mientras la operación original siga viva (pendiente/abierta o sin leer aún). */
+  /**
+   * Duplicar una vez mientras la original siga viva (pendiente/abierta o sin leer aún) o haya expirado;
+   * si el duplicado expiró, se puede volver a duplicar.
+   */
   canDuplicate(s: Mt5SentEntry): boolean {
-    return !s.duplicate && !!s.order && (!s.state || s.state === 'pending' || s.state === 'open');
+    const originalOk = !s.state || s.state === 'pending' || s.state === 'open' || s.state === 'expired';
+    return !!s.order && originalOk && (!s.duplicate || s.duplicate.state === 'expired');
+  }
+
+  duplicateTip(s: Mt5SentEntry): string {
+    if (s.state === 'expired' || s.duplicate?.state === 'expired') {
+      return 'La orden expiró: vuelve a colocar la LIMIT con el mismo lote, SL y TP';
+    }
+    return 'Abre una segunda operación en MT5 con el mismo lote, SL y TP (solo una vez)';
   }
 
   duplicateOperation(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
     const s = this.sentInfo(item);
     if (!s || !this.canDuplicate(s) || this.mt5DuplicateBusy.has(item.id) || this.rejectIfLocked(item)) return;
-    const how = s.state === 'open' ? 'a mercado' : 'como LIMIT';
-    if (!confirm(`¿Abrir una segunda operación ${s.side ?? ''} ${s.symbol ?? ''} ${how} con ${s.volume ?? '—'} lotes y el mismo SL/TP?`)) return;
+    const how = s.state === 'open' ? 'a mercado' : `como LIMIT en ${s.price ?? '—'}`;
+    const what = s.state === 'expired' || s.duplicate?.state === 'expired' ? 'La orden expiró. ¿Volver a colocar' : '¿Abrir';
+    if (!confirm(`${what} una segunda operación ${s.side ?? ''} ${s.symbol ?? ''} ${how} con ${s.volume ?? '—'} lotes y el mismo SL/TP?`)) return;
     this.mt5DuplicateBusy.add(item.id);
     this.api.mt5Duplicate(item.id).subscribe({
       next: (r) => {
@@ -1875,7 +1887,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
       '¿Recalcular la columna Probabilidad de TODO el historial?\n\n' +
         'Aplica v3: bias H1/CLI + Premium/Discount + blend Acuerdo (62/38).\n' +
         'También actualiza Tasa de acierto cuando hay datos.\n' +
-        'Es idempotente (no duplica el ajuste).'
+        'Es idempotente (no duplica el ajuste).\n' +
+        'Las filas bloqueadas (candado o días anteriores) no se modifican.'
     );
     if (!ok) return;
     this.recalcBusy = true;
@@ -1891,7 +1904,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
           this.saveHint =
             `Probabilidad actualizada: ${res.updated} filas` +
             (res.unchanged ? ` · ${res.unchanged} ya al día` : '') +
-            (res.skipped ? ` · ${res.skipped} sin score` : '');
+            (res.skipped ? ` · ${res.skipped} sin score` : '') +
+            (res.skippedLocked ? ` · ${res.skippedLocked} bloqueadas (sin cambios)` : '');
           this.load(this.page);
         },
         error: (err: unknown) => {

@@ -104,15 +104,18 @@ function buildManualOrder(body = {}, settings = mt5Settings.get()) {
   return { order };
 }
 
+const DUPLICABLE_STATES = new Set(['pending', 'open', 'expired']);
+
 /**
  * Duplicar: segunda operación con el mismo lote y Entrada/SL/TP actuales de la original
- * (LIMIT si sigue pendiente, a mercado si ya está abierta). Va como orden manual: sin chequeos de señal.
+ * (LIMIT si sigue pendiente o expiró sin ejecutarse, a mercado si ya está abierta).
+ * Va como orden manual: sin chequeos de señal.
  * @param {object} sent entrada de mt5-sent de la original
  * @param {object} status estado real de la original (puente /status)
  * @returns {{ order?: object, error?: string }}
  */
 function buildDuplicateOrder(sent = {}, status = {}) {
-  if (status.state !== 'pending' && status.state !== 'open') {
+  if (!DUPLICABLE_STATES.has(status.state)) {
     return { error: `La operación original está ${STATE_LABELS[status.state] || status.state || 'desconocida'}: no se puede duplicar` };
   }
   const side = String(sent.side || '').toUpperCase();
@@ -124,7 +127,7 @@ function buildDuplicateOrder(sent = {}, status = {}) {
   const tp = positiveNumber(status.tp) ?? positiveNumber(sent.tp);
   if (sl) order.sl = sl;
   if (tp) order.tp = tp;
-  if (status.state === 'pending') {
+  if (status.state === 'pending' || status.state === 'expired') {
     const entry = positiveNumber(status.entry) ?? positiveNumber(sent.price);
     if (!entry) return { error: 'La orden pendiente original no tiene precio de entrada' };
     Object.assign(order, { order_mode: 'limit', entry });

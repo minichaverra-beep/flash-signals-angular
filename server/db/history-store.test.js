@@ -656,6 +656,60 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
       assert.equal(again.item.effectiveLocked, false);
     });
 
+    it('recalcAllProbabilidad omite filas bloqueadas (manual y por fecha) y las cuenta', async () => {
+      const recalcable = {
+        summary: { verdict: 'OPERAR_LONG', scoreCombined: 73, confluencePct: 38, bias: 'bullish', setup: 'BREAK' },
+        flags: { bullish: true },
+        preview: 'Posición precio: **PREMIUM** (precio 84000)\nmodo **BREAK**',
+      };
+      const insert = async (iso) => {
+        if (iso) store._setClockForTests(() => new Date(iso));
+        const { id } = await store.insertSnapshot(sampleSnap(recalcable));
+        store._setClockForTests(null);
+        return id;
+      };
+      const free = await insert();
+      const manual = await insert();
+      await store.setLocked(manual, true);
+      const past = await insert(new Date(Date.now() - 3 * DAY).toISOString());
+      const overridden = await insert(new Date(Date.now() - 3 * DAY).toISOString());
+      await store.setLocked(overridden, false);
+
+      const res = await store.recalcAllProbabilidad({ force: true });
+      assert.equal(res.total, 4);
+      assert.equal(res.skippedLocked, 2);
+      assert.equal(res.updated, 2);
+
+      for (const id of [manual, past]) {
+        const row = await store.getById(id);
+        assert.equal(row.scoreCombined, 73);
+        assert.equal(row.summary.scoreCombined, 73);
+        assert.equal(row.summary.scoreRecalcVersion, undefined);
+      }
+      for (const id of [free, overridden]) {
+        const row = await store.getById(id);
+        assert.notEqual(row.scoreCombined, 73);
+        assert.ok(row.summary.scoreRecalcVersion);
+      }
+
+      await store.setLocked(manual, false);
+      const again = await store.recalcAllProbabilidad();
+      assert.equal(again.skippedLocked, 1);
+      assert.notEqual((await store.getById(manual)).scoreCombined, 73);
+    });
+
+    it('fila bloqueada: recálculo de plan y de resultado/PnL (Recalcular MT5) no la altera', async () => {
+      const id = await insertAt(new Date(Date.now() - 3 * DAY).toISOString());
+      const L = store.LOCKED_ERROR;
+      const prev = await store.getById(id);
+      assert.equal((await store.updatePlanLevels(id, { entry: 92500, sl: 91000, tp: 95000 })).error, L);
+      assert.equal((await store.updateAnnotation(id, { resultado: 'ganada', pnlUsd: 120 })).error, L);
+      const next = await store.getById(id);
+      assert.deepEqual(next.summary, prev.summary);
+      assert.equal(next.resultado, null);
+      assert.equal(next.pnlUsd, null);
+    });
+
     it('filas de hoy: solo candado manual, sin override', async () => {
       const { id } = await store.insertSnapshot(sampleSnap());
       const item = await store.getById(id);

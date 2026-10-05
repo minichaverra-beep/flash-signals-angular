@@ -1649,18 +1649,12 @@ async function recalcAllProbabilidad(opts = {}) {
       ? String(opts.market).toLowerCase()
       : null;
 
+  const cols = `id, flags_json, summary_json, preview, score_combined, ${LOCK_COLUMNS}`;
   const rows = market
-    ? e.all(
-        `SELECT id, flags_json, summary_json, preview, score_combined
-         FROM signal_history WHERE market = ? ORDER BY id ASC`,
-        [market]
-      )
-    : e.all(
-        `SELECT id, flags_json, summary_json, preview, score_combined
-         FROM signal_history ORDER BY id ASC`
-      );
+    ? e.all(`SELECT ${cols} FROM signal_history WHERE market = ? ORDER BY id ASC`, [market])
+    : e.all(`SELECT ${cols} FROM signal_history ORDER BY id ASC`);
 
-  const counts = { updated: 0, unchanged: 0, skipped: 0 };
+  const counts = { updated: 0, unchanged: 0, skipped: 0, skippedLocked: 0 };
   const samples = [];
   const ctx = { e, force, recalcSummaryProbabilidad, RECALC_VERSION };
 
@@ -1681,10 +1675,12 @@ async function recalcAllProbabilidad(opts = {}) {
 
 /**
  * Recalcula una fila del historial.
- * @returns {{ status: 'updated'|'unchanged'|'skipped', sample?: object }}
+ * Filas con candado efectivo (manual o de un día anterior) nunca se reescriben.
+ * @returns {{ status: 'updated'|'unchanged'|'skipped'|'skippedLocked', sample?: object }}
  */
 function recalcHistoryRow(ctx, row) {
   const { e, force, recalcSummaryProbabilidad, RECALC_VERSION } = ctx;
+  if (isRowLocked(row)) return { status: 'skippedLocked' };
   const summary = parseJson(row.summary_json, null);
   if (!summary || typeof summary !== 'object') return { status: 'skipped' };
   // Prefer column if summary missing score

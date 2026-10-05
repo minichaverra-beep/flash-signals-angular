@@ -3,7 +3,7 @@
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildDuplicateOrder, combineAnnotations } = require('./mt5');
+const { buildDuplicateOrder, combineAnnotations, reconcileOrder } = require('./mt5');
 
 const sent = { side: 'LONG', symbol: 'BTCUSDm', volume: 0.05, price: 60000, sl: 59500, tp: 61000 };
 
@@ -25,10 +25,36 @@ describe('buildDuplicateOrder', () => {
     assert.equal(order.volume, 0.05);
   });
 
-  it('no duplica operaciones terminadas', () => {
-    for (const state of ['closed', 'canceled', 'expired']) {
+  it('expirada → vuelve a colocar la LIMIT con los niveles conocidos del envío', () => {
+    const { order } = buildDuplicateOrder(sent, { state: 'expired', symbol: 'BTCUSDm' });
+    assert.deepEqual(order, {
+      symbol: 'BTCUSDm', side: 'LONG', volume: 0.05, manual: true,
+      sl: 59500, tp: 61000, order_mode: 'limit', entry: 60000,
+    });
+  });
+
+  it('no duplica operaciones cerradas o canceladas', () => {
+    for (const state of ['closed', 'canceled', undefined]) {
       assert.match(buildDuplicateOrder(sent, { state }).error, /no se puede duplicar/);
     }
+  });
+});
+
+describe('reconcileOrder + combineAnnotations con órdenes expiradas', () => {
+  it('expirada cuenta como no tomada', () => {
+    assert.deepEqual(reconcileOrder(sent, { state: 'expired' }).annotation, { resultado: 'no_tomada' });
+  });
+
+  it('original expirada + duplicado ganado → ganada con el PnL del duplicado', () => {
+    const main = reconcileOrder(sent, { state: 'expired' }).annotation;
+    const dup = reconcileOrder(sent, { state: 'closed', profit: 12.5 }).annotation;
+    assert.deepEqual(combineAnnotations(main, dup), { resultado: 'ganada', pnlUsd: 12.5 });
+  });
+
+  it('original y duplicado expirados → no tomada; duplicado aún pendiente → sin resultado', () => {
+    const expired = reconcileOrder(sent, { state: 'expired' }).annotation;
+    assert.deepEqual(combineAnnotations(expired, expired), { resultado: 'no_tomada' });
+    assert.equal(combineAnnotations(expired, reconcileOrder(sent, { state: 'pending' }).annotation), null);
   });
 });
 

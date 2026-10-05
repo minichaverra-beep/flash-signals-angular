@@ -207,8 +207,10 @@ export interface Mt5SentEntry {
   profit?: number | null;
   closeReason?: string | null;
   checkedAt?: string;
-  /** Segunda operación con el mismo lote (botón Duplicar; solo una por señal). */
+  /** Segunda operación con el mismo lote (botón Duplicar; solo una por señal salvo que expire). */
   duplicate?: Mt5SentEntry;
+  /** Duplicados anteriores que expiraron y se reemplazaron con otro Duplicar. */
+  duplicateHistory?: Mt5SentEntry[];
 }
 
 export interface Mt5RecalcResult {
@@ -547,6 +549,8 @@ export class SignalsApiService {
     updated: number;
     unchanged: number;
     skipped: number;
+    /** Filas con candado (manual o de un día anterior): nunca se recalculan. */
+    skippedLocked?: number;
     samples?: Array<{
       id: number;
       before: number;
@@ -561,6 +565,7 @@ export class SignalsApiService {
       updated: number;
       unchanged: number;
       skipped: number;
+      skippedLocked?: number;
       samples?: Array<{
         id: number;
         before: number;
