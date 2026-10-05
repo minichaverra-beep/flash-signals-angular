@@ -48,7 +48,7 @@ if (-not $InWindow) {
       } else {
         Write-Host "Conf secundaria: sin MT5_TERMINAL_PATH_SECUNDARIA, no se arranca su puente." -ForegroundColor DarkGray
       }
-      Write-Host "Recuerda: 'Algo Trading' debe estar activado en MetaTrader 5 para enviar órdenes." -ForegroundColor Yellow
+      Write-Host "'Algo Trading' de MT5: los puentes lo activan solos si esta apagado (MT5_AUTO_ALGO_TRADING=0 lo desactiva)." -ForegroundColor Yellow
     }
   }
   exit 0

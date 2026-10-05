@@ -9,10 +9,14 @@ SL y TP siempre van adjuntos a la orden.
 
 Solo escucha en 127.0.0.1. Cuentas REAL bloqueadas salvo MT5_ALLOW_REAL=1.
 """
+import ctypes
 import json
 import math
 import os
+import tempfile
 import time
+from contextlib import contextmanager
+from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import MetaTrader5 as mt5
@@ -25,6 +29,13 @@ ALLOW_REAL = os.environ.get("MT5_ALLOW_REAL") == "1"
 TERMINAL_PATH = os.environ.get("MT5_TERMINAL_PATH") or None
 MAGIC = int(os.environ.get("MT5_MAGIC", "260901"))
 MAX_BODY = 16 * 1024
+AUTO_ALGO_TRADING = os.environ.get("MT5_AUTO_ALGO_TRADING", "1") != "0"
+MT5_WINDOW_CLASS = "MetaQuotes::MetaTrader::5.00"
+WM_COMMAND = 0x0111
+ALGO_TRADING_COMMAND = 32851
+ALGO_MUTEX_NAME = "Local\\FlashSignalsMt5AlgoTrading"
+ALGO_TOGGLE_STAMP = os.path.join(tempfile.gettempdir(), "flash-signals-mt5-algo-toggle.stamp")
+ALGO_TOGGLE_COOLDOWN = 30.0
 
 OK_RETCODES = {
     mt5.TRADE_RETCODE_DONE,
@@ -55,6 +66,125 @@ def ensure_connected():
     ok = mt5.initialize(TERMINAL_PATH, **kwargs) if TERMINAL_PATH else mt5.initialize(**kwargs)
     if not ok:
         raise BridgeError(503, f"No se pudo conectar al terminal MT5: {mt5.last_error()}")
+    acc = mt5.account_info()
+    if acc is not None and (acc.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO or ALLOW_REAL):
+        ensure_algo_trading()
+
+
+def _trade_allowed():
+    term = mt5.terminal_info()
+    return bool(term and term.trade_allowed)
+
+
+def _wait_trade_allowed(timeout=5.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _trade_allowed():
+            return True
+        time.sleep(0.2)
+    return _trade_allowed()
+
+
+def _process_image(pid):
+    kernel32 = ctypes.windll.kernel32
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ""
+    try:
+        size = wintypes.DWORD(1024)
+        buf = ctypes.create_unicode_buffer(size.value)
+        ok = kernel32.QueryFullProcessImageNameW(wintypes.HANDLE(handle), 0, buf, ctypes.byref(size))
+        return buf.value if ok else ""
+    finally:
+        kernel32.CloseHandle(wintypes.HANDLE(handle))
+
+
+def _terminal_windows():
+    """Ventanas principales de MT5 como [(hwnd, ruta del exe)]."""
+    user32 = ctypes.windll.user32
+    found = []
+
+    def collect(hwnd, _lparam):
+        cls = ctypes.create_unicode_buffer(64)
+        user32.GetClassNameW(hwnd, cls, 64)
+        if cls.value == MT5_WINDOW_CLASS:
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            found.append((hwnd, _process_image(pid.value)))
+        return True
+
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(collect)
+    user32.EnumWindows(callback, 0)
+    return found
+
+
+def _terminal_window(term):
+    windows = _terminal_windows()
+    folder = os.path.normcase(os.path.normpath(term.path or ""))
+    for hwnd, exe in windows:
+        if exe and os.path.normcase(os.path.dirname(exe)) == folder:
+            return hwnd
+    return windows[0][0] if len(windows) == 1 else None
+
+
+@contextmanager
+def _algo_toggle_lock():
+    """Mutex con nombre compartido por los puentes: solo uno conmuta a la vez."""
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    handle = wintypes.HANDLE(kernel32.CreateMutexW(None, False, ALGO_MUTEX_NAME))
+    if not handle.value:
+        yield False
+        return
+    acquired = kernel32.WaitForSingleObject(handle, 10000) in (0, 0x80)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            kernel32.ReleaseMutex(handle)
+        kernel32.CloseHandle(handle)
+
+
+def _recent_toggle():
+    try:
+        return time.time() - os.path.getmtime(ALGO_TOGGLE_STAMP) < ALGO_TOGGLE_COOLDOWN
+    except OSError:
+        return False
+
+
+def _toggle_algo_trading():
+    """El comando es un toggle: solo se envía con el mutex tomado y tras re-comprobar que está apagado."""
+    term = mt5.terminal_info()
+    if term is None or term.trade_allowed or term.tradeapi_disabled:
+        return bool(term and term.trade_allowed)
+    if _recent_toggle():
+        return _wait_trade_allowed()
+    hwnd = _terminal_window(term)
+    if not hwnd:
+        print("[mt5-bridge] No se encontró la ventana del terminal MT5 para activar 'Algo Trading'.")
+        return False
+    with open(ALGO_TOGGLE_STAMP, "w", encoding="utf-8") as stamp:
+        stamp.write(str(os.getpid()))
+    user32 = ctypes.windll.user32
+    user32.PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+    if not user32.PostMessageW(hwnd, WM_COMMAND, ALGO_TRADING_COMMAND, 0):
+        return False
+    enabled = _wait_trade_allowed()
+    print(f"[mt5-bridge] 'Algo Trading' {'activado automáticamente' if enabled else 'no se pudo activar'}.")
+    return enabled
+
+
+def ensure_algo_trading():
+    """Activa 'Algo Trading' si está apagado (MT5_AUTO_ALGO_TRADING=0 lo desactiva). True si queda activo."""
+    if _trade_allowed():
+        return True
+    if not AUTO_ALGO_TRADING or os.name != "nt":
+        return False
+    with _algo_toggle_lock() as locked:
+        if not locked:
+            return _trade_allowed()
+        return _toggle_algo_trading()
 
 
 def account_guard():
@@ -65,8 +195,10 @@ def account_guard():
     is_demo = acc.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO
     if not is_demo and not ALLOW_REAL:
         raise BridgeError(403, "Cuenta REAL bloqueada. Define MT5_ALLOW_REAL=1 si de verdad quieres operar en real.")
-    term = mt5.terminal_info()
-    if not term.trade_allowed:
+    if not ensure_algo_trading():
+        term = mt5.terminal_info()
+        if term is not None and term.tradeapi_disabled:
+            raise BridgeError(409, "MT5 tiene desactivado el trading por la API de Python (Opciones > Asesores Expertos).")
         raise BridgeError(409, "Activa 'Algo Trading' en el terminal MT5.")
     return acc, is_demo
 
@@ -79,6 +211,9 @@ def health():
         "ok": True,
         "connected": bool(term and term.connected),
         "tradeAllowed": bool(term and term.trade_allowed),
+        "tradeApiDisabled": bool(term and term.tradeapi_disabled),
+        "accountTradeExpert": None if acc is None else bool(acc.trade_expert),
+        "autoAlgoTrading": AUTO_ALGO_TRADING,
         "account": None if acc is None else {
             "login": acc.login,
             "server": acc.server,
