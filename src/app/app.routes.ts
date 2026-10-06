@@ -1,5 +1,4 @@
 import { Routes } from '@angular/router';
-import { HomeComponent } from './pages/home/home.component';
 import { HistorialComponent } from './pages/historial/historial.component';
 import { WikiComponent } from './pages/wiki/wiki.component';
 import { PlataformaComponent } from './pages/plataforma/plataforma.component';
@@ -8,13 +7,14 @@ import { ConfiguracionComponent } from './pages/configuracion/configuracion.comp
 
 export const routes: Routes = [
   { path: '', component: PlataformaComponent },
-  { path: 'senales', component: HomeComponent },
+  /** Señales: formulario de corrida + historial local en una sola página. */
+  { path: 'senales', component: HistorialComponent },
+  { path: 'historial', redirectTo: 'senales' },
   { path: 'plataforma', redirectTo: '' },
   { path: 'macd-quant', component: MacdQuantComponent },
   { path: 'quantum', redirectTo: 'macd-quant' },
   { path: 'colombia', redirectTo: '' },
   { path: 'mercado', redirectTo: '' },
-  { path: 'historial', component: HistorialComponent },
   { path: 'wiki', component: WikiComponent },
   { path: 'artefactos', redirectTo: 'wiki' },
   { path: 'configuracion', component: ConfiguracionComponent },

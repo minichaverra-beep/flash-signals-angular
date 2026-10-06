@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import {
@@ -55,6 +55,10 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
 
   health: Mt5Health | null = null;
   testing = false;
+
+  /** Perfil cuyo borrador espera confirmación para activar reversiones. */
+  reversalConfirm: Mt5ProfileId | null = null;
+  private reversalTrigger: HTMLElement | null = null;
 
   ngOnInit(): void {
     this.load();
@@ -117,6 +121,44 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     });
   }
 
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    if (this.reversalConfirm) this.cancelReversals();
+  }
+
+  /** Activar pide confirmación; desactivar es inmediato. */
+  toggleReversals(): void {
+    const d = this.draft;
+    if (!d) return;
+    if (d.form.reversalsEnabled) {
+      d.form.reversalsEnabled = false;
+      return;
+    }
+    this.reversalTrigger = document.activeElement as HTMLElement | null;
+    this.reversalConfirm = this.editing;
+  }
+
+  confirmReversals(): void {
+    const d = this.reversalConfirm ? this.drafts[this.reversalConfirm] : null;
+    if (d) d.form.reversalsEnabled = true;
+    this.closeReversalConfirm();
+  }
+
+  cancelReversals(): void {
+    this.closeReversalConfirm();
+  }
+
+  noLimitsWarning(f: Mt5Settings): string {
+    const missing = [!f.maxTradesPerDay && 'operaciones', !f.maxDailyDrawdownPct && 'drawdown'].filter(Boolean);
+    return `⚠ Sin límite diario de ${missing.join(' ni de ')} configurado.`;
+  }
+
+  private closeReversalConfirm(): void {
+    this.reversalConfirm = null;
+    this.reversalTrigger?.focus();
+    this.reversalTrigger = null;
+  }
+
   copyFromOther(): void {
     const other = this.state?.profiles[this.otherProfile];
     const current = this.draft;
@@ -152,6 +194,9 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       expiryMinutes: f.expiryMinutes,
       deviationPoints: f.deviationPoints,
       allowMultiple: f.allowMultiple,
+      reversalsEnabled: f.reversalsEnabled,
+      maxTradesPerDay: f.maxTradesPerDay,
+      maxDailyDrawdownPct: f.maxDailyDrawdownPct,
       extraSlPips: f.extraSlPips,
       extraTpPips: f.extraTpPips,
       pipSize: { ...f.pipSize },

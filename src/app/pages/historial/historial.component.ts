@@ -48,6 +48,7 @@ import {
 } from './historial-export';
 import { isAutoLocked, isEffectivelyLocked, isPastDay } from './historial-lock';
 import { SignalJobService, jobKind } from '../../services/signal-job.service';
+import { SignalRunFormComponent } from '../../shared/signal-run-form.component';
 import { Subscription } from 'rxjs';
 
 export type ExportFormat = 'excel' | 'pdf';
@@ -136,7 +137,7 @@ function lockFields(u: HistoryListItem): Partial<HistoryListItem> {
 @Component({
   selector: 'app-historial',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, SignalReportViewerComponent],
+  imports: [CommonModule, RouterLink, RouterLinkActive, SignalReportViewerComponent, SignalRunFormComponent],
   templateUrl: './historial.component.html',
   styleUrl: './historial.component.scss',
 })
@@ -144,6 +145,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
   private readonly jobs = inject(SignalJobService);
   private finishedSub?: Subscription;
+  /** Tras terminar una corrida: bajar a la tabla cuando llegue la lista recargada. */
+  private scrollToListAfterLoad = false;
   /** Limpia el listener de cierre outside-click (fase capture). */
   private removeDocClickClose?: () => void;
 
@@ -283,9 +286,11 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.loadTags();
     this.loadConfluencias();
     this.load();
-    // Señal terminada mientras se mira el historial → nueva fila sin recargar.
+    // Señal terminada (formulario de arriba) → recarga lista + envíos MT5 y baja a la tabla.
     this.finishedSub = this.jobs.finished$.subscribe((j) => {
-      if (jobKind(j) === 'signal') this.load(1);
+      if (jobKind(j) !== 'signal') return;
+      this.scrollToListAfterLoad = j.status === 'done';
+      this.load(1);
     });
     // Capture: celdas vecinas / card-annotate hacen stopPropagation y el bubble
     // no llega a document; sin capture Confluencias (multi-select) queda abierta.
@@ -373,6 +378,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
           this.loading = false;
           this.loadMetricsDataset();
           this.loadMt5Sent();
+          if (this.scrollToListAfterLoad) {
+            this.scrollToListAfterLoad = false;
+            setTimeout(() => this.scrollToList(), 0);
+          }
         },
         error: (err: unknown) => {
           this.loading = false;
@@ -380,6 +389,13 @@ export class HistorialComponent implements OnInit, OnDestroy {
           this.error = this.errMsg(err, 'No se pudo cargar el historial. ¿API en :3847?');
         },
       });
+  }
+
+  private scrollToList(): void {
+    const el = document.getElementById('sec-historial');
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   }
 
   private loadMt5Sent(): void {

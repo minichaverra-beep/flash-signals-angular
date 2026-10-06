@@ -2319,7 +2319,7 @@ app.post('/api/mt5/duplicate', async (req, res) => {
     if (!order) return res.status(409).json({ error });
     const history = sent.duplicate ? [...(sent.duplicateHistory ?? []), sent.duplicate] : sent.duplicateHistory;
     const clientId = history?.length ? `${key}d${history.length + 1}` : `${key}d`;
-    const result = await mt5.pushOrder(order, { clientId }, settings);
+    const result = await mt5.pushDuplicateOrder(order, { clientId }, settings);
     const patch = { duplicate: mt5Sent.entryOf(result) };
     if (history) patch.duplicateHistory = history;
     const updated = mt5Sent.update(profileId, key, patch);

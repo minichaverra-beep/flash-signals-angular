@@ -18,11 +18,11 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 3. PNG de gráfico **solo** vía API (`/api/signals/chart`).
 4. API pensada para **localhost** (`BIND_HOST=127.0.0.1` por defecto). No publicar a Internet.
 5. **No commit** de secretos (`.env`, tokens, credenciales).
-6. Branding: *Flash Signals · fire & shadow*, crédito **Danilo Chaverra**, `src/assets/logo.png`.
+6. Branding: *Flash Signals · fuego y sombra*, crédito **Danilo Chaverra**, `src/assets/logo.png`.
 
 ## Stack técnico
 
-- Angular 19 (`src/app/pages/home`, `src/app/services/signals-api.service.ts`) — `ng serve` en **:4400**
+- Angular 19 (`src/app/pages/historial` = página `/senales`, `src/app/shared/signal-run-form.component.ts`, `src/app/services/signals-api.service.ts`) — `ng serve` en **:4400**
 - Express 5 CommonJS en `server/` (deps en `server/package.json`) — API en **:3847**
 - Scripts host: `run-api.ps1`, `run-local-web.ps1`
 - Cursor/VS Code: `.vscode/launch.json` compound **API + Web** (F5, hot reload)
@@ -31,7 +31,7 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 ## UI
 
 - Tabs: **Modo Trader** (técnico) · **Modo Inversor** (simple) · **Cómo usar**
-- Ruta **`/historial`**: historial de corridas (caja local SQLite)
+- Ruta **`/senales`**: formulario de corrida + historial de corridas (caja local SQLite) en una sola página; `/historial` redirige aquí
 - Ruta **`/wiki`** (alias `/artefactos`): wiki de artefactos Cursor AI en `docs/Artifacts`
 - Cards colapsables compartidas en `src/app/shared/signal-report-viewer`
 

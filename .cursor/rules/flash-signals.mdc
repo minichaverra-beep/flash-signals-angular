@@ -11,7 +11,7 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 
 - **No usa Cursor AI** para generar señales.
 - **No inventar** veredictos, planes, scores ni charts: solo invocar `.ps1` del trading stack y mostrar el resultado o el **error real**.
-- Crédito / branding: *Flash Signals · fire & shadow*, **Danilo Chaverra**, logo `src/assets/logo.png`.
+- Crédito / branding: *Flash Signals · fuego y sombra*, **Danilo Chaverra**, logo `src/assets/logo.png`.
 
 ## Stack
 
@@ -27,7 +27,7 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 | Modo Trader | Vista técnica: veredicto, plan, setup, scores, checklists, volumen, gráfico |
 | Modo Inversor | Vista simplificada: decisión, plan, riesgo, scores en lenguaje claro |
 | Cómo usar | Guía rápida (visible sin haber corrido señal) |
-| `/historial` | Historial local (SQLite hive box): lista + drawer detalle Trader/Inversor |
+| `/senales` | Página única (`HistorialComponent`): `app-signal-run-form` (formulario + estado del job) arriba y, debajo, historial local (SQLite hive box) con drawer detalle Trader/Inversor y Run operation. `/historial` redirige a `/senales`; al terminar una corrida la lista se recarga en la misma página |
 | `/wiki` | Wiki de artefactos Cursor AI (`docs/Artifacts`): sidebar + preview |
 
 - Cards colapsables (`<details>`) vía `app-signal-report-viewer` compartido.

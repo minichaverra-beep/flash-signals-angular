@@ -3,7 +3,7 @@
     <div class="brand">
       <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
-        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Configuración</h1>
         <p class="sub hide-on-phone">Variables para ejecutar señales en MetaTrader 5</p>
       </div>
@@ -11,7 +11,6 @@
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
       <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
@@ -214,6 +213,55 @@
       </section>
 
       <section class="panel">
+        <h2>Gestión de riesgo diaria</h2>
+        <div class="switch-row">
+          <button
+            type="button"
+            class="switch"
+            role="switch"
+            [class.on]="d.form.reversalsEnabled"
+            [attr.aria-checked]="d.form.reversalsEnabled"
+            aria-labelledby="cfg-reversals-label"
+            (click)="toggleReversals()"
+          >
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+          <span
+            id="cfg-reversals-label"
+            class="has-tip"
+            tabindex="0"
+            data-tooltip="Las señales de reversión tienen aprox. un 25 % de probabilidad de acierto. Desactivadas, no se envían a MT5."
+          >Activar reversiones ⓘ</span>
+          <small class="switch-state" [class.on]="d.form.reversalsEnabled" aria-hidden="true">
+            {{ d.form.reversalsEnabled ? 'Activadas' : 'Desactivadas' }}
+          </small>
+        </div>
+        <div class="reversal-warning" *ngIf="d.form.reversalsEnabled" role="note">
+          <p class="reversal-warning-title">⚠ Reversiones activadas en {{ label(editing) }}</p>
+          <ul>
+            <li>Las señales de reversión tienen solo aprox. un <strong>25 % de probabilidad de acierto</strong>.</li>
+            <li>Las señales con setup <strong>REVERSE</strong> se enviarán a MT5 (también desde Run operation).</li>
+            <li>Configura los límites diarios de operaciones y de drawdown para acotar las rachas de pérdidas.</li>
+          </ul>
+          <p class="reversal-warning-alert" *ngIf="!d.form.maxTradesPerDay || !d.form.maxDailyDrawdownPct">
+            {{ noLimitsWarning(d.form) }}
+          </p>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="cfg-max-trades">Límite de operaciones por día</label>
+            <input id="cfg-max-trades" name="maxTradesPerDay" type="number" min="0" max="100" step="1" [(ngModel)]="d.form.maxTradesPerDay" />
+            <small class="muted">0 = sin límite. Cuenta las entradas de hoy y las órdenes pendientes abiertas hoy.</small>
+          </div>
+          <div class="field">
+            <label for="cfg-max-dd">Límite de drawdown de hoy (%)</label>
+            <input id="cfg-max-dd" name="maxDailyDrawdownPct" type="number" min="0" max="100" step="0.5" [(ngModel)]="d.form.maxDailyDrawdownPct" />
+            <small class="muted">0 = sin límite. Pérdida de hoy (cerrada + flotante) sobre el balance al inicio del día.</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
         <div class="actions">
           <button class="primary" type="submit" [disabled]="saving">
             <span class="spinner" *ngIf="saving" aria-hidden="true"></span>
@@ -230,6 +278,47 @@
       </section>
     </form>
   </ng-container>
+
+  <!-- Confirmación al activar reversiones -->
+  <button
+    type="button"
+    class="unlock-backdrop"
+    *ngIf="reversalConfirm"
+    aria-label="Cancelar activación de reversiones"
+    (click)="cancelReversals()"
+  ></button>
+  <dialog
+    open
+    class="unlock-dialog reversal-dialog"
+    *ngIf="reversalConfirm as profile"
+    aria-modal="true"
+    aria-labelledby="reversal-dialog-title"
+  >
+    <p class="eyebrow">Gestión de riesgo · {{ label(profile) }}</p>
+    <h2 id="reversal-dialog-title">¿Activar reversiones?</h2>
+    <ul class="reversal-dialog-list">
+      <li>
+        Las señales de reversión tienen solo aprox. un <strong>25 % de probabilidad de acierto</strong>: operan
+        contra la tendencia y la estructura del mercado.
+      </li>
+      <li>
+        Se enviarán a MT5 también las señales con setup <strong>REVERSE</strong>, incluso desde Run operation.
+      </li>
+      <li>Mayor riesgo de rachas de pérdidas y de drawdown en la cuenta.</li>
+      <li>
+        Recomendado: configura el <strong>límite de operaciones por día</strong> y el
+        <strong>límite de drawdown de hoy</strong> en esta misma sección.
+      </li>
+    </ul>
+    <p class="muted tiny">
+      El cambio se aplica solo al perfil <strong>{{ label(profile) }}</strong> y no tendrá efecto hasta que pulses
+      Guardar.
+    </p>
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="cancelReversals()" autofocus>Cancelar</button>
+      <button type="button" class="reversal-confirm-btn" (click)="confirmReversals()">Activar reversiones</button>
+    </div>
+  </dialog>
 
   <p class="msg toast" *ngIf="message" [class.err]="messageErr" aria-live="polite">{{ message }}</p>
 </div>

@@ -3,19 +3,22 @@
     <div class="brand">
       <a routerLink="/" class="logo-link" aria-label="Ir al inicio"><img class="logo" src="assets/logo.png" alt="Flash Signals" width="72" height="72" /></a>
       <div>
-        <p class="eyebrow hide-on-phone">Flash Signals · fire &amp; shadow</p>
-        <h1>Historial</h1>
-        <p class="sub hide-on-phone">Caja local (SQLite embebido) — solo corridas reales del pipeline</p>
+        <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
+        <h1>Señales de trading</h1>
+        <p class="sub hide-on-phone">Creado por: Danilo Chaverra</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
       <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/historial" routerLinkActive="active"><span class="nav-long">Historial</span><span class="nav-short">Hist</span></a>
       <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
+
+  <app-signal-run-form />
+
+  <h2 id="sec-historial" class="section-title">Historial</h2>
 
   <div class="toolbar sticky">
     <fieldset class="seg filters" aria-label="Filtro mercado">
@@ -63,11 +66,11 @@
   <section class="panel empty" *ngIf="!loading && !items.length && !calcMarkers.length && !error">
     <h2>Sin entradas aún</h2>
     <p class="muted hide-on-phone">
-      Ejecuta una señal desde <a routerLink="/senales">Señales</a>. Al terminar el job,
+      Ejecuta una señal con «Configurar corrida» (arriba). Al terminar el job,
       el snapshot se guarda aquí automáticamente (hive box local).
     </p>
     <p class="muted phone-only">
-      Ejecuta una señal desde <a routerLink="/senales">Señales</a> para verla aquí.
+      Ejecuta una señal (arriba) para verla aquí.
     </p>
   </section>
 

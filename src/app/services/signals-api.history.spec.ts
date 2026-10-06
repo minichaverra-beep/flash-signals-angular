@@ -1,6 +1,6 @@
 /**
  * Spec ligera: construcción de params de historyList (sin TestBed/HTTP real).
- * Valida el contrato de query que usa la página /historial.
+ * Valida el contrato de query que usa el historial de la página /senales.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

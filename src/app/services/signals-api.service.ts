@@ -259,6 +259,11 @@ export interface Mt5Settings {
   expiryMinutes: number;
   deviationPoints: number;
   allowMultiple: boolean;
+  /** Señales con setup REVERSE (por defecto desactivadas). */
+  reversalsEnabled: boolean;
+  /** Límites diarios; 0 = sin límite. */
+  maxTradesPerDay: number;
+  maxDailyDrawdownPct: number;
   /** Margen extra sobre SL/TP de la señal, en pips. */
   extraSlPips: number;
   extraTpPips: number;

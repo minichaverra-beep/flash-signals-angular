@@ -45,6 +45,14 @@ describe('buildOrderFromSummary', () => {
     assert.deepEqual(order, { symbol: 'US30m', side: 'LONG', entry: 51677, sl: 51617, tp: 51797 });
   });
 
+  it('reversiones desactivadas por defecto: setup REVERSE no se envía salvo reversalsEnabled', () => {
+    const summary = { ...plan('51677', '51617', '51797'), setup: 'REVERSE' };
+    const settings = { symbols: { us30: 'US30m' } };
+    assert.match(buildOrderFromSummary('us30', summary, settings).skip, /reversiones están desactivadas/);
+    assert.equal(buildOrderFromSummary('us30', summary, { ...settings, reversalsEnabled: true }).order.side, 'LONG');
+    assert.ok(buildOrderFromSummary('us30', { ...summary, setup: 'BREAK' }, settings).order);
+  });
+
   it('descarta planes incoherentes o incompletos', () => {
     assert.match(buildOrderFromSummary('us30', plan('51677', '51700', '51797')).skip, /incoherente/);
     assert.match(buildOrderFromSummary('us30', plan('51677', null, '51797')).skip, /Entry\/SL\/TP/);

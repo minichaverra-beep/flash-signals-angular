@@ -88,6 +88,219 @@
   cursor: pointer;
 }
 
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.6rem;
+  height: 1.45rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-deep);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.switch:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.18rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transform: translateY(-50%);
+  transition: left 0.18s ease, background 0.18s ease;
+}
+
+.switch.on {
+  border-color: color-mix(in srgb, var(--gold) 70%, transparent);
+  background: color-mix(in srgb, var(--gold) 30%, var(--panel-deep));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 30%, transparent);
+}
+
+.switch.on .switch-thumb {
+  left: calc(100% - 1.05rem - 0.18rem);
+  background: var(--gold);
+}
+
+.switch-state {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.switch-state.on {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch-thumb {
+    transition: none;
+  }
+}
+
+.reversal-warning {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-left: 4px solid var(--warn);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.reversal-warning p {
+  margin: 0;
+}
+
+.reversal-warning-title {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.reversal-warning ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+}
+
+.reversal-warning-alert {
+  margin-top: 0.45rem !important;
+  color: color-mix(in srgb, var(--fire) 80%, white);
+  font-weight: 700;
+}
+
+.unlock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background: color-mix(in srgb, black 70%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.unlock-dialog {
+  position: fixed;
+  z-index: 95;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  margin: 0;
+  color: inherit;
+  padding: 1.25rem 1.35rem 1.35rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+}
+
+.unlock-dialog h2 {
+  margin: 0.15rem 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.unlock-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.unlock-actions button {
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+.reversal-dialog {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.reversal-dialog-list {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.9rem 0.7rem 1.9rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.reversal-dialog-list li + li {
+  margin-top: 0.35rem;
+}
+
+.unlock-actions .reversal-confirm-btn {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.unlock-actions .reversal-confirm-btn:hover {
+  background: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
+.has-tip {
+  position: relative;
+  cursor: help;
+}
+
+.has-tip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.45rem);
+  z-index: 40;
+  width: max-content;
+  max-width: min(22rem, 70vw);
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  background: color-mix(in srgb, #1a1210 92%, black);
+  color: color-mix(in srgb, var(--text) 92%, white);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.has-tip:hover::after,
+.has-tip:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .seg,
 .actions {
   display: flex;

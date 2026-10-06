@@ -38,6 +38,11 @@ function defaults() {
     expiryMinutes: envNumber('MT5_EXPIRY_MINUTES') ?? 0,
     deviationPoints: 20,
     allowMultiple: false,
+    /** Señales con setup REVERSE: desactivadas salvo que se activen (~25 % de probabilidad). */
+    reversalsEnabled: false,
+    /** Límites diarios (día local); 0 = sin límite. */
+    maxTradesPerDay: 0,
+    maxDailyDrawdownPct: 0,
     /** Margen extra sobre el SL/TP de la señal, en pips (0 = niveles exactos de la señal). */
     extraSlPips: 30,
     extraTpPips: 30,
@@ -69,6 +74,8 @@ const NUMBER_FIELDS = {
   deviationPoints: { min: 1, max: 1000, integer: true },
   extraSlPips: { min: 0, max: 10000 },
   extraTpPips: { min: 0, max: 10000 },
+  maxTradesPerDay: { min: 0, max: 100, integer: true },
+  maxDailyDrawdownPct: { min: 0, max: 100 },
 };
 
 function validateBridgeUrl(errors, raw) {
@@ -126,6 +133,11 @@ const FIELD_VALIDATORS = {
   allowMultiple(errors, raw) {
     if (typeof raw === 'boolean') return raw;
     errors.push('allowMultiple: true/false');
+    return undefined;
+  },
+  reversalsEnabled(errors, raw) {
+    if (typeof raw === 'boolean') return raw;
+    errors.push('reversalsEnabled: true/false');
     return undefined;
   },
   ...Object.fromEntries(

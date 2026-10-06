@@ -19,6 +19,8 @@ function tradeDefaults(settings) {
     expiry_minutes: settings.expiryMinutes,
     deviation_points: settings.deviationPoints,
     allow_multiple: settings.allowMultiple,
+    max_trades_per_day: settings.maxTradesPerDay || undefined,
+    max_daily_dd_pct: settings.maxDailyDrawdownPct || undefined,
   };
 }
 
@@ -38,6 +40,9 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { 
   if (!summary) return { skip: 'Sin resumen de señal' };
   if (!anyVerdict && !/entrar/i.test(String(summary.verdict || ''))) {
     return { skip: `Veredicto "${summary.verdict || 'n/d'}": no se envía orden` };
+  }
+  if (!settings.reversalsEnabled && /revers/i.test(String(summary.setup || ''))) {
+    return { skip: 'Señal de reversión: las reversiones están desactivadas en Configuración' };
   }
   const symbol = symbolFor(market, settings);
   if (!symbol) return { skip: `Mercado ${market} sin símbolo MT5` };
@@ -285,6 +290,11 @@ function pushOrder(order, { clientId, ...overrides } = {}, settings = mt5Setting
   );
 }
 
+/** Duplicar no está sujeto a los límites diarios (nº de operaciones / drawdown) del perfil. */
+function pushDuplicateOrder(order, overrides = {}, settings = mt5Settings.get()) {
+  return pushOrder(order, { ...overrides, max_trades_per_day: undefined, max_daily_dd_pct: undefined }, settings);
+}
+
 module.exports = {
   brokerFeedEnv,
   buildDuplicateOrder,
@@ -295,6 +305,7 @@ module.exports = {
   historyDeals,
   orderStatus,
   padStops,
+  pushDuplicateOrder,
   pushOrder,
   reconcileOrder,
   symbolFor,

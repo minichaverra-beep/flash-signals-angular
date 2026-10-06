@@ -275,6 +275,45 @@ def calc_volume(symbol, info, is_long, price, sl, equity, volume, risk_pct):
     return info.volume_min, note
 
 
+def local_day_start():
+    """Epoch UTC de las 00:00 locales de hoy (el día de trading es el del PC)."""
+    lt = time.localtime()
+    return int(time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1)))
+
+
+def daily_limits_guard(acc, max_trades, max_dd_pct):
+    """Operaciones de hoy (entradas con nuestro magic + pendientes vivas) y drawdown de hoy de la cuenta."""
+    if not max_trades and not max_dd_pct:
+        return
+    offset, _ = server_offset()
+    day_from = local_day_start() + offset
+    deals = mt5.history_deals_get(day_from, int(time.time()) + offset + DEALS_MARGIN_SEC)
+    if deals is None:
+        raise BridgeError(502, f"history_deals_get falló: {mt5.last_error()}")
+    deals = [d for d in deals if d.time >= day_from and d.type in (mt5.DEAL_TYPE_BUY, mt5.DEAL_TYPE_SELL)]
+
+    if max_trades:
+        entries = sum(1 for d in deals if d.magic == MAGIC and d.entry == mt5.DEAL_ENTRY_IN)
+        pending = sum(1 for o in (mt5.orders_get() or ()) if o.magic == MAGIC and o.time_setup >= day_from)
+        if entries + pending >= max_trades:
+            raise BridgeError(
+                409,
+                f"Límite diario alcanzado: {entries + pending} operaciones hoy (máx {max_trades}). "
+                "Sube el límite en Configuración o espera a mañana.",
+            )
+
+    if max_dd_pct:
+        realized = sum(d.profit + d.commission + d.swap + getattr(d, "fee", 0.0) for d in deals)
+        floating = acc.equity - acc.balance
+        start = acc.balance - realized
+        dd_pct = max(0.0, -(realized + floating)) / start * 100.0 if start > 0 else 0.0
+        if dd_pct >= max_dd_pct:
+            raise BridgeError(
+                409,
+                f"Drawdown de hoy {dd_pct:.2f} % (máx {max_dd_pct:g} %): no se abren más operaciones hoy.",
+            )
+
+
 def require_margin(symbol, is_long, price, volume):
     """El lote del riesgo configurado nunca se reduce: sin margen libre suficiente la orden no se envía."""
     acc = mt5.account_info()
@@ -404,6 +443,20 @@ def place_order(payload):
     return place_signal(payload, symbol, side)
 
 
+def limit_value(payload, key):
+    """Límite opcional ≥ 0 (0 o ausente = sin límite)."""
+    raw = payload.get(key)
+    if raw in (None, ""):
+        return 0.0
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise BridgeError(400, f"'{key}' debe ser un número ≥ 0") from None
+    if not math.isfinite(value) or value < 0:
+        raise BridgeError(400, f"'{key}' debe ser un número ≥ 0")
+    return value
+
+
 def order_options(payload):
     """Opciones comunes a orden de señal y manual (con sus valores por defecto)."""
     return {
@@ -412,6 +465,8 @@ def order_options(payload):
         "deviation": int(num(payload, "deviation_points", required=False) or 20),
         "expiry_minutes": int(payload.get("expiry_minutes") or 0),
         "dry_run": bool(payload.get("dry_run")),
+        "max_trades_per_day": int(limit_value(payload, "max_trades_per_day")),
+        "max_daily_dd_pct": limit_value(payload, "max_daily_dd_pct"),
         "client_id": str(payload.get("client_id") or "")[:24],
     }
 
@@ -450,6 +505,7 @@ def place_signal(payload, symbol, side):
         raise BridgeError(422, "LONG requiere SL < entry < TP" if is_long else "SHORT requiere TP < entry < SL")
 
     acc, is_demo = account_guard()
+    daily_limits_guard(acc, opts["max_trades_per_day"], opts["max_daily_dd_pct"])
     info, tick = symbol_quote(symbol, require_tradeable=True)
 
     market_price = tick.ask if is_long else tick.bid
@@ -532,6 +588,7 @@ def place_manual(payload, symbol, side, order_mode):
     is_long = side == "LONG"
 
     acc, is_demo = account_guard()
+    daily_limits_guard(acc, opts["max_trades_per_day"], opts["max_daily_dd_pct"])
     info, tick = symbol_quote(symbol)
 
     market_price = tick.ask if is_long else tick.bid

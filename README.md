@@ -3,7 +3,7 @@
 UI local (Angular 19 + API Express) para orquestar señales **BTC / US30** del stack real **Cursor Trading**.
 
 - **No usa Cursor AI** ni inventa señales: solo invoca los `.ps1` del repo trading y muestra el resultado (o el error real).
-- Branding *fire & shadow*, crédito **Danilo Chaverra**, logo en `src/assets/logo.png`.
+- Branding *fuego y sombra*, crédito **Danilo Chaverra**, logo en `src/assets/logo.png`.
 
 ## Rutas
 
@@ -171,7 +171,7 @@ En `docker-compose.arm.yml` se fija `platform: linux/arm64` para los servicios.
 Resumen para agentes:
 
 - Arquitectura UI **Trader / Inversor / Cómo usar**; no inventar señales.
-- Gráficos PNG solo vía API; API localhost; branding Danilo / fire & shadow.
+- Gráficos PNG solo vía API; API localhost; branding Danilo / fuego y sombra.
 - No commit de secretos; stack Express + Angular 19.
 - Docker = UI sin Node; pipeline PowerShell→Python suele necesitar `run-api.ps1` en Windows.
 
@@ -182,7 +182,7 @@ Resumen para agentes:
 | **Modo Trader** | Vista técnica: veredicto, plan, setup, scores, checklists, gráfico |
 | **Modo Inversor** | Vista simplificada: decisión, plan, riesgo y scores en lenguaje claro |
 | **Cómo usar** | Guía rápida (visible sin haber corrido una señal) |
-| **Historial** (`/historial`) | Lista de corridas guardadas en la **caja local** SQLite |
+| **Señales** (`/senales`) | Una sola página: formulario «Configurar corrida» + estado del job arriba y, debajo, el historial de corridas de la **caja local** SQLite (`/historial` redirige aquí) |
 | **Wiki** (`/wiki`) | Artefactos Cursor AI en `docs/Artifacts` (MD/HTML/IMG/PDF) |
 
 ## Historial local (hive box / embedded store)
@@ -223,7 +223,7 @@ Cómo añadir: copia el archivo a `docs/Artifacts` (o subcarpeta) → abre `/wik
 - **Cards colapsables** (`<details>`) para veredicto, plan, setup, scores, checklists, gráfico, etc. (compartidas vía `app-signal-report-viewer`)
 - **Gráfico PNG** vía `GET /api/signals/chart?market=btc|us30` (abre en pestaña nueva desde la card «Gráfico»)
 - **Crédito** en el header: *Creado por: Danilo Chaverra*
-- **Branding** *Flash Signals · fire & shadow* + logo (`assets/logo.png`, también favicon)
+- **Branding** *Flash Signals · fuego y sombra* + logo (`assets/logo.png`, también favicon)
 - Formulario: mercado BTC/US30, tiers Context / Light / High / History, flags (Bullish/Bearish, Break/Reverse, ML, Neural, Ilustrate, Advanced, Entry en High)
 - Recarga del último reporte live sin volver a ejecutar
 - **Historial**: filtro BTC/US30, fechas relativas+absolutas, badges de veredicto, drawer de detalle con Modo Trader/Inversor
@@ -278,7 +278,7 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 - Lotaje por riesgo: `equity × MT5_RISK_PCT %` / pérdida hasta el SL (o `MT5_VOLUME` fijo).
 - Bloqueos: cuenta REAL (salvo `MT5_ALLOW_REAL=1`), precio broker a más de `MT5_MAX_DEVIATION_PCT` % de la entrada, precio ya fuera de SL/TP, posición/orden abierta del mismo magic en el símbolo, misma señal enviada dos veces.
 
-**Run operation** (`/historial`, vista detallada): única vía de ejecución desde la UI. Solo la **última señal** y hasta **30 min** después de terminar (validado también en la API). Vista previa (dry-run) → *Confirmar y enviar*; color del botón según veredicto (NO OPERAR rojo, ESPERAR amarillo, resto verde). Una sola vez por señal y perfil (`data/mt5-sent.json`).
+**Run operation** (historial de `/senales`, vista detallada): única vía de ejecución desde la UI. Solo la **última señal** y hasta **30 min** después de terminar (validado también en la API). Vista previa (dry-run) → *Confirmar y enviar*; color del botón según veredicto (NO OPERAR rojo, ESPERAR amarillo, resto verde). Una sola vez por señal y perfil (`data/mt5-sent.json`).
 
 **Operación manual** (solo API, `POST /api/mt5/manual`): dirección, tipo (mercado / limit / stop), entrada, SL/TP opcionales y lotes (o riesgo % si hay SL). Ignora los chequeos de señal; token, bloqueo de cuenta REAL y Algo Trading siguen aplicando.
 
@@ -324,8 +324,8 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 
 ```
 flash-signals-angular/
-  src/app/pages/home/         # UI señales (tabs Trader / Inversor / Guía)
-  src/app/pages/historial/    # Historial local (/historial)
+  src/app/pages/historial/    # Página /senales: formulario de corrida + historial local
+  src/app/shared/signal-run-form.component.*  # «Configurar corrida» + estado del job
   src/app/pages/wiki/         # Wiki de artefactos (/wiki)
   src/app/shared/             # Report viewer compartido
   src/app/services/           # Cliente HTTP → /api

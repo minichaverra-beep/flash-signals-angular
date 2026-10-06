@@ -37,7 +37,7 @@ export class PlataformaComponent {
     'Define bias y setup; activa ML / Neural si quieres capas extra.',
     'Ejecuta la señal: el pipeline real corre en tu máquina (PowerShell → Python).',
     'Lee el reporte en Vista rápida, Detallada o Modo Inversor.',
-    'Revisa el Historial local o la Wiki de artefactos cuando necesites contexto.',
+    'Revisa el historial local (debajo, en Señales) o la Wiki de artefactos cuando necesites contexto.',
   ] as const;
 
   readonly trust = [

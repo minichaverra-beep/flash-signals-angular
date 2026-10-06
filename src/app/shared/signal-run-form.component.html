@@ -1,0 +1,82 @@
+<section id="sec-config" class="panel form">
+  <h2>Configurar corrida</h2>
+
+  <div class="run-grid">
+    <div class="field">
+      <label>Mercado</label>
+      <div class="seg">
+        <button
+          type="button"
+          *ngFor="let m of markets"
+          [class.active]="market === m.id"
+          (click)="market = m.id"
+        >{{ m.label }}</button>
+      </div>
+    </div>
+
+    <div class="field" [class.dim]="flagsDisabled">
+      <label>Bias</label>
+      <select
+        [(ngModel)]="bias"
+        [disabled]="flagsDisabled"
+        [ngClass]="'bias-' + (bias === 'auto' ? 'auto' : bias)"
+      >
+        <option value="auto">AUTO (sin forzar)</option>
+        <option value="bullish">Bullish</option>
+        <option value="bearish">Bearish</option>
+      </select>
+    </div>
+    <div class="field" [class.dim]="highOnlyDisabled">
+      <label>Setup</label>
+      <select [(ngModel)]="setup" [disabled]="highOnlyDisabled">
+        <option value="break">Break</option>
+        <option
+          value="reverse"
+          [disabled]="reversalsDisabled"
+          [attr.title]="reversalsDisabled ? 'Activa las reversiones en Configuración para usar este setup' : null"
+        >{{ reversalsDisabled ? 'Reverse (desactivado)' : 'Reverse' }}</option>
+      </select>
+      <p class="muted tiny setup-note" *ngIf="reversalsDisabled">
+        Reversiones desactivadas · <a routerLink="/configuracion">activar en Configuración</a>
+      </p>
+    </div>
+    <div class="field" [class.dim]="flagsDisabled">
+      <label>Capas</label>
+      <div class="flags">
+        <label><input type="checkbox" [(ngModel)]="ml" [disabled]="flagsDisabled" /> ML</label>
+        <label><input type="checkbox" [(ngModel)]="neural" [disabled]="flagsDisabled" /> Neural</label>
+      </div>
+    </div>
+
+    <div class="field actions">
+      <button class="primary" type="button" (click)="run()" [disabled]="busy || apiOk === false">
+        <span class="spinner" *ngIf="busy" aria-hidden="true"></span>
+        {{ runLabel }}
+      </button>
+    </div>
+  </div>
+
+  <div class="field" style="display: none">
+    <label>Entry usuario (solo High)</label>
+    <input
+      type="text"
+      [(ngModel)]="entry"
+      placeholder="ej. 97450.5"
+      [disabled]="entryDisabled"
+    />
+  </div>
+
+  <p class="msg" *ngIf="statusMessage" [class.err]="job?.status === 'error'" aria-live="polite">{{ statusMessage }}</p>
+</section>
+
+<section id="sec-estado" class="panel result" *ngIf="job as j">
+  <h2>
+    <span class="spinner" *ngIf="j.status === 'running'" aria-hidden="true"></span>
+    Estado: {{ j.status }}
+    <small class="muted">· {{ (j.market || '') | uppercase }} {{ j.tier }} · {{ jobs.elapsed() }}</small>
+  </h2>
+  <p class="muted tiny" *ngIf="j.status === 'running' && !jobs.connected()">
+    Reconectando con la API para seguir la corrida…
+  </p>
+  <pre class="job-tail" *ngIf="j.status === 'running' && j.logs.length">{{ j.logs.slice(-6).join('\n') }}</pre>
+</section>

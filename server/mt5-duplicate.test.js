@@ -1,9 +1,9 @@
 /**
  * Duplicar operación (segunda orden con el mismo lote) y resultado conjunto en Recalcular.
  */
-const { describe, it } = require('node:test');
+const { describe, it, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildDuplicateOrder, combineAnnotations, reconcileOrder } = require('./mt5');
+const { buildDuplicateOrder, combineAnnotations, reconcileOrder, pushDuplicateOrder, pushOrder } = require('./mt5');
 
 const sent = { side: 'LONG', symbol: 'BTCUSDm', volume: 0.05, price: 60000, sl: 59500, tp: 61000 };
 
@@ -37,6 +37,44 @@ describe('buildDuplicateOrder', () => {
     for (const state of ['closed', 'canceled', undefined]) {
       assert.match(buildDuplicateOrder(sent, { state }).error, /no se puede duplicar/);
     }
+  });
+});
+
+describe('pushDuplicateOrder: exento de los límites diarios', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  const settings = {
+    bridgeUrl: 'http://bridge.test', riskPct: 0.5, volume: 0, maxDeviationPct: 1, expiryMinutes: 60,
+    deviationPoints: 20, allowMultiple: true, maxTradesPerDay: 3, maxDailyDrawdownPct: 4,
+  };
+
+  function captureBody() {
+    const calls = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ ok: true, order: 1 }), { status: 200 });
+    };
+    return calls;
+  }
+
+  it('el duplicado no envía max_trades_per_day ni max_daily_dd_pct al puente', async () => {
+    const calls = captureBody();
+    const { order } = buildDuplicateOrder(sent, { state: 'open', symbol: 'BTCUSDm', volume: 0.05, sl: 59500, tp: 61000 });
+    await pushDuplicateOrder(order, { clientId: 'h1d' }, settings);
+    const body = calls[0];
+    assert.equal('max_trades_per_day' in body, false);
+    assert.equal('max_daily_dd_pct' in body, false);
+    assert.equal(body.client_id, 'h1d');
+    assert.equal(body.manual, true);
+    assert.equal(body.volume, 0.05);
+  });
+
+  it('una orden normal (pushOrder) sigue llevando los límites del perfil', async () => {
+    const calls = captureBody();
+    await pushOrder({ symbol: 'BTCUSDm', side: 'LONG', entry: 60000, sl: 59500, tp: 61000 }, { clientId: 'h1' }, settings);
+    assert.equal(calls[0].max_trades_per_day, 3);
+    assert.equal(calls[0].max_daily_dd_pct, 4);
   });
 });
 
