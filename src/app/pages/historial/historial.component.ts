@@ -14,6 +14,8 @@ import {
   Mt5OrderResult,
   Mt5PushOutcome,
   Mt5Runnable,
+  Mt5PositionLeg,
+  Mt5PositionParams,
   Mt5SentEntry,
   SignalsApiService,
   SortDir,
@@ -48,6 +50,7 @@ import {
   type ExportRowHelpers,
 } from './historial-export';
 import { isAutoLocked, isEffectivelyLocked, isPastDay } from './historial-lock';
+import { ShotCaption, shotCaption } from './historial-shot-caption';
 import { SignalJobService, jobKind } from '../../services/signal-job.service';
 import { SignalRunFormComponent } from '../../shared/signal-run-form.component';
 import { Subscription } from 'rxjs';
@@ -320,6 +323,10 @@ export class HistorialComponent implements OnInit, OnDestroy {
       this.cancelRun();
       return;
     }
+    if (this.paramsItem) {
+      this.closeParams();
+      return;
+    }
     if (this.exportConfirm) {
       this.cancelExport();
       return;
@@ -343,6 +350,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearInterval(this.clockTimer);
+    this.stopParamsRefresh();
     this.removeDocClickClose?.();
     this.finishedSub?.unsubscribe();
   }
@@ -453,6 +461,86 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   sentInfo(item: HistoryListItem): Mt5SentEntry | null {
     return this.mt5Sent[item.id] ?? null;
+  }
+
+  // --- Modal «Parámetros» de la operación enviada ---
+
+  paramsItem: HistoryListItem | null = null;
+  paramsData: Mt5PositionParams | null = null;
+  paramsLoading = false;
+  paramsError = '';
+  private paramsTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly PARAMS_REFRESH_MS = 15_000;
+
+  openParams(item: HistoryListItem, ev?: Event): void {
+    ev?.stopPropagation();
+    this.paramsItem = item;
+    this.paramsData = null;
+    this.paramsError = '';
+    this.loadParams();
+    this.stopParamsRefresh();
+    this.paramsTimer = setInterval(() => {
+      if (this.paramsLive()) this.loadParams();
+    }, HistorialComponent.PARAMS_REFRESH_MS);
+  }
+
+  closeParams(): void {
+    this.paramsItem = null;
+    this.paramsData = null;
+    this.stopParamsRefresh();
+  }
+
+  loadParams(): void {
+    const item = this.paramsItem;
+    if (!item || this.paramsLoading) return;
+    this.paramsLoading = true;
+    this.api.mt5Position(item.id).subscribe({
+      next: (p) => {
+        this.paramsLoading = false;
+        if (this.paramsItem?.id !== item.id) return;
+        this.paramsData = p;
+        this.paramsError = p.quoteError ? `Sin precio del broker: ${p.quoteError}` : '';
+      },
+      error: (err: unknown) => {
+        this.paramsLoading = false;
+        this.paramsError = this.runErrMsg(err, 'No se pudieron leer los parámetros (¿API o puente MT5 sin conexión?).');
+      },
+    });
+  }
+
+  /** Recalcular desde el modal: reajusta con MT5 y vuelve a leer los parámetros. */
+  recalcFromParams(): void {
+    if (this.paramsItem) this.recalcOperation(this.paramsItem);
+  }
+
+  /** Alguna pata sigue abierta o pendiente: el precio cambia y merece refresco automático. */
+  paramsLive(): boolean {
+    return !!this.paramsData?.legs.some((l) => l.state === 'open' || l.state === 'pending' || !l.state);
+  }
+
+  private stopParamsRefresh(): void {
+    if (this.paramsTimer) clearInterval(this.paramsTimer);
+    this.paramsTimer = null;
+  }
+
+  legStateLabel(leg: Mt5PositionLeg): string {
+    if (leg.state === 'closed' && leg.closeReason) return `Cerrada por ${leg.closeReason.toUpperCase()}`;
+    return this.sentStateLabel({ state: leg.state } as Mt5SentEntry) || 'Sin leer (pulsa Recalcular)';
+  }
+
+  signedMoney(v: number | null | undefined, currency = 'USD'): string {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return `${v > 0 ? '+' : ''}${v.toFixed(2)} ${currency}`;
+  }
+
+  signedPips(v: number | null | undefined): string {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return `${v > 0 ? '+' : ''}${v} pips`;
+  }
+
+  /** Dinero y estado (TP/SL, esperando entrada, no entró…) bajo las capturas. */
+  shotCaption(item: HistoryListItem): ShotCaption | null {
+    return shotCaption(item.resultado, item.pnlUsd, this.sentInfo(item));
   }
 
   sentTip(s: Mt5SentEntry): string {
@@ -593,6 +681,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
         }
         this.showRunToast(`#${item.id} · ${r.message}${chartMsg}${captureMsg}`, r.capture?.ok === false);
         this.load();
+        if (this.paramsItem?.id === item.id) this.loadParams();
         if (this.drawerOpen && this.detail?.id === item.id) {
           this.api.historyGet(item.id).subscribe({ next: (d) => (this.detail = d) });
         }
@@ -1496,7 +1585,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.detailExpanded = true;
     this.detail = null;
     this.detailLoading = true;
-    this.detailMode = 'trader';
+    this.detailMode = 'rapida';
     this.dropActive = false;
     this.api.historyGet(item.id).subscribe({
       next: (d) => {

@@ -228,15 +228,6 @@
             <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Fecha <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Mercado <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Sesgo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
-            <th [attr.aria-sort]="ariaSort('winrate')">
-              <button
-                type="button"
-                class="th-tip has-tip"
-                [attr.data-tooltip]="hitRateColumnTip"
-                [attr.aria-label]="hitRateColumnTip"
-              >Tasa de acierto <span class="th-tip-icon" aria-hidden="true">?</span></button>
-              <button type="button" class="th-sort th-sort-icon" [class.active]="sortBy === 'winrate'" (click)="toggleSort('winrate')" aria-label="Ordenar por tasa de acierto"><span class="sort-ind">{{ sortIcon('winrate') }}</span></button>
-            </th>
             <th
               class="run-th has-tip"
               [attr.data-tooltip]="'Solo la última señal, hasta 30 min después de ejecutarse. Envía a MT5 la entrada óptima con SL y TP' + (mt5ProfileLabel ? ' · ' + mt5ProfileLabel : '') + ': mercado si el precio ya llegó; si no, LIMIT. Una sola vez.'"
@@ -258,7 +249,7 @@
         <tbody>
           <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
             <tr *ngIf="row.kind === 'calc_marker'" class="calc-change-row">
-              <td colspan="15">
+              <td colspan="14">
                 <div class="calc-change-bar">
                   <div class="calc-change-main">
                     <span class="calc-change-badge">Cambio de cálculo</span>
@@ -321,28 +312,6 @@
                 [ngClass]="biasClass(itemBias(item))"
               >{{ biasText(itemBias(item)) }}</span>
             </td>
-            <td class="hit-rate-cell">
-              <ng-container *ngIf="hitRateAnalysis(item) as ha">
-                <div
-                  class="hit-rate-adv has-tip"
-                  [attr.data-tone]="hitRateTone(item)"
-                  [attr.data-tooltip]="hitRateTip(item)"
-                  [attr.aria-label]="hitRateTip(item)"
-                >
-                  <span class="hit-rate-pct">{{ ha.pctLabel }}</span>
-                  <span class="hit-rate-src muted tiny" *ngIf="ha.source">{{ ha.source }}</span>
-                  <div class="hit-rate-factors" *ngIf="ha.factors.length">
-                    <span
-                      class="hit-factor has-tip"
-                      *ngFor="let f of ha.factors"
-                      [attr.data-kind]="f.kind"
-                      [attr.data-tone]="factorTone(f.delta)"
-                      [attr.data-tooltip]="factorTip(f)"
-                    >{{ f.label }}</span>
-                  </div>
-                </div>
-              </ng-container>
-            </td>
             <td class="run-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <ng-container *ngIf="sentInfo(item) as s; else runBtn">
                 <div class="run-sent-wrap">
@@ -356,6 +325,12 @@
                     + duplicada<ng-container *ngIf="d.order"> #{{ d.order }}</ng-container><ng-container *ngIf="sentStateLabel(d) as dst"> · {{ dst }}</ng-container><ng-container *ngIf="d.profit != null"> · {{ d.profit | number:'1.2-2' }} USD</ng-container>
                   </span>
                   <div class="run-sent-actions">
+                    <button
+                      type="button"
+                      class="params-btn sm has-tip"
+                      data-tooltip="Objetivo, SL actual en dinero y pips, R:R y flotante (se actualiza solo y con Recalcular)"
+                      (click)="openParams(item, $event)"
+                    >⚙ Parámetros</button>
                     <button
                       type="button"
                       class="dup-btn sm has-tip"
@@ -450,6 +425,7 @@
               <ng-template #noDetailShot>
                 <span class="muted tiny">—</span>
               </ng-template>
+              <p class="shot-caption tiny" *ngIf="shotCaption(item) as cap" [ngClass]="'tone-' + cap.tone" [title]="cap.text">{{ cap.text }}</p>
             </td>
             <td class="shot-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <span class="auto-capture-spinner" *ngIf="isAutoCaptureBusy(item.id)" role="status" title="Generando auto captura…">
@@ -464,6 +440,12 @@
               >
                 <img [src]="thumb" alt="Captura resultado" />
               </button>
+              <p
+                class="shot-caption tiny"
+                *ngIf="!isAutoCaptureBusy(item.id) && shotCaption(item) as cap"
+                [ngClass]="'tone-' + cap.tone"
+                [title]="cap.text"
+              >{{ cap.text }}</p>
               <label
                 *ngIf="!isAutoCaptureBusy(item.id) && !item.hasResultImage"
                 class="btn-attach sm"
@@ -748,6 +730,7 @@
               <img [src]="thumb" alt="Captura" />
             </button>
             <span class="muted tiny hide-on-phone">Captura adjunta</span>
+            <span class="shot-caption tiny" *ngIf="shotCaption(item) as cap" [ngClass]="'tone-' + cap.tone">{{ cap.text }}</span>
           </div>
           <p
             class="auto-capture-note tiny"
@@ -772,6 +755,7 @@
               <img [src]="detailThumb" alt="Captura detalle" />
             </button>
             <span class="muted tiny hide-on-phone">Captura detalle</span>
+            <span class="shot-caption tiny" *ngIf="shotCaption(item) as cap" [ngClass]="'tone-' + cap.tone">{{ cap.text }}</span>
           </div>
           <div class="tag-picker" [class.open]="tagPickerOpenId === item.id">
             <div class="tag-chips">
@@ -882,6 +866,12 @@
         </div>
         <div class="card-actions">
           <span class="run-sent" *ngIf="sentInfo(item) as s">✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small><small *ngIf="s.duplicate?.order"> + #{{ s.duplicate?.order }}</small></span>
+          <button
+            type="button"
+            class="params-btn sm"
+            *ngIf="sentInfo(item)"
+            (click)="openParams(item, $event)"
+          >⚙ Parámetros</button>
           <button
             type="button"
             class="dup-btn sm"
@@ -1530,6 +1520,101 @@
         (click)="confirmRun()"
         [disabled]="!runPreview || runLoading || runSending"
       >{{ runSending ? 'Enviando…' : 'Confirmar y enviar' }}</button>
+    </div>
+  </dialog>
+
+  <!-- Parámetros de la operación enviada: objetivo, SL actual en $ y pips, R:R, flotante -->
+  <button
+    type="button"
+    class="unlock-backdrop"
+    *ngIf="paramsItem"
+    aria-label="Cerrar parámetros"
+    (click)="closeParams()"
+  ></button>
+  <dialog open class="unlock-dialog params-dialog" *ngIf="paramsItem as it" aria-modal="true" aria-label="Parámetros de la operación">
+    <p class="eyebrow">MetaTrader 5 · señal #{{ it.id }} · {{ it.market | uppercase }}<ng-container *ngIf="paramsData as p"> · {{ p.symbol }}</ng-container></p>
+    <h2>Parámetros de la operación</h2>
+
+    <p class="muted" *ngIf="paramsLoading && !paramsData">Leyendo MT5…</p>
+    <p class="msg err" *ngIf="paramsError">{{ paramsError }}</p>
+
+    <ng-container *ngIf="paramsData as p">
+      <p class="muted tiny">
+        Precio broker: bid <strong>{{ p.bid ?? '—' }}</strong> · ask <strong>{{ p.ask ?? '—' }}</strong>
+        · 1 pip = {{ p.pipSize }} · leído {{ p.readAt | date: 'HH:mm:ss' }}
+        <ng-container *ngIf="paramsLive()"> · se actualiza cada 15 s</ng-container>
+        <span class="spinner sm" *ngIf="paramsLoading" aria-hidden="true"></span>
+      </p>
+      <p class="run-volume-note" *ngIf="!p.moneyAvailable">⚠ El broker no informó el valor del tick: se muestran pips sin dinero.</p>
+
+      <section class="params-leg" *ngFor="let leg of p.legs">
+        <h3>
+          {{ leg.label }}<small *ngIf="leg.ticket"> #{{ leg.ticket }}</small>
+          <span [class.run-long]="leg.side === 'LONG'" [class.run-short]="leg.side === 'SHORT'"> · {{ leg.side }} {{ leg.volume }} lotes</span>
+          <span class="params-state"> · {{ legStateLabel(leg) }}</span>
+        </h3>
+        <table class="params-table">
+          <thead>
+            <tr><th scope="col">Nivel</th><th scope="col">Precio</th><th scope="col">Pips</th><th scope="col">Dinero</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Entrada</th>
+              <td>{{ leg.entry ?? '—' }}</td><td>—</td><td>—</td>
+            </tr>
+            <tr class="tp">
+              <th scope="row">🎯 Objetivo (TP)</th>
+              <td>{{ leg.tp?.price ?? '—' }}</td>
+              <td>{{ signedPips(leg.tp?.pips) }}</td>
+              <td class="pos">{{ signedMoney(leg.tp?.money, p.currency) }}</td>
+            </tr>
+            <tr class="sl">
+              <th scope="row">🛑 SL actual</th>
+              <td>{{ leg.sl?.price ?? '—' }}</td>
+              <td>{{ signedPips(leg.sl?.pips) }}</td>
+              <td [class.pos]="leg.slLocksProfit" [class.neg]="!leg.slLocksProfit">{{ signedMoney(leg.sl?.money, p.currency) }}</td>
+            </tr>
+            <tr *ngIf="leg.current != null">
+              <th scope="row">📍 Precio actual</th>
+              <td>{{ leg.current }}</td>
+              <td>{{ signedPips(leg.floatingPips) }}</td>
+              <td [class.pos]="(leg.floatingMoney ?? 0) > 0" [class.neg]="(leg.floatingMoney ?? 0) < 0">{{ signedMoney(leg.floatingMoney, p.currency) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <ul class="params-facts">
+          <li *ngIf="leg.rr != null">R:R <strong>1:{{ leg.rr }}</strong></li>
+          <li *ngIf="leg.slLocksProfit">✓ El SL ya asegura ganancia (break-even o trailing)</li>
+          <li *ngIf="leg.toTpPips != null">Faltan <strong>{{ leg.toTpPips }} pips</strong> para el TP</li>
+          <li *ngIf="leg.toSlPips != null">Margen hasta el SL: <strong>{{ leg.toSlPips }} pips</strong></li>
+          <li *ngIf="leg.progressPct != null">Recorrido hacia el TP: <strong>{{ leg.progressPct }}%</strong></li>
+          <li *ngIf="leg.profit != null">PnL leído en MT5: <strong>{{ signedMoney(leg.profit, p.currency) }}</strong><small *ngIf="leg.checkedAt" class="muted"> ({{ leg.checkedAt | date: 'HH:mm' }})</small></li>
+        </ul>
+        <div class="params-progress" *ngIf="leg.progressPct != null" aria-hidden="true">
+          <span [class.neg]="leg.progressPct < 0" [style.width.%]="leg.progressPct < 0 ? -leg.progressPct : leg.progressPct"></span>
+        </div>
+      </section>
+
+      <dl class="export-confirm-list params-total" *ngIf="p.legs.length > 1">
+        <dt>Total si TP</dt><dd class="pos">{{ signedMoney(p.total.tpMoney, p.currency) }}</dd>
+        <dt>Total si SL</dt><dd [class.neg]="(p.total.slMoney ?? 0) < 0" [class.pos]="(p.total.slMoney ?? 0) >= 0">{{ signedMoney(p.total.slMoney, p.currency) }}</dd>
+        <dt>Flotante total</dt><dd>{{ signedMoney(p.total.floatingMoney, p.currency) }}</dd>
+      </dl>
+      <p class="muted tiny">
+        Niveles guardados del último envío/Recalcular. Si moviste SL o TP en MT5, pulsa Recalcular para traerlos.
+        Dinero estimado con el valor del tick del broker (sin comisiones ni swap).
+      </p>
+    </ng-container>
+
+    <div class="unlock-actions">
+      <button type="button" class="ghost" (click)="closeParams()">Cerrar</button>
+      <button type="button" class="ghost" (click)="loadParams()" [disabled]="paramsLoading">Actualizar precio</button>
+      <button
+        type="button"
+        class="recalc-btn"
+        (click)="recalcFromParams()"
+        [disabled]="mt5RecalcBusy.has(it.id) || isLocked(it)"
+      >{{ mt5RecalcBusy.has(it.id) ? 'Recalculando…' : '↻ Recalcular con MT5' }}</button>
     </div>
   </dialog>
 

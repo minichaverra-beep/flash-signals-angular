@@ -10,7 +10,7 @@
     "api": "node server/index.js",
     "start:all": "npx --yes concurrently -k -n api,ui -c cyan,magenta \"npm run api\" \"npm start\"",
     "test:server": "npm --prefix server test",
-    "test:helpers": "node --experimental-strip-types --test src/app/shared/signal-report.helpers.spec.ts src/app/services/signals-api.history.spec.ts src/app/pages/historial/historial-metrics.spec.ts src/app/pages/historial/historial-summary.spec.ts src/app/pages/historial/historial-export.spec.ts src/app/pages/historial/historial-lock.spec.ts src/app/pages/configuracion/volatility.helpers.spec.ts",
+    "test:helpers": "node --experimental-strip-types --test src/app/shared/signal-report.helpers.spec.ts src/app/services/signals-api.history.spec.ts src/app/pages/historial/historial-metrics.spec.ts src/app/pages/historial/historial-summary.spec.ts src/app/pages/historial/historial-export.spec.ts src/app/pages/historial/historial-lock.spec.ts src/app/pages/historial/historial-shot-caption.spec.ts src/app/pages/configuracion/volatility.helpers.spec.ts",
     "test": "npm run test:server && npm run test:helpers"
   },
   "dependencies": {

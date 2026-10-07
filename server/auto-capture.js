@@ -338,7 +338,8 @@ function resolveChartPath(out, outPath, workDir) {
  * Ejecuta el script y devuelve { ok, outcome, buffer } o { ok:false, error, code? }.
  * Si el antivirus bloquea un archivo, reintenta el script una vez antes de rendirse.
  * @param {{ input: object, tradingRoot: string, workDir: string, python?: string, spawnFn?: Function,
- *   timeoutMs?: number, attempts?: number, retryDelayMs?: number }} opts
+ *   timeoutMs?: number, attempts?: number, retryDelayMs?: number, extraEnv?: object }} opts
+ *   extraEnv: p. ej. mt5.brokerFeedEnv() para dibujar con las velas del broker.
  */
 async function runAutoCapture({
   input,
@@ -349,6 +350,7 @@ async function runAutoCapture({
   timeoutMs = TIMEOUT_MS,
   attempts = SCRIPT_ATTEMPTS,
   retryDelayMs = 1000,
+  extraEnv = {},
 }) {
   if (!workDir) throw new Error('runAutoCapture: workDir es obligatorio');
   const dir = path.resolve(workDir);
@@ -360,7 +362,7 @@ async function runAutoCapture({
     outDir,
     workDir: dir,
     py: python || process.env.PYTHON || process.env.PYTHON_EXE || 'python',
-    env: buildScriptEnv(dir),
+    env: { ...buildScriptEnv(dir), ...extraEnv },
     spawnFn,
     timeoutMs,
   };

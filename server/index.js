@@ -15,6 +15,7 @@ const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
 const mt5Sent = require('./mt5-sent');
+const { positionParams } = require('./position-params');
 const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
 const autoCapture = require('./auto-capture');
@@ -1715,6 +1716,7 @@ async function autoCaptureRow(id, resultadoOverride) {
       input: resolved.input,
       tradingRoot: TRADING_ROOT,
       workDir: path.join(historyStore.DATA_DIR, 'auto-capture'),
+      extraEnv: mt5.brokerFeedEnv(),
     });
     if (!run.ok) {
       console.warn(`[history] auto-capture #${id}:`, run.error);
@@ -2216,6 +2218,38 @@ app.get('/api/mt5/sent', async (_req, res) => {
     profile: { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] },
     sent: mt5Sent.historyMap(profileId),
     runnable: await runnableHistory().catch(() => null),
+  });
+});
+
+/**
+ * Parámetros de una operación enviada (solo lectura): objetivo, SL actual en pips y dinero, R:R,
+ * distancia al precio actual y flotante, con la ficha del símbolo del broker. Usa los niveles
+ * guardados en mt5-sent (los reajusta Recalcular). GET ?historyId=
+ */
+app.get('/api/mt5/position', async (req, res) => {
+  const id = parseHistoryId(req.query.historyId);
+  if (id == null) return res.status(400).json({ error: 'historyId inválido' });
+  const profileId = mt5Settings.getActive();
+  const settings = mt5Settings.get(profileId);
+  const sent = mt5Sent.get(profileId, `h${id}`);
+  if (!sent?.order) {
+    return res.status(404).json({ error: `La señal #${id} no se envió a MT5 con ${mt5Settings.PROFILE_LABELS[profileId]}` });
+  }
+  const row = await historyStore.getById(id);
+  const market = row?.market;
+  if (!mt5Settings.SIGNAL_MARKETS.includes(market)) return res.status(422).json({ error: 'Mercado sin parámetros MT5' });
+  const symbol = sent.symbol || mt5.symbolFor(market, settings);
+  let details = null;
+  let quoteError = null;
+  try {
+    details = await mt5.symbolDetails(symbol, settings);
+  } catch (err) {
+    quoteError = err.message;
+  }
+  res.json({
+    ...positionParams(sent, { pipSize: settings.pipSize[market], details, symbol, market }),
+    quoteError,
+    readAt: new Date().toISOString(),
   });
 });
 

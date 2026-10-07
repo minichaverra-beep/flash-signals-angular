@@ -813,6 +813,20 @@ button:disabled {
   &.tone-err { color: color-mix(in srgb, var(--err) 55%, white); }
 }
 
+.shot-caption {
+  display: block;
+  margin: 0.25rem auto 0;
+  max-width: 9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+
+  &.tone-pos { color: var(--ok); }
+  &.tone-neg { color: color-mix(in srgb, var(--err) 55%, white); }
+  &.tone-wait { color: var(--warn); }
+  &.tone-muted { color: var(--muted, #a8968a); }
+}
+
 .card-annotate .auto-capture-note,
 .cards .auto-capture-note {
   max-width: none;
@@ -1948,6 +1962,105 @@ tr.row-no-tomada:hover > td {
 
 .run-dialog {
   --tone: var(--ok);
+}
+
+.params-btn {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  color: color-mix(in srgb, var(--gold) 85%, white);
+  font-weight: 600;
+}
+
+.params-btn:hover {
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+}
+
+.params-dialog {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+
+  .pos { color: var(--ok); }
+  .neg { color: color-mix(in srgb, var(--err, var(--fire)) 60%, white); }
+  .run-long { color: var(--ok); }
+  .run-short { color: color-mix(in srgb, var(--fire) 85%, white); }
+}
+
+.params-leg {
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  border-radius: 10px;
+
+  h3 {
+    margin: 0 0 0.45rem;
+    font-size: 0.92rem;
+  }
+
+  h3 small,
+  .params-state {
+    font-weight: 500;
+    opacity: 0.8;
+  }
+}
+
+.params-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+
+  th,
+  td {
+    padding: 0.28rem 0.35rem;
+    text-align: right;
+    border-bottom: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
+  }
+
+  th[scope='row'],
+  thead th:first-child {
+    text-align: left;
+  }
+
+  thead th {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  td {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+}
+
+.params-facts {
+  margin: 0.5rem 0 0.35rem;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.params-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    max-width: 100%;
+    background: var(--ok);
+  }
+
+  span.neg {
+    background: color-mix(in srgb, var(--err, var(--fire)) 70%, white);
+  }
+}
+
+.params-total {
+  margin-top: 0.4rem;
 }
 
 .run-volume-note {

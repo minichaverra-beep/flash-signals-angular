@@ -231,6 +231,50 @@ export interface Mt5SentEntry {
   duplicateHistory?: Mt5SentEntry[];
 }
 
+/** Nivel de una operación: + si al tocarlo se gana, − si se pierde. */
+export interface Mt5LevelOutcome {
+  price: number;
+  pips: number | null;
+  money: number | null;
+}
+
+export interface Mt5PositionLeg {
+  label: string;
+  ticket: number | null;
+  side: 'LONG' | 'SHORT' | null;
+  state: Mt5SentEntry['state'];
+  volume: number | null;
+  entry: number | null;
+  sl: Mt5LevelOutcome | null;
+  tp: Mt5LevelOutcome | null;
+  slLocksProfit: boolean;
+  rr: number | null;
+  current: number | null;
+  toTpPips: number | null;
+  toSlPips: number | null;
+  progressPct: number | null;
+  floatingPips: number | null;
+  floatingMoney: number | null;
+  profit: number | null;
+  closeReason: string | null;
+  checkedAt: string | null;
+}
+
+/** Parámetros de una operación enviada (GET /api/mt5/position). */
+export interface Mt5PositionParams {
+  market: string;
+  symbol: string;
+  pipSize: number;
+  currency: string;
+  bid: number | null;
+  ask: number | null;
+  moneyAvailable: boolean;
+  legs: Mt5PositionLeg[];
+  total: { tpMoney: number | null; slMoney: number | null; floatingMoney: number | null; profit: number | null };
+  quoteError: string | null;
+  readAt: string;
+}
+
 export interface Mt5RecalcResult {
   ok: boolean;
   message: string;
@@ -473,6 +517,10 @@ export class SignalsApiService {
 
   mt5Recalc(historyId: number): Observable<Mt5RecalcResult> {
     return this.http.post<Mt5RecalcResult>(`${this.base}/mt5/recalc`, { historyId });
+  }
+
+  mt5Position(historyId: number): Observable<Mt5PositionParams> {
+    return this.http.get<Mt5PositionParams>(`${this.base}/mt5/position`, { params: { historyId } });
   }
 
   mt5Duplicate(historyId: number): Observable<Mt5DuplicateResult> {
