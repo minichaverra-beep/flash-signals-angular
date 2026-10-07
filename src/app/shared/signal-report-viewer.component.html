@@ -557,26 +557,17 @@
       @if (investorRiskCard(s); as risk) {
         @if (risk.active && (risk.riskRaw || risk.rewardMultiple != null || risk.heat !== 'none')) {
           <!-- Riesgo en claro compacto: una sola línea (etiqueta + mini termómetro + texto corto) -->
-          <div
+          <section
             id="sec-riesgo"
             data-section="sec-riesgo"
             class="risk-hot risk-hot--compact"
             [attr.data-heat]="risk.heat"
             [attr.title]="riskGaugeHint(risk)"
-            tabindex="0"
-            role="group"
             aria-label="Riesgo en claro"
           >
             <span class="risk-hot-label">Riesgo en claro</span>
             <strong class="risk-hot-badge">{{ risk.heatLabel }}</strong>
-            <div
-              class="risk-hot-track"
-              role="meter"
-              [attr.aria-valuenow]="risk.barPct"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              [attr.aria-label]="risk.heatLabel"
-            >
+            <div class="risk-hot-track" aria-hidden="true">
               <div class="risk-hot-zones" aria-hidden="true">
                 <span class="z-cool"></span>
                 <span class="z-warm"></span>
@@ -598,7 +589,7 @@
                 }
               </span>
             }
-          </div>
+          </section>
         }
       }
 

@@ -296,9 +296,22 @@
 }
 
 .has-tip:hover::after,
-.has-tip:focus-visible::after {
+.has-tip:focus-visible::after,
+.switch:focus-visible + .has-tip::after {
   opacity: 1;
   transform: translateY(0);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .seg,
@@ -718,6 +731,10 @@ code {
 .mood-grid {
   display: grid;
   gap: 0.6rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .big-seg {

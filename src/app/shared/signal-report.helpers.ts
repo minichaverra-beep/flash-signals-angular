@@ -128,16 +128,20 @@ function scoreConceptKey(label: string | null | undefined): string {
   if (/^(score ext\.?|nota extendida|nota ampliada|rules extendidas( \(10\))?)$/.test(t)) {
     return 'extendida';
   }
-  if (/^neural galeria/.test(t)) return 'neural';
-  if (/^crt coherence/.test(t)) return 'crt';
-  if (/^(penalizacion|bonificacion) ubicacion/.test(t)) return 'ubicacion';
-  if (/^penalizacion direccion/.test(t)) return 'direccion';
-  if (/^e2 turtle/.test(t)) return 'e2';
-  if (/^fusion heuristica/.test(t)) return 'fusion-anterior';
-  if (/^capas ml\/neural/.test(t)) return 'capas-ia';
-  if (/^ev por operacion/.test(t)) return 'ev';
-  return t;
+  return SCORE_KEY_PREFIXES.find(([prefix]) => t.startsWith(prefix))?.[1] ?? t;
 }
+
+const SCORE_KEY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ['neural galeria', 'neural'],
+  ['crt coherence', 'crt'],
+  ['penalizacion ubicacion', 'ubicacion'],
+  ['bonificacion ubicacion', 'ubicacion'],
+  ['penalizacion direccion', 'direccion'],
+  ['e2 turtle', 'e2'],
+  ['fusion heuristica', 'fusion-anterior'],
+  ['capas ml/neural', 'capas-ia'],
+  ['ev por operacion', 'ev'],
+];
 
 const NATURAL_SCORE_NAMES: Record<string, string> = {
   reglas: 'Reglas del plan cumplidas',
@@ -166,6 +170,22 @@ const OK_THRESHOLD: Record<string, number> = {
   neural: 60,
 };
 
+const isDigit = (c: string | undefined): boolean => c !== undefined && c >= '0' && c <= '9';
+
+/** «6/9 reglas» → 66.7; null si no hay fracción «a/b». */
+function fractionPct(v: string): number | null {
+  const compact = v.replaceAll(/\s/g, '');
+  const slash = compact.indexOf('/');
+  if (slash < 1) return null;
+  let start = slash;
+  while (isDigit(compact[start - 1])) start--;
+  let end = slash + 1;
+  while (isDigit(compact[end])) end++;
+  if (start === slash || end === slash + 1) return null;
+  const den = Number(compact.slice(slash + 1, end));
+  return den ? (Number(compact.slice(start, slash)) / den) * 100 : null;
+}
+
 /** ✓ / ✗ / null para una fila de score según su valor. */
 export function scoreRowStatus(label: string | null | undefined, valor: string | null | undefined): boolean | null {
   const key = scoreConceptKey(label);
@@ -182,8 +202,7 @@ export function scoreRowStatus(label: string | null | undefined, valor: string |
   }
   const ev = /^([+-]?\d+(?:[.,]\d+)?)\s*r$/.exec(v);
   if (ev) return Number(ev[1].replace(',', '.')) > 0;
-  const frac = /(\d+)\s*\/\s*(\d+)/.exec(v);
-  const pct = frac ? (Number(frac[1]) / Number(frac[2])) * 100 : firstPercent(v)?.value;
+  const pct = fractionPct(v) ?? firstPercent(v)?.value;
   if (pct == null || !Number.isFinite(pct)) return null;
   return pct >= (OK_THRESHOLD[key] ?? 60);
 }
@@ -213,6 +232,26 @@ export function winProbabilityRow(s: SignalSummary | null): RapidaScoreRow | nul
 function joinDetail(weight: string | null | undefined, note: string | null | undefined): string {
   const w = (weight || '').trim();
   return [w ? `Peso ${w}` : '', (note || '').trim()].filter(Boolean).join(' · ');
+}
+
+/** Capas del scorecard multicapa o, si no hay, de las barras del gráfico (sin la fila combinada). */
+function layerSources(s: SignalSummary): { tecnico: string; valor: string; detalle: string }[] {
+  if (s.scorecard?.length) {
+    return s.scorecard
+      .filter((row) => !isCombinedScoreLabel(row.label))
+      .map((row) => ({
+        tecnico: displayScoreLabel(row.label),
+        valor: row.raw || (row.value == null ? '—' : `${row.value}%`),
+        detalle: joinDetail(row.weight, row.note),
+      }));
+  }
+  return (s.chartScores || [])
+    .filter((bar) => !isCombinedScoreLabel(bar.label))
+    .map((bar) => ({
+      tecnico: displayScoreLabel(bar.label),
+      valor: bar.value == null ? bar.raw || '—' : `${Math.round(bar.value * 10) / 10}%`,
+      detalle: '',
+    }));
 }
 
 /**
@@ -246,28 +285,12 @@ export function rapidaScoreGroups(s: SignalSummary | null): RapidaScoreGroup[] {
     layers.push({ concepto, valor, detalle, ok: scoreRowStatus(tecnico, valor), tecnico });
   };
 
-  if (s.scorecard?.length) {
-    for (const row of s.scorecard) {
-      if (isCombinedScoreLabel(row.label)) continue;
-      const valor = row.raw || (row.value != null ? `${row.value}%` : '—');
-      addLayer(displayScoreLabel(row.label), valor, joinDetail(row.weight, row.note));
-    }
-  } else {
-    for (const bar of s.chartScores || []) {
-      if (isCombinedScoreLabel(bar.label)) continue;
-      const valor = bar.value != null ? `${Math.round(bar.value * 10) / 10}%` : bar.raw || '—';
-      addLayer(displayScoreLabel(bar.label), valor, '');
-    }
-  }
+  for (const layer of layerSources(s)) addLayer(layer.tecnico, layer.valor, layer.detalle);
 
+  const withDash = (rows: RapidaScoreRow[]) => rows.map((r) => ({ ...r, detalle: r.detalle || '—' }));
   const groups: RapidaScoreGroup[] = [];
-  if (scores.length) groups.push({ titulo: 'Resumen', rows: scores.map((r) => ({ ...r, detalle: r.detalle || '—' })) });
-  if (layers.length) {
-    groups.push({
-      titulo: 'Detalle por análisis',
-      rows: layers.map((r) => ({ ...r, detalle: r.detalle || '—' })),
-    });
-  }
+  if (scores.length) groups.push({ titulo: 'Resumen', rows: withDash(scores) });
+  if (layers.length) groups.push({ titulo: 'Detalle por análisis', rows: withDash(layers) });
   const finalRow = groups.length ? winProbabilityRow(s) : null;
   if (finalRow) groups.push({ titulo: 'Resultado', rows: [finalRow] });
   return groups;

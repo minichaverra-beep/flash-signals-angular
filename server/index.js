@@ -299,7 +299,9 @@ async function readVolatility(settings) {
 }
 
 function volatilitySuffix(volatility) {
-  return volatility ? ` · ${volatility.level ? '' : '⚠ '}${volatility.note}` : '';
+  if (!volatility) return '';
+  const warn = volatility.level ? '' : '⚠ ';
+  return ` · ${warn}${volatility.note}`;
 }
 
 /**
@@ -539,9 +541,7 @@ const RULE_GRADES = ['✓✓', '✓', '~', '✗✗', '✗', '·'];
 
 /** Tabla «Reglas revisadas (graduadas)»: Regla | Estado | Valor | Impacto | Acierto | Tipo. */
 function parseRulesReview(md) {
-  const block = String(md || '').match(
-    /###\s*Reglas revisadas[^\n]*\n([\s\S]*?)(?:\n###|\n##\s|\n---|$)/i
-  );
+  const block = /###\s*Reglas revisadas[^\n]*\n([\s\S]*?)(?:\n###|\n##\s|\n---|$)/i.exec(String(md || ''));
   if (!block) return [];
   return parseMarkdownTable(block[1])
     .slice(1)

@@ -203,6 +203,7 @@
             [class.on]="d.form.volatilityAdjustEnabled"
             [attr.aria-checked]="d.form.volatilityAdjustEnabled"
             aria-labelledby="cfg-vol-label"
+            aria-describedby="cfg-vol-tip"
             [disabled]="volSaving"
             (click)="toggleVolatility()"
           >
@@ -211,9 +212,12 @@
           <span
             id="cfg-vol-label"
             class="has-tip"
-            tabindex="0"
             data-tooltip="Al enviar una operación se mira el VIX y se multiplica la distancia del SL y del TP según el nivel (tabla de abajo). Apagado, se envían los niveles de la señal sin tocar. Los multiplicadores se conservan."
           >Ajustar SL/TP según la volatilidad (VIX) ⓘ</span>
+          <span id="cfg-vol-tip" class="sr-only">
+            Se guarda al instante. Al enviar una operación se mira el VIX y se multiplica la distancia del SL y del TP
+            según el nivel. Apagado, se envían los niveles de la señal sin tocar.
+          </span>
           <small class="switch-state" [class.on]="d.form.volatilityAdjustEnabled" aria-hidden="true">
             {{ d.form.volatilityAdjustEnabled ? 'Activado' : 'Desactivado' }}
           </small>
@@ -244,7 +248,7 @@
               <span class="vix-unit">puntos</span>
               <span class="level-chip" *ngIf="vixLevel as lv" [attr.data-level]="lv">Volatilidad {{ levelLabels[lv] | lowercase }}</span>
             </div>
-            <div class="thermo" *ngIf="vixThermo as t" role="img" [attr.aria-label]="'VIX ' + v.points + ' puntos'">
+            <div class="thermo" *ngIf="vixThermo as t" aria-hidden="true">
               <span class="thermo-zone" *ngFor="let z of t.zones" [attr.data-level]="z.level" [style.width.%]="z.widthPct">
                 {{ levelLabels[z.level] }}
               </span>
@@ -336,16 +340,16 @@
 
           <div class="calc-step">
             <p class="calc-q">1 · ¿Qué mercado vas a operar?</p>
-            <div class="big-seg" role="radiogroup" aria-label="Mercado">
+            <fieldset class="big-seg">
+              <legend class="sr-only">Mercado</legend>
               <button
                 type="button"
-                role="radio"
                 *ngFor="let m of markets"
-                [attr.aria-checked]="calcMarket === m.id"
+                [attr.aria-pressed]="calcMarket === m.id"
                 [class.active]="calcMarket === m.id"
                 (click)="setCalcMarket(m.id)"
               >{{ m.label }}</button>
-            </div>
+            </fieldset>
           </div>
 
           <div class="calc-step">
@@ -369,19 +373,19 @@
 
           <div class="calc-step">
             <p class="calc-q">3 · ¿Qué tan movido está el mercado?</p>
-            <div class="mood-grid" role="radiogroup" aria-label="Qué tan movido está el mercado">
+            <fieldset class="mood-grid">
+              <legend class="sr-only">Qué tan movido está el mercado</legend>
               <button
                 type="button"
-                role="radio"
                 *ngFor="let mo of moodIds"
-                [attr.aria-checked]="calcMood === mo"
+                [attr.aria-pressed]="calcMood === mo"
                 [class.active]="calcMood === mo"
                 (click)="setCalcMood(mo)"
               >
                 <strong>{{ moodLabels[mo] }}</strong>
                 <small>{{ moodHints[mo] }}</small>
               </button>
-            </div>
+            </fieldset>
             <p class="muted tiny" *ngIf="calcMoodFromVix && vix">✔ Elegido por ti según el VIX de ahora ({{ num(vix.points) }} puntos).</p>
             <p class="muted tiny" *ngIf="!calcMoodFromVix">Consejo: pulsa «Calcular VIX actual» y lo elijo yo por ti.</p>
           </div>
@@ -435,11 +439,7 @@
                 Si falla pierdes ~<strong class="loss">{{ money(r.plan.riskAmount, r.currency) }}</strong>
                 · si acierta ganas ~<strong class="gain">{{ money(r.plan.rewardAmount, r.currency) }}</strong>
               </p>
-              <div
-                class="rr-bar"
-                role="img"
-                [attr.aria-label]="'Pierdes ' + r.plan.riskAmount + ' o ganas ' + r.plan.rewardAmount"
-              >
+              <div class="rr-bar" aria-hidden="true">
                 <span class="rr-risk" [style.width.%]="calcBar.riskPct">Pierdes</span>
                 <span class="rr-reward" [style.width.%]="calcBar.rewardPct">Ganas</span>
               </div>
