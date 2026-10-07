@@ -18,6 +18,7 @@ import time
 from contextlib import contextmanager
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 import MetaTrader5 as mt5
 
@@ -699,11 +700,13 @@ def _deals_status(ticket):
     hist = mt5.history_orders_get(ticket=ticket) or ()
     sl, tp = (hist[0].sl, hist[0].tp) if hist else (0, 0)
     profit = round(sum(d.profit + d.swap + d.commission for d in deals), 2)
-    base = {"symbol": entry.symbol, "volume": entry.volume, "profit": profit, **_levels(entry.price, sl, tp)}
+    offset, _source = server_offset()
+    base = {"symbol": entry.symbol, "volume": entry.volume, "profit": profit,
+            "openTime": entry.time - offset, **_levels(entry.price, sl, tp)}
     if not exits:
         return {"state": "open", **base}
     last = exits[-1]
-    return {"state": "closed", **base, "closePrice": last.price,
+    return {"state": "closed", **base, "closePrice": last.price, "closeTime": last.time - offset,
             "closeReason": CLOSE_REASONS.get(last.reason, "manual")}
 
 
@@ -869,6 +872,51 @@ def market_rates(payload):
     }
 
 
+def search_symbols(query):
+    """Símbolos del broker cuyo nombre o descripción contiene `query` (solo lectura)."""
+    text = str(query or "").strip().upper()
+    if not 2 <= len(text) <= 32:
+        raise BridgeError(400, "'query' debe tener entre 2 y 32 caracteres")
+    ensure_connected()
+    found = [
+        s for s in (mt5.symbols_get() or ())
+        if text in s.name.upper() or text in (s.description or "").upper()
+    ]
+    return {
+        "ok": True,
+        "query": text,
+        "symbols": [
+            {"name": s.name, "description": s.description, "path": s.path, "visible": bool(s.visible)}
+            for s in found[:50]
+        ],
+    }
+
+
+def symbol_details(name):
+    """Ficha de un símbolo para calcular lotes y dinero por punto (solo lectura)."""
+    symbol = str(name or "").strip()
+    if not symbol:
+        raise BridgeError(400, "Falta 'name'")
+    ensure_connected()
+    info, tick = symbol_quote(symbol)
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "digits": info.digits,
+        "point": info.point,
+        "tickSize": info.trade_tick_size,
+        "tickValue": getattr(info, "trade_tick_value_loss", 0.0) or info.trade_tick_value,
+        "contractSize": info.trade_contract_size,
+        "volumeMin": info.volume_min,
+        "volumeMax": info.volume_max,
+        "volumeStep": info.volume_step,
+        "stopsLevel": info.trade_stops_level,
+        "currency": account_currency(),
+        "bid": tick.bid,
+        "ask": tick.ask,
+    }
+
+
 def opening_levels(position_id):
     """SL/TP con que se abrió la posición (orden de apertura); None si no constan."""
     orders = sorted(mt5.history_orders_get(position=position_id) or (), key=lambda o: o.time_setup)
@@ -904,8 +952,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._authorized():
             return
-        if self.path == "/health":
+        url = urlsplit(self.path)
+        query = parse_qs(url.query)
+        if url.path == "/health":
             self._handle(health)
+        elif url.path == "/symbols":
+            self._handle(lambda: search_symbols((query.get("query") or [""])[0]))
+        elif url.path == "/symbol":
+            self._handle(lambda: symbol_details((query.get("name") or [""])[0]))
         else:
             self._send(404, {"ok": False, "error": "Ruta no encontrada"})
 

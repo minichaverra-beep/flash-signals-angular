@@ -93,6 +93,190 @@ export function scoreKpiRows(s: SignalSummary | null): KpiRow[] {
   return rows;
 }
 
+/** Fila de la tabla unificada de la Vista rápida (Scores + confluencias por capa). */
+export interface RapidaScoreRow {
+  /** Nombre en lenguaje natural. */
+  concepto: string;
+  valor: string;
+  detalle: string;
+  /** true = ✓ a favor · false = ✗ en contra · null = informativa. */
+  ok: boolean | null;
+  /** Nombre técnico original (tooltip). */
+  tecnico?: string;
+  /** Fila final con la probabilidad de ganar. */
+  final?: boolean;
+}
+
+export interface RapidaScoreGroup {
+  titulo: string;
+  rows: RapidaScoreRow[];
+}
+
+const norm = (t: string | null | undefined): string =>
+  (t || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+/** Clave de concepto para detectar la misma medida con nombres distintos (Confluencia ≈ Acuerdo entre capas). */
+function scoreConceptKey(label: string | null | undefined): string {
+  const t = norm(label);
+  if (/^(acuerdo( entre capas)?|confluencia)$/.test(t)) return 'acuerdo';
+  if (/^(rules?( e1)?|reglas|cumplimiento de reglas)$/.test(t)) return 'reglas';
+  if (/^(ml|modelo automatico \(ml\)|ml tabular( \(gated\))?)$/.test(t)) return 'ml';
+  if (/^(score ext\.?|nota extendida|nota ampliada|rules extendidas( \(10\))?)$/.test(t)) {
+    return 'extendida';
+  }
+  if (/^neural galeria/.test(t)) return 'neural';
+  if (/^crt coherence/.test(t)) return 'crt';
+  if (/^(penalizacion|bonificacion) ubicacion/.test(t)) return 'ubicacion';
+  if (/^penalizacion direccion/.test(t)) return 'direccion';
+  if (/^e2 turtle/.test(t)) return 'e2';
+  if (/^fusion heuristica/.test(t)) return 'fusion-anterior';
+  if (/^capas ml\/neural/.test(t)) return 'capas-ia';
+  if (/^ev por operacion/.test(t)) return 'ev';
+  return t;
+}
+
+const NATURAL_SCORE_NAMES: Record<string, string> = {
+  reglas: 'Reglas del plan cumplidas',
+  ml: 'Predicción del modelo de datos',
+  acuerdo: 'Coincidencia entre los análisis',
+  extendida: 'Chequeo ampliado (10 puntos)',
+  neural: 'Parecido con operaciones pasadas',
+  crt: 'Precio respeta el rango de ayer',
+  ubicacion: 'Precio en zona favorable',
+  direccion: 'Tendencia de 1 hora a favor',
+  e2: 'Patrón de giro (E2)',
+  'fusion-anterior': 'Cálculo anterior (referencia)',
+  'capas-ia': 'IA incluida en el cálculo',
+  ev: 'Ganancia esperada por operación',
+};
+
+/** Nombre entendible para alguien sin jerga de trading. */
+export function naturalScoreName(label: string | null | undefined): string {
+  return NATURAL_SCORE_NAMES[scoreConceptKey(label)] || (label || '').trim() || '—';
+}
+
+const OK_THRESHOLD: Record<string, number> = {
+  extendida: 70,
+  ml: 55,
+  acuerdo: 50,
+  neural: 60,
+};
+
+/** ✓ / ✗ / null para una fila de score según su valor. */
+export function scoreRowStatus(label: string | null | undefined, valor: string | null | undefined): boolean | null {
+  const key = scoreConceptKey(label);
+  if (key === 'fusion-anterior' || key === 'capas-ia') return null;
+  const v = String(valor || '').trim().toLowerCase();
+  if (!v || v === '—' || v === 'n/d') return null;
+  if (v === 'pass') return true;
+  if (v === 'fail') return false;
+  const mult = /^[×x]\s*(\d+(?:[.,]\d+)?)/.exec(v);
+  if (mult) {
+    const m = Number(mult[1].replace(',', '.'));
+    if (m === 1) return null;
+    return m > 1;
+  }
+  const ev = /^([+-]?\d+(?:[.,]\d+)?)\s*r$/.exec(v);
+  if (ev) return Number(ev[1].replace(',', '.')) > 0;
+  const frac = /(\d+)\s*\/\s*(\d+)/.exec(v);
+  const pct = frac ? (Number(frac[1]) / Number(frac[2])) * 100 : firstPercent(v)?.value;
+  if (pct == null || !Number.isFinite(pct)) return null;
+  return pct >= (OK_THRESHOLD[key] ?? 60);
+}
+
+/** Fila final: probabilidad de ganar frente al equilibrio del R:R. */
+export function winProbabilityRow(s: SignalSummary | null): RapidaScoreRow | null {
+  const pct = resolveSuccessProbabilityPct(s);
+  if (pct == null) return null;
+  const rr = parseRewardMultiple(s?.planDetails?.rr) ?? 2;
+  const breakeven = 100 / (1 + rr);
+  const range = /80%:\s*(\d+)\s*[–-]\s*(\d+)%/.exec(String(s?.winrate || ''));
+  const detalle = [
+    `≈ ${Math.round(pct / 10)} de cada 10 operaciones así ganan`,
+    `equilibrio ${Math.round(breakeven)}% con R:R 1:${rr}`,
+    range ? `rango ${range[1]}–${range[2]}%` : '',
+  ].filter(Boolean).join(' · ');
+  return {
+    concepto: 'Probabilidad de ganar la operación',
+    valor: `${Math.round(pct)}%`,
+    detalle,
+    ok: pct > breakeven + 5,
+    tecnico: 'Probabilidad de éxito',
+    final: true,
+  };
+}
+
+function joinDetail(weight: string | null | undefined, note: string | null | undefined): string {
+  const w = (weight || '').trim();
+  return [w ? `Peso ${w}` : '', (note || '').trim()].filter(Boolean).join(' · ');
+}
+
+/**
+ * Tabla unificada de la Vista rápida: «Resumen» (reglas, ML, acuerdo, chequeo ampliado)
+ * + «Detalle por análisis» (scorecard multicapa) + «Resultado» (probabilidad de ganar).
+ * - Nombres en lenguaje natural; el técnico queda en `tecnico`.
+ * - Si una capa del scorecard es la misma medida que un score (p. ej. Rules E1 ≈ reglas),
+ *   su peso/nota se fusiona en la fila del score en vez de añadir otra.
+ * - Si no hay scorecard, las barras (chartScores) aportan las filas que falten.
+ */
+export function rapidaScoreGroups(s: SignalSummary | null): RapidaScoreGroup[] {
+  if (!s) return [];
+  const scores: RapidaScoreRow[] = scoreKpiRows(s).map((r) => ({
+    concepto: naturalScoreName(r.campo),
+    valor: r.valor,
+    detalle: '',
+    ok: scoreRowStatus(r.campo, r.valor),
+    tecnico: r.campo,
+  }));
+  const scoreByKey = new Map(scores.map((r) => [scoreConceptKey(r.tecnico), r]));
+
+  const layers: RapidaScoreRow[] = [];
+  const addLayer = (tecnico: string, valor: string, detalle: string): void => {
+    const dup = scoreByKey.get(scoreConceptKey(tecnico));
+    if (dup) {
+      if (detalle && !dup.detalle) dup.detalle = detalle;
+      return;
+    }
+    const concepto = naturalScoreName(tecnico);
+    if (layers.some((l) => norm(l.concepto) === norm(concepto))) return;
+    layers.push({ concepto, valor, detalle, ok: scoreRowStatus(tecnico, valor), tecnico });
+  };
+
+  if (s.scorecard?.length) {
+    for (const row of s.scorecard) {
+      if (isCombinedScoreLabel(row.label)) continue;
+      const valor = row.raw || (row.value != null ? `${row.value}%` : '—');
+      addLayer(displayScoreLabel(row.label), valor, joinDetail(row.weight, row.note));
+    }
+  } else {
+    for (const bar of s.chartScores || []) {
+      if (isCombinedScoreLabel(bar.label)) continue;
+      const valor = bar.value != null ? `${Math.round(bar.value * 10) / 10}%` : bar.raw || '—';
+      addLayer(displayScoreLabel(bar.label), valor, '');
+    }
+  }
+
+  const groups: RapidaScoreGroup[] = [];
+  if (scores.length) groups.push({ titulo: 'Resumen', rows: scores.map((r) => ({ ...r, detalle: r.detalle || '—' })) });
+  if (layers.length) {
+    groups.push({
+      titulo: 'Detalle por análisis',
+      rows: layers.map((r) => ({ ...r, detalle: r.detalle || '—' })),
+    });
+  }
+  const finalRow = groups.length ? winProbabilityRow(s) : null;
+  if (finalRow) groups.push({ titulo: 'Resultado', rows: [finalRow] });
+  return groups;
+}
+
+export function hasRapidaScores(s: SignalSummary | null): boolean {
+  return rapidaScoreGroups(s).length > 0;
+}
+
 export function hasPlanMatrix(s: SignalSummary | null): boolean {
   const p = s?.planDetails;
   return !!(p && (p.entry || p.sl || p.tp || p.rr));
@@ -110,7 +294,20 @@ export function hasScoresCard(s: SignalSummary | null): boolean {
 }
 
 export function hasChecklistsCard(s: SignalSummary | null): boolean {
-  return !!(s?.checklist2M5?.length || s?.checklistE1?.length);
+  return !!(s?.rulesReview?.length || s?.checklist2M5?.length || s?.checklistE1?.length);
+}
+
+const RULE_GRADE_CLASS: Record<string, string> = {
+  '✓✓': 'grade-strong',
+  '✓': 'grade-ok',
+  '~': 'grade-neutral',
+  '✗': 'grade-bad',
+  '✗✗': 'grade-critical',
+  '·': 'grade-info',
+};
+
+export function ruleGradeClass(grade: string | null | undefined): string {
+  return RULE_GRADE_CLASS[String(grade || '').trim()] || 'grade-info';
 }
 
 export function hasDetalleAdicional(
@@ -400,12 +597,35 @@ export function explainHitFactor(factor: HitRateFactor): string {
  * Tooltip multilínea para la columna Tasa de acierto.
  * Explica % + cada factor (bias, PD, acuerdo…).
  */
+export function isCalibratedWinrate(winrate: string | null | undefined): boolean {
+  return /calibrad[oa] walk-forward|tasa base \(modelo sin ventaja OOS\)/i.test(String(winrate || ''));
+}
+
+/** Lectura frente a la tasa base del motor (~46% BTC E1), no frente a umbrales fijos. */
+export function calibratedBandLabel(pct: number): string {
+  if (pct >= 52) return 'por encima de la media del motor';
+  if (pct >= 42) return 'en la media del motor';
+  return 'por debajo de la media del motor';
+}
+
 export function hitRateTooltip(winrate: string | null | undefined): string {
   const a = parseHitRateAnalysis(winrate);
   if (!a.raw || a.pct == null) {
     return a.raw && a.raw !== '—' ? a.raw : 'Sin tasa de acierto estimada.';
   }
   const pct = a.pct;
+  if (isCalibratedWinrate(a.raw)) {
+    return [
+      `Probabilidad calibrada: ${a.pctLabel} — ${calibratedBandLabel(pct)}`,
+      `≈ ${Math.round(pct / 10)} de cada 10 señales parecidas tocaron TP antes que SL (replay histórico).`,
+      '',
+      a.raw,
+      '',
+      'Modelo logístico validado walk-forward: RSI vs dirección, premium/discount,',
+      '2 velas M5 y coherencia CRT. El rango 80% indica la incertidumbre del estimado.',
+      'EV ya descuenta el costo estimado por operación.',
+    ].join('\n');
+  }
   const factorLines = a.factors.length
     ? a.factors.flatMap((f) => [
         `• ${KIND_TITLE[f.kind]}: ${f.label}`,
@@ -443,7 +663,10 @@ export function formatExpectancyR(pct: number): string {
 export const HIT_RATE_COLUMN_TOOLTIP = [
   'Tasa de acierto = % histórico estimado de setups parecidos que tocaron TP antes que SL.',
   '',
-  'Se calcula así:',
+  'Señales nuevas (BTC E1): probabilidad calibrada walk-forward sobre el replay del motor,',
+  'con rango 80% y EV en R. Media real del motor ≈ 46%; rango típico 33–62%.',
+  '',
+  'Señales anteriores (heurística, sin calibrar) se calculaban así:',
   '• Base: % de reglas E1/E2 cumplidas (curva histórica del setup).',
   '• Ajuste por ubicación Premium/Discount (long en discount / short en premium suman; al revés restan).',
   '• Ajuste por acuerdo entre capas (ALTA suma, BAJA/NULA resta).',
@@ -470,6 +693,16 @@ export function probabilityTooltip(item: {
       ? `${Math.round(Number(item.scoreCombined) * 10) / 10}%`
       : null;
   if (!pct) return 'Sin Probabilidad de éxito calculada.';
+
+  if (isCalibratedWinrate(item.winrate)) {
+    return [
+      `Probabilidad de éxito: ${pct} (calibrada)`,
+      '',
+      String(item.winrate || ''),
+      '',
+      'ML / Neural solo entran si mejoran el Brier fuera de muestra.',
+    ].join('\n');
+  }
 
   const lines: string[] = [
     `Probabilidad de éxito: ${pct}`,

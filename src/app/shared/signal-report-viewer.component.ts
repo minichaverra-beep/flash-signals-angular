@@ -18,6 +18,8 @@ import {
   marketRows,
   riskGaugeHint,
   riskGaugeNeedle,
+  rapidaScoreGroups,
+  ruleGradeClass,
   scoreKpiRows,
   setupRows,
   verdictRows,
@@ -27,7 +29,20 @@ import {
   isCombinedScoreLabel,
   biasTone,
   volMarkerPct,
+  type RapidaScoreGroup,
 } from './signal-report.helpers';
+import {
+  INSTAGRAM_SIZES,
+  downloadScoresImage,
+  scoreImageFilename,
+  statusMark,
+  type InstagramFormat,
+} from './score-image-export';
+
+const INSTAGRAM_FORMAT_OPTIONS = (Object.keys(INSTAGRAM_SIZES) as InstagramFormat[]).map((id) => ({
+  id,
+  label: `${INSTAGRAM_SIZES[id].label} (${INSTAGRAM_SIZES[id].width}×${INSTAGRAM_SIZES[id].height})`,
+}));
 
 export type ReportViewMode = 'trader' | 'inversor' | 'rapida';
 
@@ -54,9 +69,11 @@ export class SignalReportViewerComponent {
   readonly marketRows = marketRows;
   readonly setupRows = setupRows;
   readonly scoreKpiRows = scoreKpiRows;
+  readonly rapidaScoreGroups = rapidaScoreGroups;
   readonly hasMarketPlan = hasMarketPlan;
   readonly hasScoresCard = hasScoresCard;
   readonly hasChecklistsCard = hasChecklistsCard;
+  readonly ruleGradeClass = ruleGradeClass;
   readonly hasDetalleAdicional = hasDetalleAdicional;
   readonly verdictTone = verdictTone;
   readonly verdictSectionTone = verdictSectionTone;
@@ -83,6 +100,27 @@ export class SignalReportViewerComponent {
   }
 
   /** Una sola evaluación de tone → clases (evita 4× verdictTone en el template). */
+  readonly instagramFormats = INSTAGRAM_FORMAT_OPTIONS;
+  readonly statusMark = statusMark;
+
+  exportScoresImage(groups: RapidaScoreGroup[], format: InstagramFormat): void {
+    const s = this.summary;
+    const market = (s?.market || this.market || 'btc').toUpperCase();
+    const subtitle = [s?.verdict, s?.price ? `Precio ${s.price}` : '', s?.dataAsOf || '']
+      .filter(Boolean)
+      .join(' · ');
+    downloadScoresImage(
+      groups,
+      {
+        title: `${market} · Scores y confluencias`,
+        subtitle,
+        footer: 'Flash Signals · estimación estadística, no es asesoría financiera',
+      },
+      format,
+      scoreImageFilename(market, format),
+    );
+  }
+
   verdictCellClass(valor: string | null | undefined): Record<string, boolean> {
     const t = verdictTone(valor);
     return {

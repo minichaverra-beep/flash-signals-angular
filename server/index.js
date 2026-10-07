@@ -18,6 +18,10 @@ const mt5Sent = require('./mt5-sent');
 const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
 const autoCapture = require('./auto-capture');
+const trendBias = require('./trend-bias');
+const vixSource = require('./vix-source');
+const { resolveVolatilityAdjustment } = require('./volatility');
+const { registerVolatilityRoutes } = require('./volatility-routes');
 const {
   pickLatestChart,
   isChartStale,
@@ -219,6 +223,7 @@ function flagsFromBody(body) {
   return {
     bullish: !!body.bullish,
     bearish: !!body.bearish,
+    trendBias: !!body.trendBias,
     breakSetup: !!body.breakSetup,
     reverse: !!body.reverse,
     ml: !!body.ml,
@@ -284,6 +289,19 @@ function volumeNoteSuffix(result) {
   return result?.volumeNote ? ` · ⚠ ${result.volumeNote}` : '';
 }
 
+/** Ajuste de SL/TP por VIX para un envío: multiplicador del nivel actual o ×1 con aviso si no hay dato. */
+async function readVolatility(settings) {
+  try {
+    return resolveVolatilityAdjustment(settings, await vixSource.getVix(settings));
+  } catch (err) {
+    return resolveVolatilityAdjustment(settings, { error: err.attempts?.join(' · ') || err.message });
+  }
+}
+
+function volatilitySuffix(volatility) {
+  return volatility ? ` · ${volatility.level ? '' : '⚠ '}${volatility.note}` : '';
+}
+
 /**
  * Envía el plan Entry/SL/TP de una señal al puente MT5.
  * @returns {Promise<{ status: 'sent'|'skipped'|'error', message: string, result?: object, order?: object }>}
@@ -292,8 +310,14 @@ async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdic
   const profileId = mt5Settings.getActive();
   const settings = mt5Settings.get(profileId);
   const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
-  const { order, skip } = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict });
-  if (!order) return { status: 'skipped', message: skip, profile };
+  let built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict });
+  if (!built.order) return { status: 'skipped', message: built.skip, profile };
+  // Con el toggle apagado no se pide el VIX; si falla la lectura la orden sigue con ×1 y un aviso.
+  if (settings.volatilityAdjustEnabled) {
+    const volatility = await readVolatility(settings);
+    built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict, volatility });
+  }
+  const { order, volatility } = built;
   // Por perfil (persistido): la misma señal puede ir a la cuenta principal y a la secundaria.
   const allowMultiple = overrides.allow_multiple || settings.allowMultiple;
   if (key && mt5Sent.has(profileId, key) && !allowMultiple) {
@@ -307,16 +331,21 @@ async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdic
   try {
     const result = await mt5.pushOrder(order, { clientId: key, ...overrides }, settings);
     if (lockKey) mt5Sent.record(profileId, key, result);
+    if (volatility) {
+      result.volatilityNote = volatility.note;
+      result.volatility = volatility;
+    }
     const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
     return {
       status: 'sent',
-      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}`,
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}${volatilitySuffix(volatility)}`,
       order,
       result,
       profile,
+      volatility,
     };
   } catch (err) {
-    return { status: 'error', message: err.message, order, profile, httpStatus: err.status, details: err.details };
+    return { status: 'error', message: err.message, order, profile, volatility, httpStatus: err.status, details: err.details };
   } finally {
     if (lockKey) mt5InFlight.delete(lockKey);
   }
@@ -504,6 +533,30 @@ function parseRulesTable(md, headingRe) {
     ok: okFromCell(cells[1] || ''),
     note: cells[2] || cells.slice(2).join(' · ') || '',
   })).filter((r) => r.label && !/^regla$/i.test(r.label) && !/^check$/i.test(r.label));
+}
+
+const RULE_GRADES = ['✓✓', '✓', '~', '✗✗', '✗', '·'];
+
+/** Tabla «Reglas revisadas (graduadas)»: Regla | Estado | Valor | Impacto | Acierto | Tipo. */
+function parseRulesReview(md) {
+  const block = String(md || '').match(
+    /###\s*Reglas revisadas[^\n]*\n([\s\S]*?)(?:\n###|\n##\s|\n---|$)/i
+  );
+  if (!block) return [];
+  return parseMarkdownTable(block[1])
+    .slice(1)
+    .filter((cells) => cells[0] && !/^regla$/i.test(cells[0]))
+    .map((cells) => {
+      const raw = String(cells[1] || '').trim();
+      return {
+        label: cells[0],
+        grade: RULE_GRADES.find((g) => raw.startsWith(g)) || raw || '·',
+        value: cells[2] || '',
+        impact: cells[3] || '',
+        winrate: cells[4] || '',
+        type: cells[5] || '',
+      };
+    });
 }
 
 function parsePlanDetails(md) {
@@ -820,6 +873,10 @@ function parseSummary(md, market, tier) {
     planDetails,
     checklist2M5: checklist2M5Final.slice(0, 10),
     checklistE1: checklistE1.slice(0, 10),
+    rulesReview: parseRulesReview(md).slice(0, 12),
+    probCalibrated: /calibrad[oa] walk-forward|tasa base \(sin ventaja OOS\)/i.test(
+      combinedFromCard?.note || ''
+    ),
     scorecard,
     chartScores: chartScores.slice(0, 8),
     volume: {
@@ -1562,11 +1619,16 @@ app.patch('/api/history/:id', async (req, res) => {
     });
   }
   try {
-    const result = await historyStore.updateAnnotation(id, patch);
+    const result = await historyStore.updateAnnotation(id, patch, {
+      reversalsEnabled: mt5Settings.get().reversalsEnabled === true,
+    });
     if (!result.ok && result.error === 'not_found') {
       return res.status(404).json({ error: 'Entrada no encontrada' });
     }
     if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
+    if (result.error === historyStore.REVERSALS_DISABLED_ERROR) {
+      return res.status(409).json({ error: result.message });
+    }
     if (!result.ok) {
       return res.status(400).json({ error: result.error || 'No se pudo actualizar' });
     }
@@ -1644,7 +1706,8 @@ async function autoCaptureRow(id, resultadoOverride) {
   try {
     const row = await historyStore.getById(id);
     if (row?.effectiveLocked) return { status: 423, body: { locked: true } };
-    const resolved = autoCapture.resolveAutoCaptureInput(row);
+    const sent = await sentWithExecutionTimes(id, row?.market);
+    const resolved = autoCapture.resolveAutoCaptureInput(row, sent);
     if (!resolved.ok) {
       return { status: resolved.code === 'not_found' ? 404 : 422, body: { error: resolved.error, code: resolved.code } };
     }
@@ -1664,6 +1727,35 @@ async function autoCaptureRow(id, resultadoOverride) {
     return { status: 200, body: { ok: true, item: saved.item, outcome: run.outcome, ...check } };
   } finally {
     autoCaptureInFlight.delete(id);
+  }
+}
+
+/**
+ * Envío MT5 de la fila (perfil activo primero) con precio/horas reales de cierre de la original y
+ * del duplicado. Si faltan (envíos anteriores), los lee de /deals del puente y los guarda en mt5-sent.
+ * Sin puente → el envío tal cual (el gráfico estima las horas con velas).
+ */
+async function sentWithExecutionTimes(historyId, market) {
+  const key = `h${historyId}`;
+  const active = mt5Settings.getActive();
+  const profileId = [active, ...mt5Settings.PROFILES.filter((p) => p !== active)]
+    .find((p) => mt5Sent.get(p, key)?.order);
+  if (!profileId) return null;
+  const sent = mt5Sent.get(profileId, key);
+  if (!autoCapture.sentNeedsDeals(sent)) return sent;
+  const settings = mt5Settings.get(profileId);
+  const symbol = sent.symbol || settings.symbols?.[market];
+  const fromMs = Date.parse(sent.at || '');
+  if (!symbol || !Number.isFinite(fromMs)) return sent;
+  const from = Math.floor(fromMs / 1000) - 120;
+  const to = Math.min(Math.ceil(Date.now() / 1000), from + 60 * 86400);
+  try {
+    const data = await mt5.historyDeals({ symbol, from, to }, settings);
+    const patch = autoCapture.sentPatchFromDeals(sent, data.deals || [], mt5.executionFromDeals);
+    return patch ? mt5Sent.update(profileId, key, patch) : sent;
+  } catch (err) {
+    console.warn(`[history] auto-capture #${historyId}: deals MT5:`, err.message);
+    return sent;
   }
 }
 
@@ -1983,6 +2075,8 @@ app.get('/api/artifacts/raw', (req, res) => {
   );
   res.sendFile(resolved.full);
 });
+
+registerVolatilityRoutes(app);
 
 /** ?profile=principal|secundaria (por defecto el activo). */
 app.get('/api/mt5/health', async (req, res) => {
@@ -2422,8 +2516,10 @@ app.post('/api/signals/run', (req, res) => {
     });
   }
 
-  const psArgs = buildPsArgs(body);
-  const command = `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptResolved}" ${psArgs.join(' ')}`;
+  // «Tendencia actual»: el bias se resuelve tras crear el job (detector H1) y antes del .ps1.
+  const wantsTrend = !!body.trendBias && !body.bullish && !body.bearish && tier !== 'context';
+  body.trendBias = wantsTrend;
+  const command = signalCommand(scriptResolved, buildPsArgs(body));
 
   if (!SIGNALS_RUNNABLE) {
     return res.status(503).json({
@@ -2435,6 +2531,7 @@ app.post('/api/signals/run', (req, res) => {
     });
   }
 
+  const env = { ...process.env, ...mt5.brokerFeedEnv(), PYTHONIOENCODING: 'utf-8' };
   currentJob = {
     id: crypto.randomUUID(),
     kind: 'signal',
@@ -2445,11 +2542,14 @@ app.post('/api/signals/run', (req, res) => {
     tier,
     command,
     exitCode: null,
-    logs: [`>> ${command}`],
+    logs: wantsTrend
+      ? [`[bias] Detectando tendencia H1 actual de ${market.toUpperCase()}…`]
+      : [`>> ${command}`],
     error: null,
     reportPath: null,
     summary: null,
     flags: flagsFromBody(body),
+    trendBias: null,
     entry: body.entry ?? null,
     historyId: null,
     mt5: null,
@@ -2457,12 +2557,54 @@ app.post('/api/signals/run', (req, res) => {
   const job = currentJob;
   jobEvents.broadcast(JOB_EVENTS.started, publicJob(job));
 
+  if (wantsTrend) {
+    const py = process.env.PYTHON || process.env.PYTHON_EXE || 'python';
+    void trendBias
+      .detectTrendBias({ py, cwd: TRADING_ROOT, env, market })
+      .then(({ result, error }) => {
+        const decision = trendBias.trendBiasDecision(result, error);
+        body.bullish = decision.flag === 'bullish';
+        body.bearish = decision.flag === 'bearish';
+        job.flags = flagsFromBody(body);
+        job.trendBias = {
+          bias: decision.bias,
+          label: decision.label,
+          flag: decision.flag,
+          method: decision.method,
+          source: result?.source ?? null,
+        };
+        job.command = signalCommand(scriptResolved, buildPsArgs(body));
+        pushJobLines(job, [decision.log, `>> ${job.command}`]);
+        launchSignalScript(job, scriptResolved, buildPsArgs(body), env);
+      });
+  } else {
+    launchSignalScript(job, scriptResolved, buildPsArgs(body), env);
+  }
+
+  res.status(202).json({
+    message: 'Señal iniciada',
+    job: publicJob(job),
+  });
+});
+
+function signalCommand(scriptResolved, psArgs) {
+  return `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptResolved}" ${psArgs.join(' ')}`;
+}
+
+/** Líneas propias de la API en el log del job (emitidas como job:progress). */
+function pushJobLines(job, lines) {
+  job.logs.push(...lines);
+  jobEvents.broadcast(JOB_EVENTS.progress, { id: job.id, lines });
+}
+
+function launchSignalScript(job, scriptResolved, psArgs, env) {
+  const { market, tier } = job;
   const child = spawn(
     'powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptResolved, ...psArgs],
     {
       cwd: TRADING_ROOT,
-      env: { ...process.env, ...mt5.brokerFeedEnv(), PYTHONIOENCODING: 'utf-8' },
+      env,
       windowsHide: true,
       shell: false,
     }
@@ -2472,40 +2614,35 @@ app.post('/api/signals/run', (req, res) => {
   child.stderr.on('data', (d) => appendJobLogs(job, d, 'err'));
 
   child.on('error', (err) => {
-    currentJob.status = 'error';
-    currentJob.finishedAt = new Date().toISOString();
-    currentJob.error = err.message;
-    currentJob.logs.push(`[error] ${err.message}`);
+    job.status = 'error';
+    job.finishedAt = new Date().toISOString();
+    job.error = err.message;
+    job.logs.push(`[error] ${err.message}`);
     void persistJobSnapshot(job).then(() => announceJobEnd(job));
   });
 
   child.on('close', (code) => {
-    currentJob.exitCode = code;
-    currentJob.finishedAt = new Date().toISOString();
+    job.exitCode = code;
+    job.finishedAt = new Date().toISOString();
     if (code === 0) {
-      currentJob.status = 'done';
+      job.status = 'done';
       const latest = readLatest(market, tier);
       if (latest) {
-        currentJob.reportPath = latest.reportPath;
-        currentJob.summary = latest.summary;
-        currentJob.logs.push(`[ok] Reporte: ${latest.reportPath}`);
+        job.reportPath = latest.reportPath;
+        job.summary = latest.summary;
+        job.logs.push(`[ok] Reporte: ${latest.reportPath}`);
       } else {
-        currentJob.logs.push('[warn] Proceso OK pero no se encontró reporte live.');
+        job.logs.push('[warn] Proceso OK pero no se encontró reporte live.');
       }
     } else {
-      currentJob.status = 'error';
-      currentJob.error = `El script terminó con código ${code}`;
-      currentJob.logs.push(`[error] exit ${code}`);
+      job.status = 'error';
+      job.error = `El script terminó con código ${code}`;
+      job.logs.push(`[error] exit ${code}`);
     }
     // El fin se emite tras persistir → el cliente recibe historyId.
     void persistJobSnapshot(job).then(() => announceJobEnd(job));
   });
-
-  res.status(202).json({
-    message: 'Señal iniciada',
-    job: publicJob(job),
-  });
-});
+}
 
 void Promise.all([
   historyStore.init(),

@@ -10,6 +10,8 @@ export interface RunRequest {
   tier: Tier;
   bullish?: boolean;
   bearish?: boolean;
+  /** «Tendencia actual»: la API detecta el bias H1 y fuerza -Bullish/-Bearish. */
+  trendBias?: boolean;
   breakSetup?: boolean;
   reverse?: boolean;
   ml?: boolean;
@@ -25,6 +27,16 @@ export interface ChecklistItem {
   label: string;
   ok: boolean | null;
   note?: string;
+}
+
+/** Regla graduada: ✓✓ / ✓ / ~ / ✗ / ✗✗ / · (info). */
+export interface RuleReviewItem {
+  label: string;
+  grade: string;
+  value?: string;
+  impact?: string;
+  winrate?: string;
+  type?: string;
 }
 
 export interface PlanDetails {
@@ -86,6 +98,8 @@ export interface SignalSummary {
   planOriginal?: { entry?: string | null; sl?: string | null; tp?: string | null } | null;
   checklist2M5?: ChecklistItem[];
   checklistE1?: ChecklistItem[];
+  rulesReview?: RuleReviewItem[];
+  probCalibrated?: boolean;
   scorecard?: ScoreBar[];
   chartScores?: ScoreBar[];
   volume?: VolumeInfo | null;
@@ -121,6 +135,8 @@ export interface JobStatus {
   /** id en historial MACD-quant */
   macdQuantId?: number | null;
   days?: number;
+  /** Bias H1 detectado con «Tendencia actual» (flag null = no se forzó). */
+  trendBias?: { bias: string; label: string; flag: 'bullish' | 'bearish' | null; method: string | null; source: string | null } | null;
 }
 
 export interface LatestResponse {
@@ -167,6 +183,8 @@ export interface Mt5OrderResult {
   /** Lote subido al mínimo del broker: incluye el riesgo real resultante. */
   volumeNote?: string | null;
   checkWarning?: string | null;
+  /** Ajuste de SL/TP por VIX aplicado (o aviso si no se pudo leer); ausente con el toggle apagado. */
+  volatilityNote?: string | null;
 }
 
 export interface Mt5PushOutcome {
@@ -269,6 +287,82 @@ export interface Mt5Settings {
   extraTpPips: number;
   /** Valor en precio de 1 pip por mercado. */
   pipSize: Record<Mt5SignalMarket, number>;
+  /** Ajusta SL/TP según el nivel del VIX al enviar (desactivado por defecto). */
+  volatilityAdjustEnabled: boolean;
+  /** Símbolo del VIX en el broker; vacío = buscarlo en el puente. */
+  vixSymbol: string;
+  /** Umbrales superiores (puntos VIX) de Baja / Normal / Alta; por encima de vixHighMax es Extrema. */
+  vixLowMax: number;
+  vixNormalMax: number;
+  vixHighMax: number;
+  /** Multiplicador de SL/TP por nivel. */
+  vixMultLow: number;
+  vixMultNormal: number;
+  vixMultHigh: number;
+  vixMultExtreme: number;
+}
+
+export type VolatilityLevel = 'baja' | 'normal' | 'alta' | 'extrema';
+export type VolatilityMood = 'tranquilo' | 'normal' | 'movido' | 'muy_movido';
+
+/** GET /api/volatility/vix */
+export interface VixReading {
+  points: number;
+  source: 'broker' | 'yahoo';
+  sourceLabel: string;
+  symbol: string;
+  asOf: string;
+  /** Dato no reciente (mercado cerrado: último cierre). */
+  stale: boolean;
+  cached: boolean;
+  attempts: string[];
+  level: VolatilityLevel | null;
+  levelLabel: string | null;
+  multiplier: number;
+  enabled: boolean;
+}
+
+export interface VolatilityCalcRequest {
+  market: Mt5SignalMarket;
+  mood: VolatilityMood;
+  riskPct: number;
+  balance?: number | null;
+  /** Valores del borrador sin guardar (si no se envían, los guardados del perfil). */
+  multiplier?: number;
+  pipSize?: number;
+  profile?: Mt5ProfileId;
+}
+
+export interface VolatilityCalcResult {
+  market: Mt5SignalMarket;
+  symbol: string;
+  mood: VolatilityMood;
+  level: VolatilityLevel;
+  levelLabel: string;
+  multiplier: number;
+  riskPct: number;
+  balance: number;
+  balanceSource: 'usuario' | 'mt5';
+  currency: string;
+  atr: number;
+  atrPips: number;
+  pipSize: number;
+  price: number | null;
+  asOf: string | null;
+  plan: {
+    slDistance: number;
+    tpDistance: number;
+    slPips: number;
+    tpPips: number;
+    lots: number;
+    lotNote: string | null;
+    riskAmount: number;
+    rewardAmount: number;
+    realRiskPct: number;
+    rewardRatio: number;
+    extraSlPips: number;
+    extraTpPips: number;
+  };
 }
 
 export type Mt5SettingsPatch = Partial<Omit<Mt5Settings, 'hasToken'>> & { bridgeToken?: string };
@@ -398,6 +492,17 @@ export class SignalsApiService {
     return this.http.get<Mt5Health>(`${this.base}/mt5/health`, { params });
   }
 
+  /** VIX actual (broker MT5 o Yahoo), nivel y multiplicador con los umbrales guardados del perfil. */
+  vixCurrent(profile?: Mt5ProfileId): Observable<VixReading> {
+    const params: Record<string, string> = profile ? { profile } : {};
+    return this.http.get<VixReading>(`${this.base}/volatility/vix`, { params });
+  }
+
+  /** Calculadora de volatilidad (solo lectura del broker): distancias SL/TP, lotes y dinero. */
+  volatilityCalc(body: VolatilityCalcRequest): Observable<VolatilityCalcResult> {
+    return this.http.post<VolatilityCalcResult>(`${this.base}/volatility/calc`, body);
+  }
+
   latest(market: Market, tier: Tier = 'high'): Observable<LatestResponse> {
     return this.http.get<LatestResponse>(
       `${this.base}/signals/latest`,
@@ -494,17 +599,6 @@ export class SignalsApiService {
     return this.http.get<{ confluencias: HistoryTag[] }>(
       `${this.base}/history/confluencias`
     );
-  }
-
-  historyConfluenciaCreate(body: {
-    name: string;
-    color?: string | null;
-  }): Observable<{ ok: boolean; confluencia: HistoryTag; created: boolean }> {
-    return this.http.post<{
-      ok: boolean;
-      confluencia: HistoryTag;
-      created: boolean;
-    }>(`${this.base}/history/confluencias`, body);
   }
 
   historyCalcMarkersList(market?: Market | ''): Observable<{ markers: CalcChangeMarker[] }> {
@@ -810,6 +904,8 @@ export interface HistoryTag {
   color?: string | null;
   sortOrder?: number;
   createdAt?: string | null;
+  /** Solo confluencias: requiere reversiones activadas en el perfil MT5 activo para asignarse. */
+  requiresReversals?: boolean;
 }
 
 /** Columnas ordenables en /api/history (whitelist en history-store.js). */

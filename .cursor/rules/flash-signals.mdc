@@ -56,6 +56,7 @@ UI local (**Angular 19**) + API (**Express** en `server/index.js`) para orquesta
 - `GET /api/signals/status|latest|chart` + `GET /api/zentinel`
 - `GET|DELETE /api/history` (+ `/:id`) — historial hive box
 - `GET /api/artifacts` (+ `scan` / `item` / `raw`) — wiki de artefactos
+- `GET /api/volatility/vix|atr` + `POST /api/volatility/calc` — VIX/ATR/calculadora de `/configuracion` (solo lectura; `server/volatility.js` pura, `server/vix-source.js` broker→Yahoo). Ajuste de SL/TP por VIX por perfil (`volatilityAdjustEnabled`, desactivado por defecto).
 - Sanitizar `entry` (solo numérico). No exponer la API a la LAN por defecto.
 - CORS: localhost (4400/8080) + `CORS_ORIGINS`.
 

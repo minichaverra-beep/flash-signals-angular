@@ -6,6 +6,18 @@ import { Subscription } from 'rxjs';
 import { JobStatus, Market, SignalsApiService, Tier } from '../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../services/signal-job.service';
 
+/** « · Tendencia H1: BAJISTA → Bearish» a partir del log `[bias]` de la API (vacío si no aplica). */
+function trendNote(j: JobStatus): string {
+  const line = [...(j.logs ?? [])].reverse().find((l) => l.startsWith('[bias] '));
+  if (!line) return '';
+  const m = /Tendencia actual H1: (\S+) → (-Bullish|-Bearish|sin forzar bias)/.exec(line);
+  if (!m) {
+    return line.includes('No se pudo detectar') ? ' · Tendencia H1 no detectada → sin forzar' : ' · Detectando tendencia H1…';
+  }
+  const action = m[2] === 'sin forzar bias' ? 'sin forzar' : m[2].slice(1);
+  return ` · Tendencia H1: ${m[1]} → ${action}`;
+}
+
 /** «Configurar corrida» + estado del job de señal (cabecera de /senales). */
 @Component({
   selector: 'app-signal-run-form',
@@ -23,7 +35,9 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
 
   market: Market = 'btc';
   readonly tier: Tier = 'high';
-  bias: 'auto' | 'bullish' | 'bearish' = 'bullish';
+  /** `trend` = «Tendencia actual»: la API detecta el bias H1 y fuerza Bullish o Bearish. */
+  bias: 'trend' | 'bullish' | 'bearish' = 'bullish';
+  readonly trendTitle = 'Detecta la tendencia H1 actual y fuerza Bullish o Bearish';
   setup: 'break' | 'reverse' = 'break';
   /**
    * `reversalsEnabled` del perfil MT5 activo. `null` = desconocido (cargando o API caída):
@@ -92,10 +106,10 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
     if (running?.status === 'running') {
       return jobKind(running) === 'macd-quant'
         ? 'Hay un análisis MACD-quant en ejecución; espera a que termine.'
-        : `Señal ${String(running.market ?? '').toUpperCase()} · ${running.tier ?? ''} en ejecución…`;
+        : `Señal ${String(running.market ?? '').toUpperCase()} · ${running.tier ?? ''} en ejecución…${trendNote(running)}`;
     }
     const j = this.job;
-    if (j?.status === 'done') return 'Listo — la señal ya está en el historial de abajo.';
+    if (j?.status === 'done') return `Listo — la señal ya está en el historial de abajo.${trendNote(j)}`;
     if (j?.status === 'error') return j.error || 'Error en el pipeline.';
     return '';
   }
@@ -160,6 +174,7 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
       tier: this.tier,
       bullish: this.bias === 'bullish',
       bearish: this.bias === 'bearish',
+      trendBias: this.bias === 'trend',
       breakSetup: this.setup === 'break',
       reverse: this.setup === 'reverse',
       ml: this.ml,

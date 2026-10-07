@@ -188,6 +188,306 @@
         </div>
       </section>
 
+      <section class="panel vol-panel">
+        <h2>Volatilidad (VIX) · {{ label(editing) }}</h2>
+        <p class="muted tiny">
+          El VIX mide cuánto se espera que se mueva la bolsa de EE. UU.: con VIX alto los mercados se agitan más y un
+          SL/TP corto salta por simple ruido; con VIX bajo hay poco movimiento y un SL/TP largo es innecesario.
+        </p>
+
+        <div class="switch-row">
+          <button
+            type="button"
+            class="switch"
+            role="switch"
+            [class.on]="d.form.volatilityAdjustEnabled"
+            [attr.aria-checked]="d.form.volatilityAdjustEnabled"
+            aria-labelledby="cfg-vol-label"
+            [disabled]="volSaving"
+            (click)="toggleVolatility()"
+          >
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+          <span
+            id="cfg-vol-label"
+            class="has-tip"
+            tabindex="0"
+            data-tooltip="Al enviar una operación se mira el VIX y se multiplica la distancia del SL y del TP según el nivel (tabla de abajo). Apagado, se envían los niveles de la señal sin tocar. Los multiplicadores se conservan."
+          >Ajustar SL/TP según la volatilidad (VIX) ⓘ</span>
+          <small class="switch-state" [class.on]="d.form.volatilityAdjustEnabled" aria-hidden="true">
+            {{ d.form.volatilityAdjustEnabled ? 'Activado' : 'Desactivado' }}
+          </small>
+        </div>
+        <p class="muted tiny">
+          Si está activo, con VIX alto el SL/TP se ensanchan y con VIX bajo se estrechan. Se multiplica la distancia de
+          la señal (entrada → SL y entrada → TP) y después se suma el margen extra en pips. Desactivado no se consulta
+          el VIX al enviar.
+        </p>
+        <p class="vol-note" *ngIf="d.form.volatilityAdjustEnabled" role="note">
+          Cada envío lee el VIX (se reutiliza durante 60 s). Si no se puede leer, la orden se envía igual con ×1 y un
+          aviso. «Copiar», «Duplicar» y la operación manual no se ajustan.
+        </p>
+
+        <div class="vix-box">
+          <div class="actions">
+            <button type="button" class="ghost" (click)="calcVix()" [disabled]="vixLoading">
+              <span class="spinner" *ngIf="vixLoading" aria-hidden="true"></span>
+              Calcular VIX actual
+            </button>
+            <small class="muted">Usa el símbolo VIX de tu broker y, si no existe, Yahoo Finance (^VIX).</small>
+          </div>
+          <p class="msg err" *ngIf="vixError">{{ vixError }}</p>
+
+          <div class="vix-result" *ngIf="vix as v" aria-live="polite">
+            <div class="vix-main">
+              <span class="vix-points">{{ num(v.points) }}</span>
+              <span class="vix-unit">puntos</span>
+              <span class="level-chip" *ngIf="vixLevel as lv" [attr.data-level]="lv">Volatilidad {{ levelLabels[lv] | lowercase }}</span>
+            </div>
+            <div class="thermo" *ngIf="vixThermo as t" role="img" [attr.aria-label]="'VIX ' + v.points + ' puntos'">
+              <span class="thermo-zone" *ngFor="let z of t.zones" [attr.data-level]="z.level" [style.width.%]="z.widthPct">
+                {{ levelLabels[z.level] }}
+              </span>
+              <span class="thermo-marker" [style.left.%]="t.markerPct"></span>
+            </div>
+            <p class="vix-effect" *ngIf="vixLevel">
+              Con este nivel el SL/TP se multiplican por <strong>×{{ num(vixMultiplier) }}</strong>
+              <ng-container *ngIf="!d.form.volatilityAdjustEnabled"> (solo informativo: el ajuste está desactivado)</ng-container>.
+            </p>
+            <p class="muted tiny">
+              Fuente: <strong>{{ v.sourceLabel }}</strong> · {{ v.asOf | date: 'dd/MM/yyyy HH:mm' }}
+              <ng-container *ngIf="vixAge">({{ vixAge }})</ng-container>
+              <ng-container *ngIf="v.stale"> · mercado cerrado: es el último cierre</ng-container>
+              <ng-container *ngIf="v.cached"> · lectura guardada de hace menos de 1 min</ng-container>
+            </p>
+            <p class="muted tiny" *ngFor="let a of v.attempts">· {{ a }}</p>
+          </div>
+        </div>
+
+        <h3 class="sub-title">Niveles y multiplicadores</h3>
+        <div class="level-table-wrap">
+          <table class="level-table">
+            <thead>
+              <tr>
+                <th scope="col">Nivel</th>
+                <th scope="col">Puntos de VIX</th>
+                <th scope="col">Hasta (puntos)</th>
+                <th scope="col">SL/TP ×</th>
+                <th scope="col">Efecto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of levelRows" [class.current]="vixLevel === row.level">
+                <td><span class="level-chip" [attr.data-level]="row.level">{{ levelLabels[row.level] }}</span></td>
+                <td>{{ levelRange(row.level) }}</td>
+                <td>
+                  <input
+                    *ngIf="row.limit as key; else noLimit"
+                    type="number"
+                    min="1"
+                    max="200"
+                    step="0.5"
+                    [name]="'vix-limit-' + row.level"
+                    [attr.aria-label]="'Límite superior del nivel ' + levelLabels[row.level]"
+                    [ngModel]="d.form[key]"
+                    (ngModelChange)="d.form[key] = $event"
+                  />
+                  <ng-template #noLimit><span class="muted">sin tope</span></ng-template>
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    min="0.2"
+                    max="4"
+                    step="0.05"
+                    [name]="'vix-mult-' + row.level"
+                    [attr.aria-label]="'Multiplicador de SL/TP del nivel ' + levelLabels[row.level]"
+                    [ngModel]="d.form[row.mult]"
+                    (ngModelChange)="d.form[row.mult] = $event; scheduleCalc()"
+                  />
+                </td>
+                <td class="muted">{{ effectText(row.mult) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="reversal-warning-alert" *ngIf="thresholdsInvalid">
+          Los límites deben ir de menor a mayor (Baja &lt; Normal &lt; Alta); si no, no se podrá guardar.
+        </p>
+        <p class="muted tiny">
+          ×1,3 = el SL y el TP quedan un 30 % más lejos de la entrada; ×0,8 = un 20 % más cerca. Rango permitido 0,2–4.
+        </p>
+
+        <div class="grid">
+          <div class="field">
+            <label for="cfg-vix-symbol">Símbolo VIX del broker (opcional)</label>
+            <input id="cfg-vix-symbol" name="vixSymbol" type="text" [(ngModel)]="d.form.vixSymbol" placeholder="vacío = buscarlo solo" />
+            <small class="muted">Muchos brokers (p. ej. Exness) no lo ofrecen; entonces se usa Yahoo Finance.</small>
+          </div>
+        </div>
+
+        <!-- Calculadora de volatilidad (sin matemáticas) -->
+        <div class="calc-card">
+          <h3 class="sub-title">Calculadora de volatilidad</h3>
+          <p class="muted tiny">
+            Responde unas preguntas sencillas y te digo dónde poner el Stop Loss y el Take Profit y cuántos lotes usar.
+            Solo lee el mercado de tu broker: no envía ninguna operación.
+          </p>
+
+          <div class="calc-step">
+            <p class="calc-q">1 · ¿Qué mercado vas a operar?</p>
+            <div class="big-seg" role="radiogroup" aria-label="Mercado">
+              <button
+                type="button"
+                role="radio"
+                *ngFor="let m of markets"
+                [attr.aria-checked]="calcMarket === m.id"
+                [class.active]="calcMarket === m.id"
+                (click)="setCalcMarket(m.id)"
+              >{{ m.label }}</button>
+            </div>
+          </div>
+
+          <div class="calc-step">
+            <p class="calc-q">2 · ¿Cuánto estás dispuesto a perder si falla? <small>(% de tu cuenta)</small></p>
+            <div class="slider-row">
+              <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.1"
+                name="calcRisk"
+                aria-label="Porcentaje de la cuenta que aceptas perder"
+                [ngModelOptions]="{ standalone: true }"
+                [ngModel]="calcRisk"
+                (ngModelChange)="calcRisk = $event; onCalcRiskChange()"
+              />
+              <strong class="slider-value">{{ num(calcRisk, 1) }} %</strong>
+            </div>
+            <p class="muted tiny">Lo habitual es entre 0,5 % y 1 %. Más bajo = duermes más tranquilo.</p>
+          </div>
+
+          <div class="calc-step">
+            <p class="calc-q">3 · ¿Qué tan movido está el mercado?</p>
+            <div class="mood-grid" role="radiogroup" aria-label="Qué tan movido está el mercado">
+              <button
+                type="button"
+                role="radio"
+                *ngFor="let mo of moodIds"
+                [attr.aria-checked]="calcMood === mo"
+                [class.active]="calcMood === mo"
+                (click)="setCalcMood(mo)"
+              >
+                <strong>{{ moodLabels[mo] }}</strong>
+                <small>{{ moodHints[mo] }}</small>
+              </button>
+            </div>
+            <p class="muted tiny" *ngIf="calcMoodFromVix && vix">✔ Elegido por ti según el VIX de ahora ({{ num(vix.points) }} puntos).</p>
+            <p class="muted tiny" *ngIf="!calcMoodFromVix">Consejo: pulsa «Calcular VIX actual» y lo elijo yo por ti.</p>
+          </div>
+
+          <div class="calc-step">
+            <p class="calc-q">4 · Saldo de tu cuenta <small>(opcional)</small></p>
+            <div class="field balance-field">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                name="calcBalance"
+                aria-label="Saldo de la cuenta"
+                placeholder="vacío = se lee de MT5"
+                [ngModelOptions]="{ standalone: true }"
+                [(ngModel)]="calcBalance"
+                (ngModelChange)="onCalcBalanceChange()"
+                (keydown.enter)="$event.preventDefault()"
+              />
+              <small class="muted">Se rellena con «Probar conexión»; si lo dejas vacío uso el saldo que MT5 informa.</small>
+            </div>
+          </div>
+
+          <div class="calc-result" [class.loading]="calcLoading" aria-live="polite">
+            <p class="muted" *ngIf="calcLoading && !calcResult"><span class="spinner" aria-hidden="true"></span> Midiendo el mercado…</p>
+            <p class="msg err" *ngIf="calcError">{{ calcError }}</p>
+
+            <ng-container *ngIf="calcResult as r">
+              <div class="result-grid">
+                <div class="result-tile sl">
+                  <span class="tile-label">Stop Loss</span>
+                  <span class="tile-big">{{ num(r.plan.slPips, 1) }}<small> pips</small></span>
+                  <span class="tile-sub">≈ {{ num(r.plan.slDistance) }} puntos de precio</span>
+                  <p class="tile-explain">Si el mercado va tanto en tu contra, la operación se cierra sola para frenar la pérdida.</p>
+                </div>
+                <div class="result-tile tp">
+                  <span class="tile-label">Take Profit</span>
+                  <span class="tile-big">{{ num(r.plan.tpPips, 1) }}<small> pips</small></span>
+                  <span class="tile-sub">≈ {{ num(r.plan.tpDistance) }} puntos de precio</span>
+                  <p class="tile-explain">Si va tanto a tu favor, se cierra sola con ganancia: el doble de lo que arriesgas.</p>
+                </div>
+                <div class="result-tile lots">
+                  <span class="tile-label">Tamaño sugerido</span>
+                  <span class="tile-big">{{ num(r.plan.lots, 2) }}<small> lotes</small></span>
+                  <span class="tile-sub">{{ r.symbol }}</span>
+                  <p class="tile-explain">Ajustado para que, si falla, pierdas aproximadamente lo que elegiste.</p>
+                </div>
+              </div>
+
+              <p class="money-line">
+                Si falla pierdes ~<strong class="loss">{{ money(r.plan.riskAmount, r.currency) }}</strong>
+                · si acierta ganas ~<strong class="gain">{{ money(r.plan.rewardAmount, r.currency) }}</strong>
+              </p>
+              <div
+                class="rr-bar"
+                role="img"
+                [attr.aria-label]="'Pierdes ' + r.plan.riskAmount + ' o ganas ' + r.plan.rewardAmount"
+              >
+                <span class="rr-risk" [style.width.%]="calcBar.riskPct">Pierdes</span>
+                <span class="rr-reward" [style.width.%]="calcBar.rewardPct">Ganas</span>
+              </div>
+              <p class="muted tiny">
+                Con un saldo de {{ money(r.balance, r.currency) }}
+                ({{ r.balanceSource === 'mt5' ? 'leído de MT5' : 'el que escribiste' }}) arriesgas
+                {{ num(r.plan.realRiskPct, 2) }} % de tu cuenta.
+              </p>
+              <p class="msg warn" *ngIf="r.plan.lotNote">⚠ {{ r.plan.lotNote }}</p>
+
+              <div class="actions use-row">
+                <button type="button" class="primary" (click)="useCalcValues()">Usar estos valores</button>
+                <small class="muted">
+                  Copia al formulario (sin guardar) un margen extra de <strong>SL +{{ r.plan.extraSlPips }} pips</strong> y
+                  <strong>TP +{{ r.plan.extraTpPips }} pips</strong>, y el riesgo de <strong>{{ num(r.riskPct, 1) }} %</strong>.
+                </small>
+              </div>
+
+              <details class="how">
+                <summary>¿Cómo se calcula?</summary>
+                <ol>
+                  <li>
+                    Miro cuánto se ha movido el mercado en las últimas velas de 5 minutos de tu broker
+                    (ATR de 14 velas): <strong>{{ num(r.atr) }}</strong> puntos ({{ num(r.atrPips, 1) }} pips) por vela.
+                  </li>
+                  <li>
+                    El Stop Loss se pone a <strong>2 veces</strong> ese movimiento, multiplicado por el nivel que elegiste
+                    ({{ r.levelLabel }}: <strong>×{{ num(calcMultiplier) }}</strong>). Así el ruido normal no te saca.
+                  </li>
+                  <li>El Take Profit se pone al <strong>doble</strong> de distancia que el Stop Loss (ganas 2 por cada 1 que arriesgas).</li>
+                  <li>
+                    El dinero que pierdes por cada lote sale del valor del punto que informa tu broker ({{ r.symbol }}).
+                  </li>
+                  <li>
+                    Lotes = (saldo × % que aceptas perder) ÷ lo que pierdes por lote, redondeado hacia abajo. Si saliera
+                    menos que el lote mínimo del broker, se usa el mínimo y se avisa.
+                  </li>
+                  <li>
+                    El margen extra sugerido es <strong>1 movimiento típico</strong> × el multiplicador para el SL y el doble
+                    para el TP: es el colchón que se suma al SL/TP de cada señal.
+                  </li>
+                </ol>
+              </details>
+            </ng-container>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <h2>Ejecución</h2>
         <div class="grid">

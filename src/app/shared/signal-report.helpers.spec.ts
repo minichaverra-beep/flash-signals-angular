@@ -7,6 +7,8 @@ import type { SignalSummary } from '../services/signals-api.service';
 import {
   chartHref,
   executionLevels,
+  rapidaScoreGroups,
+  hasRapidaScores,
   verdictRows,
   verdictTone,
   displayScoreLabel,
@@ -27,7 +29,69 @@ import {
   hitRateBandLabel,
   formatExpectancyR,
   HIT_RATE_COLUMN_TOOLTIP,
+  ruleGradeClass,
+  scoreRowStatus,
+  naturalScoreName,
+  hasChecklistsCard,
+  isCalibratedWinrate,
+  calibratedBandLabel,
 } from './signal-report.helpers.ts';
+import { INSTAGRAM_SIZES, imageLines, scoreImageFilename, statusMark } from './score-image-export.ts';
+
+describe('export imagen Instagram', () => {
+  it('tamaños Instagram y filas sin Detalle', () => {
+    assert.deepEqual(
+      [INSTAGRAM_SIZES.post.width, INSTAGRAM_SIZES.post.height],
+      [1080, 1350]
+    );
+    assert.deepEqual(
+      [INSTAGRAM_SIZES.story.width, INSTAGRAM_SIZES.story.height],
+      [1080, 1920]
+    );
+    const lines = imageLines([
+      { titulo: 'Resumen', rows: [{ concepto: 'Reglas', valor: '66%', detalle: 'Peso 28%', ok: true }] },
+      { titulo: 'Resultado', rows: [{ concepto: 'Probabilidad', valor: '51%', detalle: 'x', ok: false, final: true }] },
+    ]);
+    assert.deepEqual(lines.map((l) => [l.kind, l.text, l.valor ?? null]), [
+      ['group', 'RESUMEN', null],
+      ['row', 'Reglas', '66%'],
+      ['group', 'RESULTADO', null],
+      ['row', 'Probabilidad', '51%'],
+    ]);
+    assert.ok(!JSON.stringify(lines).includes('Peso 28%'));
+    assert.equal(statusMark(true), '✓');
+    assert.equal(statusMark(false), '✗');
+    assert.equal(statusMark(null), '·');
+    assert.match(scoreImageFilename('BTC', 'story', new Date('2026-10-07T15:30:00Z')), /^scores-btc-story-202610071530\.png$/);
+  });
+});
+
+describe('reglas graduadas y probabilidad calibrada', () => {
+  it('ruleGradeClass distingue los 6 estados', () => {
+    assert.equal(ruleGradeClass('✓✓'), 'grade-strong');
+    assert.equal(ruleGradeClass('✓'), 'grade-ok');
+    assert.equal(ruleGradeClass('~'), 'grade-neutral');
+    assert.equal(ruleGradeClass('✗'), 'grade-bad');
+    assert.equal(ruleGradeClass('✗✗'), 'grade-critical');
+    assert.equal(ruleGradeClass('·'), 'grade-info');
+    assert.equal(ruleGradeClass(null), 'grade-info');
+  });
+
+  it('hasChecklistsCard acepta solo rulesReview', () => {
+    assert.equal(hasChecklistsCard({ rulesReview: [{ label: 'RSI', grade: '✗' }] } as SignalSummary), true);
+  });
+
+  it('detecta winrate calibrado y lo lee frente a la media', () => {
+    assert.equal(
+      isCalibratedWinrate('~46% — calibrado walk-forward BTC E1 · 80%: 44–48%'),
+      true
+    );
+    assert.equal(isCalibratedWinrate('~64% — histórico E1 BTC · 83% reglas'), false);
+    assert.equal(calibratedBandLabel(55), 'por encima de la media del motor');
+    assert.equal(calibratedBandLabel(46), 'en la media del motor');
+    assert.equal(calibratedBandLabel(35), 'por debajo de la media del motor');
+  });
+});
 
 describe('signal-report.helpers', () => {
   it('chartHref prioriza chartUrl absoluto o relativo', () => {
@@ -185,6 +249,129 @@ describe('signal-report.helpers', () => {
     });
     assert.match(tip, /58%/);
     assert.match(tip, /Premium\/Discount|DISCOUNT|blend/i);
+  });
+
+  it('rapidaScoreGroups une scores + scorecard sin duplicar ni repetir Probabilidad de éxito', () => {
+    assert.deepEqual(rapidaScoreGroups(null), []);
+    assert.equal(hasRapidaScores({}), false);
+
+    const s: SignalSummary = {
+      scoreCombined: 58,
+      rulesPct: 83,
+      mlPct: 61,
+      confluencePct: 57,
+      confluenceLabel: 'MEDIA',
+      scorecard: [
+        { label: 'Rules E1', value: 65.7, raw: '65.7%', weight: '30%', note: '6/9 reglas' },
+        { label: 'Neural galería', value: 65, raw: '65%', weight: '20%', note: 'WIN similar' },
+        { label: 'Acuerdo entre capas', value: 57, raw: '57%', weight: '10%', note: 'capas dispersas' },
+        { label: 'Probabilidad de éxito', value: 58, raw: '58%', weight: '100%', note: 'blend' },
+      ],
+      chartScores: [
+        { label: 'Rules E1', value: 65.7 },
+        { label: 'Acuerdo entre capas', value: 57 },
+        { label: 'Probabilidad de éxito', value: 58 },
+      ],
+    };
+    const groups = rapidaScoreGroups(s);
+    assert.deepEqual(groups.map((g) => g.titulo), ['Resumen', 'Detalle por análisis', 'Resultado']);
+
+    const [scores, layers, result] = groups;
+    assert.deepEqual(
+      scores.rows.map((r) => [r.concepto, r.ok]),
+      [
+        ['Reglas del plan cumplidas', true],
+        ['Predicción del modelo de datos', true],
+        ['Coincidencia entre los análisis', true],
+      ]
+    );
+    assert.equal(scores.rows[0].tecnico, 'Cumplimiento de reglas');
+    // Rules E1 y Acuerdo del scorecard se fusionan en la fila del score (peso/nota)
+    assert.equal(scores.rows[0].detalle, 'Peso 30% · 6/9 reglas');
+    assert.equal(scores.rows[2].valor, 'MEDIA · 57%');
+    assert.equal(scores.rows[2].detalle, 'Peso 10% · capas dispersas');
+
+    assert.deepEqual(
+      layers.rows.map((r) => [r.concepto, r.valor, r.ok]),
+      [['Parecido con operaciones pasadas', '65%', true]]
+    );
+
+    assert.equal(result.rows.length, 1);
+    const final = result.rows[0];
+    assert.equal(final.concepto, 'Probabilidad de ganar la operación');
+    assert.equal(final.valor, '58%');
+    assert.equal(final.final, true);
+    assert.equal(final.ok, true);
+    assert.match(final.detalle, /equilibrio 33% con R:R 1:2/);
+
+    const all = groups.flatMap((g) => g.rows.map((r) => r.concepto.toLowerCase()));
+    assert.equal(new Set(all).size, all.length);
+    assert.deepEqual(verdictRows(s), [{ campo: 'Probabilidad de éxito', valor: '58%' }]);
+  });
+
+  it('scoreRowStatus interpreta %, fracciones, pass/fail, multiplicadores y EV', () => {
+    assert.equal(scoreRowStatus('Cumplimiento de reglas', '66%'), true);
+    assert.equal(scoreRowStatus('Rules E1', '2/6'), false);
+    assert.equal(scoreRowStatus('Rules extendidas (10)', '65%'), false);
+    assert.equal(scoreRowStatus('ML tabular (gated)', '69.5%'), true);
+    assert.equal(scoreRowStatus('Acuerdo entre capas', 'BAJA · 38%'), false);
+    assert.equal(scoreRowStatus('CRT coherence', 'pass'), true);
+    assert.equal(scoreRowStatus('CRT coherence', 'fail'), false);
+    assert.equal(scoreRowStatus('Penalización ubicación', '×0.72'), false);
+    assert.equal(scoreRowStatus('Bonificación ubicación', '×1.03'), true);
+    assert.equal(scoreRowStatus('EV por operación', '+0.18R'), true);
+    assert.equal(scoreRowStatus('EV por operación', '-0.07R'), false);
+    assert.equal(scoreRowStatus('Fusión heurística (anterior)', '60%'), null);
+    assert.equal(scoreRowStatus('Neural galería', 'n/d'), null);
+  });
+
+  it('naturalScoreName traduce la jerga y fusiona duplicados de la foto', () => {
+    assert.equal(naturalScoreName('CRT coherence'), 'Precio respeta el rango de ayer');
+    assert.equal(naturalScoreName('Penalización ubicación'), 'Precio en zona favorable');
+    const groups = rapidaScoreGroups({
+      rulesPct: 66,
+      mlPct: 69.5,
+      scoreExtended: 70,
+      scoreCombined: 51,
+      planDetails: { rr: '1:2' },
+      scorecard: [
+        { label: 'Rules E1', value: 66, raw: '4/6', weight: '28%', note: '66% OK' },
+        { label: 'Rules extendidas (10)', value: 70, raw: '70%', weight: '12%', note: 'meta >70%' },
+        { label: 'ML tabular (gated)', value: 69.5, raw: '69.5%', weight: '18%', note: 'grade B' },
+        { label: 'Penalización ubicación', value: null, raw: '×0.72', weight: '—', note: 'chase' },
+      ],
+    });
+    const names = groups.flatMap((g) => g.rows.map((r) => r.concepto));
+    assert.equal(names.filter((n) => n === 'Predicción del modelo de datos').length, 1);
+    assert.equal(names.filter((n) => n === 'Chequeo ampliado (10 puntos)').length, 1);
+    assert.equal(names.filter((n) => n === 'Reglas del plan cumplidas').length, 1);
+    const last = groups.at(-1)!.rows[0];
+    assert.equal(last.valor, '51%');
+    assert.equal(last.ok, true);
+  });
+
+  it('rapidaScoreGroups sin scorecard usa chartScores solo para lo que falta', () => {
+    const groups = rapidaScoreGroups({
+      rulesPct: 80,
+      mlPct: 55,
+      chartScores: [
+        { label: 'Rules', value: 80 },
+        { label: 'ML', value: 55 },
+        { label: 'Neural galería', value: 62.5 },
+        { label: 'Probabilidad de éxito', value: 58 },
+      ],
+    });
+    assert.deepEqual(groups.map((g) => g.titulo), ['Resumen', 'Detalle por análisis', 'Resultado']);
+    assert.deepEqual(groups[1].rows, [{
+      concepto: 'Parecido con operaciones pasadas',
+      valor: '62.5%',
+      detalle: '—',
+      ok: true,
+      tecnico: 'Neural galería',
+    }]);
+
+    const onlyBars = rapidaScoreGroups({ chartScores: [{ label: 'Rules E1', value: 70 }] });
+    assert.deepEqual(onlyBars.map((g) => g.titulo), ['Detalle por análisis']);
   });
 
   it('hasDetalleAdicional (empty-state útil para historial/reporte)', () => {

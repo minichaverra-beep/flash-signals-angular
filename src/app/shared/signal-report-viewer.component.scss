@@ -379,6 +379,36 @@
   color: var(--err);
 }
 
+.matrix.checklist.graded {
+  tr.grade-strong .status { color: var(--ok); }
+  tr.grade-ok .status { color: color-mix(in srgb, var(--ok) 70%, var(--muted)); }
+  tr.grade-neutral .status { color: var(--muted); }
+  tr.grade-bad .status { color: color-mix(in srgb, var(--err) 75%, var(--muted)); }
+  tr.grade-critical .status { color: var(--err); }
+  tr.grade-info { opacity: 0.6; }
+  tr.veto td { background: color-mix(in srgb, var(--err) 10%, transparent); }
+
+  .impact {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rule-type {
+    color: var(--muted);
+    font-size: 0.8em;
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 640px) {
+  .matrix.checklist.graded th:nth-child(5),
+  .matrix.checklist.graded td:nth-child(5),
+  .matrix.checklist.graded th:nth-child(6),
+  .matrix.checklist.graded td:nth-child(6) {
+    display: none;
+  }
+}
+
 .charts {
   display: flex;
   flex-direction: column;
@@ -587,12 +617,6 @@ pre {
   background: #0e0808;
 }
 
-.charts-rapida .bar-fill {
-  background: linear-gradient(90deg, #e67a22 0%, #c0392b 100%);
-  box-shadow: none;
-  opacity: 1;
-}
-
 /* —— Riesgo en claro: track por zonas + marcador —— */
 .risk-hot {
   position: relative;
@@ -781,4 +805,148 @@ pre {
 .risk-hot:hover .risk-hot-tip,
 .risk-hot:focus-visible .risk-hot-tip {
   opacity: 1;
+}
+
+/* —— Vista rápida: Riesgo en claro compacto (una línea) —— */
+.risk-hot--compact {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 10px;
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+
+.risk-hot--compact .risk-hot-label {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.risk-hot--compact .risk-hot-badge {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+}
+
+.risk-hot--compact .risk-hot-track {
+  flex: 1 1 90px;
+  min-width: 70px;
+  height: 7px;
+}
+
+.risk-hot--compact .risk-hot-marker {
+  width: 8px;
+  height: 14px;
+  margin-left: -4px;
+  border-width: 1px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, black 55%, transparent);
+}
+
+.risk-hot-short {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.2rem 0.6rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .risk-hot--compact {
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+  }
+
+  .risk-hot--compact .risk-hot-track {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+
+/* —— Vista rápida: tabla unificada Scores + confluencias —— */
+.rapida-scores tbody tr.group-row th {
+  width: auto;
+  padding: 0.35rem 0.75rem;
+  background: color-mix(in srgb, var(--charcoal) 55%, black);
+  color: color-mix(in srgb, var(--gold) 75%, white);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rapida-scores tbody:not(:first-of-type) tr.group-row th {
+  border-top: 1px solid color-mix(in srgb, var(--gold) 25%, transparent);
+}
+
+.rapida-scores tbody tr:last-child th,
+.rapida-scores tbody tr:last-child td {
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+.rapida-scores tbody:last-of-type tr:last-child th,
+.rapida-scores tbody:last-of-type tr:last-child td {
+  border-bottom: none;
+}
+
+.rapida-scores td.muted {
+  font-size: 0.82rem;
+}
+
+.rapida-scores .status-col,
+.rapida-scores td.status {
+  width: 3.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.rapida-scores tr.ok td.status { color: var(--ok); }
+.rapida-scores tr.bad td.status { color: var(--err); }
+.rapida-scores tbody tr:not(.ok):not(.bad) td.status { color: var(--muted); }
+
+.rapida-scores tr.final-row th,
+.rapida-scores tr.final-row td {
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  font-weight: 700;
+}
+
+.rapida-scores td.final-value {
+  color: var(--gold);
+  font-size: 1.1rem;
+}
+
+.score-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.btn-export {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gold);
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--gold) 15%, transparent);
+  }
+}
+
+@media (max-width: 640px) {
+  .rapida-scores th:nth-child(4),
+  .rapida-scores td:nth-child(4) {
+    display: none;
+  }
 }

@@ -484,7 +484,7 @@ button:disabled {
 
 .hist-table {
   width: 100%;
-  min-width: 1580px;
+  min-width: 1680px;
   border-collapse: collapse;
   font-size: 0.95rem;
   table-layout: auto;
@@ -657,8 +657,20 @@ button:disabled {
 
 .actions-cell {
   white-space: nowrap;
+  width: 1%;
+}
+
+.row-actions {
   display: flex;
+  align-items: center;
   gap: 0.35rem;
+}
+
+.ticket-cell {
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .comment-cell {
@@ -2423,8 +2435,18 @@ code {
   font-size: 0.82rem;
 }
 
-.tag-option:hover:not(:disabled) {
+.tag-option:hover:not(:disabled):not(.is-blocked) {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* aria-disabled (no [disabled]) para que el tooltip se vea en todos los navegadores. */
+.tag-option.is-blocked {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.tag-option.is-blocked .tag-pill-option {
+  filter: grayscale(0.6);
 }
 
 .tag-option.active {

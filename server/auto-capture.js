@@ -18,8 +18,12 @@ const READ_RETRY_MS = 250;
 const MAX_ERROR_LEN = 300;
 const ACCESS_DENIED_RE = /avgMonFltProxy|\[Errno 13\]|Permission denied|\[WinError (5|32)\]|EPERM|EACCES|EBUSY/i;
 
-/** Niveles + hora/precio de la señal desde la fila del historial (getById). */
-function resolveAutoCaptureInput(row) {
+/**
+ * Niveles + hora/precio de la señal desde la fila del historial (getById).
+ * @param {object} row fila del historial
+ * @param {object|null} [sent] entrada de mt5-sent (original + duplicate) para dibujar las operaciones reales
+ */
+function resolveAutoCaptureInput(row, sent = null) {
   if (!row) return { ok: false, error: 'Entrada no encontrada', code: 'not_found' };
   if (!AUTO_CAPTURE_MARKETS.has(row.market)) {
     return { ok: false, error: `Auto captura no disponible para ${row.market}`, code: 'market' };
@@ -31,18 +35,87 @@ function resolveAutoCaptureInput(row) {
   const signalTime = row.finishedAt || row.createdAt;
   if (!signalTime) return { ok: false, error: 'La señal no tiene hora registrada', code: 'no_time' };
   const price = Number(row.summary?.price);
-  return {
-    ok: true,
-    input: {
-      market: row.market,
-      signalTime,
-      entry: levels[0],
-      sl: levels[1],
-      tp: levels[2],
-      price: Number.isFinite(price) && price > 0 ? price : null,
-      real: realExecution(row.real),
-    },
+  const real = realExecution(row.real);
+  const input = {
+    market: row.market,
+    signalTime,
+    entry: levels[0],
+    sl: levels[1],
+    tp: levels[2],
+    price: Number.isFinite(price) && price > 0 ? price : null,
+    real,
   };
+  const trades = sentTrades(sent, { preferReal: !!real });
+  if (trades) input.trades = trades;
+  return { ok: true, input };
+}
+
+const SENT_TRADE_LABELS = { original: 'original', duplicate: 'duplicada' };
+
+/** Operación cerrada registrada en mt5-sent → trade para el gráfico, o null si falta entrada/salida. */
+function tradeFromSent(s, label) {
+  if (!s?.order || s.state !== 'closed' || !(s.price > 0) || !(s.closePrice > 0)) return null;
+  return {
+    label,
+    ticket: s.order,
+    entry: s.price,
+    exit: s.closePrice,
+    sl: s.sl > 0 ? s.sl : null,
+    tp: s.tp > 0 ? s.tp : null,
+    openedAt: s.openTime || null,
+    closedAt: s.closeTime || null,
+    sentAt: s.at || null,
+    mode: s.mode || null,
+    pnlUsd: Number.isFinite(s.profit) ? s.profit : null,
+    closeReason: s.closeReason || null,
+  };
+}
+
+/**
+ * Operaciones reales desde mt5-sent: con duplicado, original + duplicada (las cerradas);
+ * sin duplicado, solo la original y solo si no hay ya una ejecución de mt5-pnl (preferReal).
+ * @returns {object[]|null}
+ */
+function sentTrades(sent, { preferReal = false } = {}) {
+  if (!sent?.order) return null;
+  if (sent.duplicate?.order) {
+    const trades = [
+      tradeFromSent(sent, SENT_TRADE_LABELS.original),
+      tradeFromSent(sent.duplicate, SENT_TRADE_LABELS.duplicate),
+    ].filter(Boolean);
+    return trades.length ? trades : null;
+  }
+  if (preferReal) return null;
+  const main = tradeFromSent(sent, '');
+  return main ? [main] : null;
+}
+
+const needsDeals = (s) => s?.order && s.state === 'closed' && (!s.closePrice || !s.openTime || !s.closeTime);
+
+/** ¿Falta precio/hora de cierre en la original o el duplicado cerrados? (envíos de antes de guardarlos) */
+function sentNeedsDeals(sent) {
+  return Boolean(needsDeals(sent) || needsDeals(sent?.duplicate));
+}
+
+/**
+ * Completa precio de cierre y horas reales con los deals del puente (/deals).
+ * @returns {object|null} patch para mt5Sent.update, o null si no hay nada que añadir
+ */
+function sentPatchFromDeals(sent, deals, executionFromDeals) {
+  const fill = (s) => {
+    if (!needsDeals(s)) return null;
+    const ex = executionFromDeals(deals, s.order);
+    if (!ex) return null;
+    return {
+      closePrice: s.closePrice || ex.closePrice,
+      openTime: s.openTime || ex.openTime,
+      closeTime: s.closeTime || ex.closeTime,
+    };
+  };
+  const main = fill(sent);
+  const dup = sent?.duplicate ? fill(sent.duplicate) : null;
+  if (!main && !dup) return null;
+  return { ...main, ...(dup ? { duplicate: { ...sent.duplicate, ...dup } } : {}) };
 }
 
 /** Ejecución MT5 guardada (mt5-pnl) utilizable en el gráfico, o null → estimación con velas. */
@@ -69,6 +142,10 @@ function buildAutoCaptureArgs(input, outPath) {
     '--out', outPath,
   ];
   if (input.price != null) args.push('--price', String(input.price));
+  if (input.trades?.length) {
+    args.push('--trades-json', JSON.stringify(input.trades));
+    return args;
+  }
   const real = input.real;
   if (real) {
     args.push(
@@ -335,6 +412,9 @@ module.exports = {
   NO_LEVELS_ERROR,
   FILE_BLOCKED_CODE,
   resolveAutoCaptureInput,
+  sentTrades,
+  sentNeedsDeals,
+  sentPatchFromDeals,
   buildAutoCaptureArgs,
   compareOutcome,
   parseScriptOutput,

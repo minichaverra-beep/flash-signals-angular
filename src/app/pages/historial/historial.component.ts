@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import {
@@ -278,13 +279,19 @@ export class HistorialComponent implements OnInit, OnDestroy {
   /** Fila cuyo picker de Confluencias está abierto. */
   confluencePickerOpenId: number | null = null;
   newTagDraft = '';
-  newConfluenceDraft = '';
+  /**
+   * `reversalsEnabled` del perfil MT5 activo. `null` = desconocido (cargando o API caída):
+   * no se bloquea nada y decide el servidor.
+   */
+  reversalsEnabled: boolean | null = null;
+  readonly reversalsBlockedTip = 'Activa las reversiones en Configuración';
   /** Expuesto al template (evita literales duplicados / $any). */
   readonly defaultTagColor = DEFAULT_TAG_COLOR;
 
   ngOnInit(): void {
     this.loadTags();
     this.loadConfluencias();
+    this.loadReversalsSetting();
     this.load();
     // Señal terminada (formulario de arriba) → recarga lista + envíos MT5 y baja a la tabla.
     this.finishedSub = this.jobs.finished$.subscribe((j) => {
@@ -727,6 +734,26 @@ export class HistorialComponent implements OnInit, OnDestroy {
     });
   }
 
+  private loadReversalsSetting(): void {
+    this.api.mt5Settings().subscribe({
+      next: (s) => {
+        this.reversalsEnabled = !!s.profiles?.[s.active]?.reversalsEnabled;
+      },
+      error: () => {
+        this.reversalsEnabled = null;
+      },
+    });
+  }
+
+  /** Con reversiones desactivadas no se añaden Reversion / Macro tendencia (quitar sí se permite). */
+  isConfluenceBlocked(item: HistoryListItem, tag: HistoryTag): boolean {
+    return (
+      this.reversalsEnabled === false &&
+      !!tag.requiresReversals &&
+      !this.isConfluenceSelected(item, tag.id)
+    );
+  }
+
   itemTags(item: HistoryListItem): HistoryTag[] {
     const tags = item.tags ?? [];
     return tags.length ? [tags[0]] : [];
@@ -756,7 +783,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.tagPickerOpenId = null;
     this.confluencePickerOpenId =
       this.confluencePickerOpenId === item.id ? null : item.id;
-    this.newConfluenceDraft = '';
   }
 
   /** Dirección: una sola etiqueta por fila; elegir otra reemplaza; re-clic limpia. */
@@ -772,7 +798,9 @@ export class HistorialComponent implements OnInit, OnDestroy {
   /** Confluencias: multi-select; el menú permanece abierto. */
   toggleConfluence(item: HistoryListItem, tag: HistoryTag, ev: Event): void {
     ev.stopPropagation();
-    const current = (item.confluencias ?? []).map((c) => c.id);
+    if (this.isConfluenceBlocked(item, tag)) return;
+    const prev = item.confluencias ?? [];
+    const current = prev.map((c) => c.id);
     const nextIds = current.includes(tag.id)
       ? current.filter((id) => id !== tag.id)
       : [...current, tag.id];
@@ -780,7 +808,11 @@ export class HistorialComponent implements OnInit, OnDestroy {
     item.confluencias = this.catalogConfluencias.filter((c) =>
       nextIds.includes(c.id)
     );
-    this.patchItem(item, { confluenceIds: nextIds });
+    this.patchItem(item, { confluenceIds: nextIds }, undefined, (status) => {
+      item.confluencias = prev;
+      // 409: el perfil activo cambió (reversiones desactivadas) → refresca el bloqueo.
+      if (status === 409) this.loadReversalsSetting();
+    });
   }
 
   removeTag(item: HistoryListItem, _tag: HistoryTag, ev: Event): void {
@@ -814,30 +846,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
       },
       error: (err: unknown) => {
         this.error = this.errMsg(err, 'No se pudo crear la dirección');
-      },
-    });
-  }
-
-  createAndAssignConfluence(item: HistoryListItem, ev: Event): void {
-    ev.stopPropagation();
-    const name = this.newConfluenceDraft.trim();
-    if (!name) return;
-    this.api.historyConfluenciaCreate({ name, color: DEFAULT_TAG_COLOR }).subscribe({
-      next: (res) => {
-        const tag = res.confluencia;
-        if (!this.catalogConfluencias.some((t) => t.id === tag.id)) {
-          this.catalogConfluencias = [...this.catalogConfluencias, tag].sort(
-            (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id
-          );
-        }
-        this.newConfluenceDraft = '';
-        const current = (item.confluencias ?? []).map((c) => c.id);
-        if (!current.includes(tag.id)) {
-          this.patchItem(item, { confluenceIds: [...current, tag.id] });
-        }
-      },
-      error: (err: unknown) => {
-        this.error = this.errMsg(err, 'No se pudo crear la confluencia');
       },
     });
   }
@@ -1223,11 +1231,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.newTagDraft = t instanceof HTMLInputElement ? t.value : '';
   }
 
-  onNewConfluenceDraftInput(ev: Event): void {
-    const t = ev.target;
-    this.newConfluenceDraft = t instanceof HTMLInputElement ? t.value : '';
-  }
-
   onResultadoChange(item: HistoryListItem, ev: Event): void {
     const el = ev.target as HTMLSelectElement;
     const raw = el.value;
@@ -1287,7 +1290,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
       tagIds?: number[];
       confluenceIds?: number[];
     },
-    onSaved?: () => void
+    onSaved?: () => void,
+    onError?: (status: number) => void
   ): void {
     if (this.rejectIfLocked(item)) return;
     this.savingIds.add(item.id);
@@ -1308,6 +1312,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
           err,
           'No se pudo guardar comentario/motivo/resultado/PnL/dirección/confluencias'
         );
+        onError?.(err instanceof HttpErrorResponse ? err.status : 0);
       },
     });
   }

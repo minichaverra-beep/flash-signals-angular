@@ -71,6 +71,54 @@ describe('mt5-settings', () => {
     assert.throws(() => settings.setActive('otra'), (err) => err.status === 400);
   });
 
+  it('volatilidad: por defecto desactivada con niveles 15/20/30 y multiplicadores 0,8/1/1,3/1,6', () => {
+    const s = settings.get();
+    assert.equal(s.volatilityAdjustEnabled, false);
+    assert.equal(s.vixSymbol, '');
+    assert.deepEqual([s.vixLowMax, s.vixNormalMax, s.vixHighMax], [15, 20, 30]);
+    assert.deepEqual([s.vixMultLow, s.vixMultNormal, s.vixMultHigh, s.vixMultExtreme], [0.8, 1, 1.3, 1.6]);
+  });
+
+  it('volatilidad: guarda toggle y multiplicadores; apagar el toggle conserva los multiplicadores', () => {
+    settings.update({ volatilityAdjustEnabled: true, vixMultHigh: 1.5, vixHighMax: 28, vixSymbol: 'VIX.cash' });
+    settings.update({ volatilityAdjustEnabled: false });
+    settings._resetForTests();
+    const s = settings.get();
+    assert.equal(s.volatilityAdjustEnabled, false);
+    assert.equal(s.vixMultHigh, 1.5);
+    assert.equal(s.vixHighMax, 28);
+    assert.equal(s.vixSymbol, 'VIX.cash');
+    assert.equal(settings.get('secundaria').vixMultHigh, 1.3);
+  });
+
+  it('volatilidad: valida tipos, rangos y orden de umbrales', () => {
+    const { value, errors } = settings.validatePatch({
+      volatilityAdjustEnabled: 'si',
+      vixMultLow: 0.1,
+      vixMultExtreme: 5,
+      vixLowMax: 0,
+      vixSymbol: 'VIX uno',
+    });
+    assert.deepEqual(value, {});
+    assert.equal(errors.length, 5);
+    assert.deepEqual(settings.validatePatch({ vixSymbol: '', vixMultLow: 0.2, vixMultExtreme: 4 }).errors, []);
+    assert.throws(() => settings.update({ vixLowMax: 25 }), (err) => err.status === 400 && /baja < normal < alta/.test(err.message));
+    assert.throws(() => settings.update({ vixHighMax: 18 }), (err) => err.status === 400);
+    assert.equal(settings.get().vixLowMax, 15);
+    settings.update({ vixLowMax: 10, vixNormalMax: 18, vixHighMax: 25 });
+    assert.equal(settings.get().vixHighMax, 25);
+  });
+
+  it('volatilidad: umbrales desordenados en el archivo vuelven a los de fábrica al cargar', () => {
+    fs.writeFileSync(
+      process.env.MT5_SETTINGS_PATH,
+      JSON.stringify({ profiles: { principal: { vixLowMax: 40, vixMultHigh: 2 } } })
+    );
+    settings._resetForTests();
+    assert.deepEqual([settings.get().vixLowMax, settings.get().vixNormalMax, settings.get().vixHighMax], [15, 20, 30]);
+    assert.equal(settings.get().vixMultHigh, 2);
+  });
+
   it('migra el formato antiguo (plano) a Conf principal', () => {
     fs.writeFileSync(process.env.MT5_SETTINGS_PATH, JSON.stringify({ riskPct: 2, symbols: { us30: 'DJ30' } }));
     settings._resetForTests();

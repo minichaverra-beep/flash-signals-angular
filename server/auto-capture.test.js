@@ -11,6 +11,8 @@ const {
   NO_LEVELS_ERROR,
   FILE_BLOCKED_CODE,
   resolveAutoCaptureInput,
+  sentNeedsDeals,
+  sentPatchFromDeals,
   buildAutoCaptureArgs,
   compareOutcome,
   parseScriptOutput,
@@ -53,6 +55,62 @@ describe('resolveAutoCaptureInput', () => {
     const real = { ticket: 7, entry: 4162.07, exit: 4178.9, sl: null, openedAt: null, closedAt: '2026-10-01T17:30:02.000Z' };
     assert.deepEqual(resolveAutoCaptureInput({ ...ROW, real }).input.real, real);
     assert.equal(resolveAutoCaptureInput({ ...ROW, real: { ...real, exit: null } }).input.real, null);
+  });
+
+  const SENT = {
+    at: '2026-10-07T13:49:06.452Z', symbol: 'BTCUSDm', side: 'SHORT', mode: 'pending', order: 687780224,
+    price: 83020.95, sl: 83201.72, tp: 82696.33, state: 'closed', profit: -2.42, closeReason: 'manual',
+    closePrice: 83069.38, openTime: '2026-10-07T13:50:39.000Z', closeTime: '2026-10-07T14:01:37.000Z',
+    duplicate: {
+      at: '2026-10-07T13:51:53.742Z', mode: 'market', order: 687789369, price: 83264.38, sl: 83489.76,
+      tp: 82522.81, state: 'closed', profit: 11.74, closeReason: 'manual', closePrice: 83029.58,
+      openTime: '2026-10-07T13:51:53.000Z', closeTime: '2026-10-07T14:38:55.000Z',
+    },
+  };
+
+  it('con duplicado pasa las dos operaciones (original y duplicada) con sus horas y PnL', () => {
+    const { trades } = resolveAutoCaptureInput(ROW, SENT).input;
+    assert.equal(trades.length, 2);
+    assert.deepEqual(trades.map((t) => [t.label, t.entry, t.exit, t.pnlUsd]), [
+      ['original', 83020.95, 83069.38, -2.42],
+      ['duplicada', 83264.38, 83029.58, 11.74],
+    ]);
+    assert.equal(trades[1].openedAt, '2026-10-07T13:51:53.000Z');
+    assert.equal(trades[1].sentAt, SENT.duplicate.at);
+    // la suma coincide con combineAnnotations
+    assert.equal(Math.round(trades.reduce((s, t) => s + t.pnlUsd, 0) * 100) / 100, 9.32);
+    const args = buildAutoCaptureArgs(resolveAutoCaptureInput(ROW, SENT).input, 'o.png');
+    assert.deepEqual(JSON.parse(args[args.indexOf('--trades-json') + 1]), trades);
+    assert.ok(!args.includes('--real-entry'));
+  });
+
+  it('duplicado aún abierto → solo la original cerrada; sin duplicado manda la ejecución de mt5-pnl', () => {
+    const open = { ...SENT, duplicate: { ...SENT.duplicate, state: 'open' } };
+    assert.deepEqual(resolveAutoCaptureInput(ROW, open).input.trades.map((t) => t.label), ['original']);
+    const { duplicate: _d, ...single } = SENT;
+    assert.deepEqual(resolveAutoCaptureInput(ROW, single).input.trades.map((t) => t.label), ['']);
+    const real = { ticket: 7, entry: 4162.07, exit: 4178.9, sl: null, openedAt: null, closedAt: '2026-10-01T17:30:02.000Z' };
+    assert.equal(resolveAutoCaptureInput({ ...ROW, real }, single).input.trades, undefined);
+  });
+
+  it('completa precio/horas de cierre desde /deals cuando mt5-sent no los tiene', () => {
+    const { executionFromDeals } = require('./mt5');
+    const strip = ({ closePrice: _p, openTime: _o, closeTime: _c, ...rest }) => rest;
+    const old = { ...strip(SENT), duplicate: strip(SENT.duplicate) };
+    assert.equal(sentNeedsDeals(old), true);
+    assert.equal(sentNeedsDeals(SENT), false);
+    const deals = [
+      { position: 687780224, entry: 'in', price: 83020.95, volume: 0.05, time: 1791381039 },
+      { position: 687789369, entry: 'in', price: 83264.38, volume: 0.05, time: 1791381113 },
+      { position: 687780224, entry: 'out', price: 83069.38, volume: 0.05, time: 1791381697 },
+      { position: 687789369, entry: 'out', price: 83029.58, volume: 0.05, time: 1791383935 },
+    ];
+    const patch = sentPatchFromDeals(old, deals, executionFromDeals);
+    assert.equal(patch.closePrice, 83069.38);
+    assert.equal(patch.openTime, '2026-10-07T13:50:39.000Z');
+    assert.equal(patch.duplicate.closeTime, '2026-10-07T14:38:55.000Z');
+    assert.equal(patch.duplicate.order, 687789369);
+    assert.equal(sentPatchFromDeals(SENT, deals, executionFromDeals), null);
   });
 
   it('sin niveles → mensaje en español y code no_levels', () => {

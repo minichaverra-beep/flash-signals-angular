@@ -520,3 +520,422 @@ code {
     transform: rotate(360deg);
   }
 }
+
+/* --- Volatilidad (VIX) y calculadora --- */
+.sub-title {
+  margin: 1.1rem 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.vol-note {
+  margin: 0 0 0.9rem;
+  padding: 0.55rem 0.8rem;
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.msg.warn {
+  color: var(--warn);
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.vix-box {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-deep) 70%, transparent);
+}
+
+.vix-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+
+.vix-points {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.vix-unit {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.level-chip {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+[data-level='baja'] {
+  --lv: var(--ok);
+}
+
+[data-level='normal'] {
+  --lv: var(--gold);
+}
+
+[data-level='alta'] {
+  --lv: var(--warn);
+}
+
+[data-level='extrema'] {
+  --lv: var(--err);
+}
+
+.level-chip[data-level] {
+  color: var(--lv);
+  background: color-mix(in srgb, var(--lv) 12%, transparent);
+}
+
+.thermo {
+  position: relative;
+  display: flex;
+  height: 1.6rem;
+  margin: 0.8rem 0 0.6rem;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.thermo-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #120a0a;
+  background: color-mix(in srgb, var(--lv) 75%, #1a1010);
+}
+
+.thermo-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 6px #fff;
+  transition: left 0.3s ease;
+}
+
+.vix-effect {
+  margin: 0.2rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.level-table-wrap {
+  overflow-x: auto;
+}
+
+.level-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.level-table th,
+.level-table td {
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.level-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.level-table tr.current td {
+  background: color-mix(in srgb, var(--lv, var(--gold)) 10%, transparent);
+}
+
+.level-table tr.current td:first-child {
+  box-shadow: inset 3px 0 0 var(--lv, var(--gold));
+}
+
+.level-table input[type='number'] {
+  width: 5.5rem;
+  border: 1px solid var(--border);
+  background: #1a1010;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+}
+
+.level-table input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.calc-card {
+  margin-top: 1.4rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, var(--border));
+  border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 5%, transparent), transparent);
+}
+
+.calc-step {
+  margin: 1rem 0;
+}
+
+.calc-q {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.calc-q small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.big-seg,
+.mood-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.big-seg {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.mood-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.big-seg button,
+.mood-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.8rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-deep);
+  color: var(--text);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.mood-grid button small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.big-seg button:hover,
+.mood-grid button:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.big-seg button.active,
+.mood-grid button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel-deep));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.slider-row input[type='range'] {
+  flex: 1;
+  height: 2rem;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.slider-value {
+  min-width: 4.5rem;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+}
+
+.balance-field {
+  max-width: 20rem;
+}
+
+.balance-field input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #1a1010;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.calc-result {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+  transition: opacity 0.15s ease;
+}
+
+.calc-result.loading {
+  opacity: 0.6;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.result-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+}
+
+.result-tile.sl {
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+}
+
+.result-tile.tp {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.result-tile.lots {
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+
+.tile-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tile-big {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.tile-big small {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.tile-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.tile-explain {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text) 85%, transparent);
+}
+
+.money-line {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.money-line .loss {
+  color: var(--err);
+  font-size: 1.35rem;
+}
+
+.money-line .gain {
+  color: var(--ok);
+  font-size: 1.35rem;
+}
+
+.rr-bar {
+  display: flex;
+  height: 1.5rem;
+  margin: 0.4rem 0 0.6rem;
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #120a0a;
+}
+
+.rr-bar span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+
+.rr-risk {
+  background: var(--err);
+}
+
+.rr-reward {
+  background: var(--ok);
+}
+
+.use-row {
+  margin: 1rem 0 0.6rem;
+}
+
+.how {
+  margin-top: 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.how summary {
+  cursor: pointer;
+  color: var(--gold);
+}
+
+.how ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.how li + li {
+  margin-top: 0.3rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thermo-marker,
+  .rr-bar span,
+  .calc-result {
+    transition: none;
+  }
+}

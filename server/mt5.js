@@ -4,6 +4,7 @@
  * Parámetros (símbolos, riesgo, puente…) desde mt5-settings (pantalla Configuración).
  */
 const mt5Settings = require('./mt5-settings');
+const { applyVolatilityToStops } = require('./volatility');
 
 const TIMEOUT_MS = 15000;
 
@@ -30,13 +31,40 @@ function positiveNumber(raw) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Epoch UTC en segundos (puente) → ISO, o null. */
+function epochIso(raw) {
+  const s = positiveNumber(raw);
+  return s == null ? null : new Date(s * 1000).toISOString();
+}
+
+/**
+ * Ejecución real de una posición (ticket) desde los deals del puente /deals:
+ * entrada/hora del primer deal «in», salida = media ponderada de los «out» y hora del último.
+ * @returns {{ price: number, openTime: string, closePrice: number|null, closeTime: string|null }|null}
+ */
+function executionFromDeals(deals = [], ticket) {
+  const own = deals.filter((d) => Number(d?.position) === Number(ticket));
+  const ins = own.filter((d) => d.entry === 'in').sort((a, b) => a.time - b.time);
+  if (!ins.length) return null;
+  const outs = own.filter((d) => d.entry === 'out');
+  const volume = outs.reduce((s, d) => s + Number(d.volume || 0), 0);
+  const notional = outs.reduce((s, d) => s + Number(d.price || 0) * Number(d.volume || 0), 0);
+  return {
+    price: Number(ins[0].price),
+    openTime: epochIso(ins[0].time),
+    closePrice: volume > 0 ? Math.round((notional / volume) * 1e6) / 1e6 : null,
+    closeTime: outs.length ? epochIso(Math.max(...outs.map((d) => Number(d.time)))) : null,
+  };
+}
+
 /**
  * Convierte el summary de un reporte en una orden MT5.
  * El lado se deduce de la geometría SL/TP (no del texto), así un plan incoherente se descarta.
  * anyVerdict: el trader decide ejecutar un plan aunque el veredicto no sea ENTRAR (Run operation del historial).
- * @returns {{ order?: object, skip?: string }}
+ * volatility: ajuste por VIX ya resuelto (resolveVolatilityAdjustment); null/undefined = sin ajuste.
+ * @returns {{ order?: object, skip?: string, volatility?: object|null }}
  */
-function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { anyVerdict = false } = {}) {
+function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { anyVerdict = false, volatility = null } = {}) {
   if (!summary) return { skip: 'Sin resumen de señal' };
   if (!anyVerdict && !/entrar/i.test(String(summary.verdict || ''))) {
     return { skip: `Veredicto "${summary.verdict || 'n/d'}": no se envía orden` };
@@ -58,7 +86,9 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { 
   else if (tp < entry && entry < sl) side = 'SHORT';
   if (!side) return { skip: `Plan incoherente: entry=${entry} sl=${sl} tp=${tp}` };
 
-  return { order: { symbol, side, entry, ...padStops(market, side, sl, tp, settings) } };
+  // 1) El multiplicador de volatilidad escala las distancias de la señal; 2) después se suma el margen extra en pips.
+  const scaled = applyVolatilityToStops({ entry, side, sl, tp, multiplier: volatility?.multiplier });
+  return { order: { symbol, side, entry, ...padStops(market, side, scaled.sl, scaled.tp, settings) }, volatility };
 }
 
 const roundPrice = (n) => Math.round(n * 1e6) / 1e6;
@@ -201,6 +231,9 @@ function reconcileOrder(sent = {}, status = {}) {
     volume: status.volume ?? sent.volume ?? null,
     profit: Number.isFinite(Number(status.profit)) ? Number(status.profit) : null,
     closeReason: status.closeReason ?? null,
+    closePrice: positiveNumber(status.closePrice) ?? sent.closePrice ?? null,
+    openTime: epochIso(status.openTime) ?? sent.openTime ?? null,
+    closeTime: epochIso(status.closeTime) ?? sent.closeTime ?? null,
     checkedAt: new Date().toISOString(),
   };
 
@@ -261,6 +294,21 @@ function historyDeals({ symbol, from, to }, settings) {
   return callBridge('POST', '/deals', { symbol, from, to }, settings);
 }
 
+/** Velas OHLC del broker (puente /rates, solo lectura): { symbol, timeframe, bid, ask, tickTime, rates[] }. */
+function marketRates({ symbol, timeframe = 'M5', count = 120 }, settings) {
+  return callBridge('POST', '/rates', { symbol, timeframe, count }, settings);
+}
+
+/** Símbolos del broker que contienen `query` (puente /symbols, solo lectura). */
+function searchSymbols(query, settings) {
+  return callBridge('GET', `/symbols?query=${encodeURIComponent(query)}`, undefined, settings);
+}
+
+/** Ficha del símbolo: dígitos, valor del tick, lotes mín/máx/paso (puente /symbol, solo lectura). */
+function symbolDetails(name, settings) {
+  return callBridge('GET', `/symbol?name=${encodeURIComponent(name)}`, undefined, settings);
+}
+
 /**
  * Variables de entorno para los scripts de Cursor Trading: velas del broker (puente /rates)
  * con los símbolos del perfil activo, para que análisis y chart usen la escala de precio de MT5.
@@ -302,11 +350,15 @@ module.exports = {
   combineAnnotations,
   buildOrderFromSummary,
   bridgeHealth,
+  executionFromDeals,
   historyDeals,
+  marketRates,
   orderStatus,
   padStops,
   pushDuplicateOrder,
   pushOrder,
   reconcileOrder,
+  searchSymbols,
+  symbolDetails,
   symbolFor,
 };

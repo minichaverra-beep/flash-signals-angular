@@ -19,9 +19,10 @@
       <select
         [(ngModel)]="bias"
         [disabled]="flagsDisabled"
-        [ngClass]="'bias-' + (bias === 'auto' ? 'auto' : bias)"
+        [ngClass]="'bias-' + (bias === 'trend' ? 'auto' : bias)"
+        [attr.title]="bias === 'trend' ? trendTitle : null"
       >
-        <option value="auto">AUTO (sin forzar)</option>
+        <option value="trend" [attr.title]="trendTitle">Tendencia actual</option>
         <option value="bullish">Bullish</option>
         <option value="bearish">Bearish</option>
       </select>

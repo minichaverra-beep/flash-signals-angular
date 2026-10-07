@@ -221,6 +221,31 @@
       <details class="report-card collapsible" open>
         <summary>Reglas revisadas</summary>
         <div class="collapsible-body">
+          @if (s.rulesReview?.length) {
+            <p class="card-hint muted hide-on-phone">
+              ✓✓ suma ≥ 4 pts · ✓ suma · ~ neutro · ✗ resta · ✗✗ resta ≥ 4 pts o veto · · informativa.
+              Impacto medido en el histórico sobre la probabilidad de éxito.
+            </p>
+            <div class="table-wrap">
+              <table class="matrix checklist graded">
+                <thead>
+                  <tr><th>Estado</th><th>Regla</th><th>Valor actual</th><th>Impacto</th><th>Acierto histórico</th><th>Tipo</th></tr>
+                </thead>
+                <tbody>
+                  @for (item of s.rulesReview; track item.label) {
+                    <tr [class]="ruleGradeClass(item.grade)" [class.veto]="item.type === 'veto'">
+                      <td class="status">{{ item.grade }}</td>
+                      <td>{{ item.label }}</td>
+                      <td>{{ item.value || '—' }}</td>
+                      <td class="impact">{{ item.impact || '—' }}</td>
+                      <td>{{ item.winrate || '—' }}</td>
+                      <td class="rule-type">{{ item.type || '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
           <p class="card-hint muted hide-on-phone">✓ = cumple · ✗ = no cumple. Sirve para auditar por qué salió el veredicto.</p>
           @if (s.checklist2M5?.length) {
             <div class="extra-section">
@@ -260,6 +285,7 @@
                 </table>
               </div>
             </div>
+          }
           }
         </div>
       </details>
@@ -503,10 +529,10 @@
       </p>
     </div>
   } @else if (mode === 'rapida') {
-    <!-- Vista rápida: veredicto + gráfico, barras y tablas de probabilidad -->
+    <!-- Vista rápida: veredicto, riesgo compacto, tabla unificada de scores/confluencias y gráfico -->
     <div class="rapida">
       @if (verdictRows(s); as vRows) {
-        @if (vRows.length) {
+        @if (vRows.length && !rapidaScoreGroups(s).length) {
           <details id="sec-veredicto" data-section="sec-veredicto" class="report-card collapsible rapida-verdict" open [attr.data-tone]="verdictSectionTone(s)">
             <summary>Veredicto</summary>
             <div class="collapsible-body">
@@ -530,108 +556,92 @@
 
       @if (investorRiskCard(s); as risk) {
         @if (risk.active && (risk.riskRaw || risk.rewardMultiple != null || risk.heat !== 'none')) {
-          <details id="sec-riesgo" data-section="sec-riesgo" class="report-card collapsible" open>
-            <summary>Riesgo en claro</summary>
-            <div class="collapsible-body">
-              <div
-                class="risk-hot"
-                [attr.data-heat]="risk.heat"
-                [attr.title]="riskGaugeHint(risk)"
-                tabindex="0"
-                role="img"
-                [attr.aria-label]="riskGaugeHint(risk)"
-              >
-                <div class="risk-hot-meta">
-                  <p class="risk-hot-title">{{ risk.title }}</p>
-                  <strong class="risk-hot-badge">{{ risk.heatLabel }}</strong>
-                </div>
-                <div
-                  class="risk-hot-track"
-                  role="meter"
-                  [attr.aria-valuenow]="risk.barPct"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  [attr.aria-label]="risk.heatLabel"
-                >
-                  <div class="risk-hot-zones" aria-hidden="true">
-                    <span class="z-cool"></span>
-                    <span class="z-warm"></span>
-                    <span class="z-hot"></span>
-                  </div>
-                  <div
-                    class="risk-hot-marker"
-                    [style.left.%]="risk.barPct"
-                    [attr.data-heat]="risk.heat"
-                  ></div>
-                </div>
-                <div class="risk-hot-scale">
-                  <span>Fresco</span>
-                  <span>Templado</span>
-                  <span>Caliente</span>
-                </div>
-                @if (risk.rewardMultiple != null || risk.vsPricePct != null) {
-                  <div class="risk-hot-stats">
-                    @if (risk.rewardMultiple != null) {
-                      <span>Premio ≈ ×{{ risk.rewardMultiple | number:'1.1-2' }}</span>
-                    }
-                    @if (risk.vsPricePct != null) {
-                      <span>Stop ≈ {{ risk.vsPricePct | number:'1.2-2' }}% del precio</span>
-                    }
-                  </div>
-                }
-                <div class="risk-hot-tip hide-on-phone" aria-hidden="true">{{ riskGaugeHint(risk) }}</div>
+          <!-- Riesgo en claro compacto: una sola línea (etiqueta + mini termómetro + texto corto) -->
+          <div
+            id="sec-riesgo"
+            data-section="sec-riesgo"
+            class="risk-hot risk-hot--compact"
+            [attr.data-heat]="risk.heat"
+            [attr.title]="riskGaugeHint(risk)"
+            tabindex="0"
+            role="group"
+            aria-label="Riesgo en claro"
+          >
+            <span class="risk-hot-label">Riesgo en claro</span>
+            <strong class="risk-hot-badge">{{ risk.heatLabel }}</strong>
+            <div
+              class="risk-hot-track"
+              role="meter"
+              [attr.aria-valuenow]="risk.barPct"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              [attr.aria-label]="risk.heatLabel"
+            >
+              <div class="risk-hot-zones" aria-hidden="true">
+                <span class="z-cool"></span>
+                <span class="z-warm"></span>
+                <span class="z-hot"></span>
               </div>
+              <div
+                class="risk-hot-marker"
+                [style.left.%]="risk.barPct"
+                [attr.data-heat]="risk.heat"
+              ></div>
             </div>
-          </details>
+            @if (risk.rewardMultiple != null || risk.vsPricePct != null) {
+              <span class="risk-hot-short">
+                @if (risk.rewardMultiple != null) {
+                  <span>Premio ×{{ risk.rewardMultiple | number:'1.1-2' }}</span>
+                }
+                @if (risk.vsPricePct != null) {
+                  <span>Stop {{ risk.vsPricePct | number:'1.2-2' }}%</span>
+                }
+              </span>
+            }
+          </div>
         }
       }
 
-      @if (s.chartScores?.length) {
-        <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
-          <summary>Probabilidades</summary>
-          <div class="collapsible-body">
-            <div class="charts charts-rapida">
-              @for (bar of s.chartScores; track bar.label) {
-                <div class="bar-row">
-                  <div class="bar-meta">
-                    <span>{{ displayScoreLabel(bar.label) }}</span>
-                    <strong>{{ bar.value != null ? (bar.value | number:'1.0-1') + '%' : (bar.raw || '—') }}</strong>
-                  </div>
-                  <div class="bar-track">
-                    <div
-                      class="bar-fill"
-                      [style.width.%]="bar.value ?? 0"
-                    ></div>
-                  </div>
-                </div>
-              }
-            </div>
-          </div>
-        </details>
-      }
-
-      @if (scoreKpiRows(s); as scoreRows) {
-        @if (scoreRows.length) {
-          <details
-            [attr.id]="s.chartScores?.length ? null : 'sec-scores'"
-            [attr.data-section]="s.chartScores?.length ? null : 'sec-scores'"
-            class="report-card collapsible"
-            open
-          >
-            <summary>Scores</summary>
+      @if (rapidaScoreGroups(s); as groups) {
+        @if (groups.length) {
+          <!-- Tabla unificada: Scores + confluencias por capa -->
+          <details id="sec-scores" data-section="sec-scores" class="report-card collapsible" open>
+            <summary>Scores y confluencias</summary>
             <div class="collapsible-body">
               <div class="table-wrap">
-                <table class="matrix kpi-table">
-                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
-                  <tbody>
-                    @for (row of scoreRows; track row.campo) {
-                      <tr>
-                        <th>{{ row.campo }}</th>
-                        <td>{{ row.valor }}</td>
+                <table class="matrix kpi-table rapida-scores">
+                  <thead>
+                    <tr>
+                      <th class="status-col">Estado</th>
+                      <th>Qué se mide</th>
+                      <th>Valor</th>
+                      <th>Detalle</th>
+                    </tr>
+                  </thead>
+                  @for (g of groups; track g.titulo) {
+                    <tbody>
+                      <tr class="group-row">
+                        <th colspan="4" scope="colgroup">{{ g.titulo }}</th>
                       </tr>
-                    }
-                  </tbody>
+                      @for (row of g.rows; track row.concepto) {
+                        <tr [class.final-row]="row.final" [class.ok]="row.ok === true" [class.bad]="row.ok === false">
+                          <td class="status">{{ statusMark(row.ok) }}</td>
+                          <th scope="row" [attr.title]="row.tecnico || null">{{ row.concepto }}</th>
+                          <td [class.final-value]="row.final">{{ row.valor }}</td>
+                          <td class="muted">{{ row.detalle }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  }
                 </table>
+              </div>
+              <div class="score-export">
+                <span class="muted">Descargar imagen para Instagram:</span>
+                @for (f of instagramFormats; track f.id) {
+                  <button type="button" class="btn-export" (click)="exportScoresImage(groups, f.id)">
+                    {{ f.label }}
+                  </button>
+                }
               </div>
             </div>
           </details>
@@ -652,35 +662,6 @@
         </details>
       }
 
-      @if (s.scorecard?.length) {
-        <details class="report-card collapsible hide-on-phone" open>
-          <summary>Tabla de confluencia</summary>
-          <div class="collapsible-body">
-            <div class="table-wrap">
-              <table class="matrix">
-                <thead>
-                  <tr>
-                    <th>Capa</th>
-                    <th>Score</th>
-                    <th>Peso</th>
-                    <th>Nota</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of s.scorecard; track row.label) {
-                    <tr [class.emphasis]="isCombinedScoreLabel(row.label)">
-                      <td>{{ displayScoreLabel(row.label) }}</td>
-                      <td>{{ row.raw || (row.value != null ? row.value : '—') }}</td>
-                      <td>{{ row.weight || '—' }}</td>
-                      <td>{{ row.note || '—' }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </details>
-      }
     </div>
   }
 }

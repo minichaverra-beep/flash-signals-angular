@@ -435,14 +435,20 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.deepEqual(cleared.item?.tags, []);
   });
 
-  it('listConfluencias seed + multi-select persistente', async () => {
+  it('listConfluencias: catálogo cerrado de 6 opciones en orden + multi-select persistente', async () => {
     const catalog = await store.listConfluencias();
-    const names = catalog.map((c) => c.name);
-    assert.ok(names.includes('Continuación'));
-    assert.ok(names.includes('Reversion'));
-    assert.ok(names.includes('Macro tendencia'));
-    assert.ok(names.includes('Pullback-Continuo'));
-    assert.equal(catalog.length >= 13, true);
+    assert.deepEqual(catalog.map((c) => c.name), [
+      'Continuación',
+      'Reversion',
+      'Macro tendencia',
+      'Micro tendencia',
+      'Resistencia débil',
+      'Soporte débil',
+    ]);
+    assert.deepEqual(
+      catalog.filter((c) => c.requiresReversals).map((c) => c.name),
+      ['Reversion', 'Macro tendencia']
+    );
 
     const a = catalog.find((c) => c.name === 'Reversion');
     const b = catalog.find((c) => c.name === 'Macro tendencia');
@@ -470,6 +476,64 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     const cleared = await store.updateAnnotation(id, { confluenceIds: [] });
     assert.equal(cleared.ok, true);
     assert.deepEqual(cleared.item?.confluencias, []);
+  });
+
+  it('createConfluencia: no crea opciones nuevas; un nombre existente devuelve la opción', async () => {
+    const bad = await store.createConfluencia({ name: 'Pullback', color: '#16a34a' });
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /No se pueden crear confluencias nuevas/);
+    assert.equal((await store.createConfluencia({ name: '' })).ok, false);
+    assert.equal((await store.listConfluencias()).length, 6);
+
+    const exact = await store.createConfluencia({ name: 'micro tendencia' });
+    assert.equal(exact.ok, true);
+    assert.equal(exact.created, false);
+    assert.equal(exact.confluencia.name, 'Micro tendencia');
+  });
+
+  it('reversiones desactivadas: no se añaden Reversion/Macro tendencia; las ya asignadas se conservan y se pueden quitar', async () => {
+    const catalog = await store.listConfluencias();
+    const byName = Object.fromEntries(catalog.map((c) => [c.name, c.id]));
+    const off = { reversalsEnabled: false };
+    const { id } = await store.insertSnapshot(sampleSnap());
+
+    const rev = await store.updateAnnotation(id, { confluenceIds: [byName.Reversion] }, off);
+    assert.equal(rev.ok, false);
+    assert.equal(rev.error, store.REVERSALS_DISABLED_ERROR);
+    assert.match(rev.message, /Reversion.*reversiones/);
+    const macro = await store.updateAnnotation(
+      id,
+      { confluenceIds: [byName['Continuación'], byName['Macro tendencia']], tagIds: [] },
+      off
+    );
+    assert.equal(macro.error, store.REVERSALS_DISABLED_ERROR);
+    assert.deepEqual((await store.getById(id)).confluencias, []);
+
+    const plain = await store.updateAnnotation(id, { confluenceIds: [byName['Continuación']] }, off);
+    assert.equal(plain.ok, true);
+
+    // Asignada con reversiones activadas (o sin restricción) → sigue visible con reversiones off.
+    const on = await store.updateAnnotation(
+      id,
+      { confluenceIds: [byName['Continuación'], byName.Reversion] },
+      { reversalsEnabled: true }
+    );
+    assert.equal(on.ok, true);
+    const keep = await store.updateAnnotation(
+      id,
+      { confluenceIds: [byName['Continuación'], byName.Reversion, byName['Soporte débil']] },
+      off
+    );
+    assert.equal(keep.ok, true);
+    assert.deepEqual(
+      keep.item.confluencias.map((c) => c.name),
+      ['Continuación', 'Reversion', 'Soporte débil']
+    );
+    const removed = await store.updateAnnotation(id, { confluenceIds: [byName['Soporte débil']] }, off);
+    assert.equal(removed.ok, true);
+    assert.deepEqual(removed.item.confluencias.map((c) => c.name), ['Soporte débil']);
+    const readd = await store.updateAnnotation(id, { confluenceIds: [byName.Reversion] }, off);
+    assert.equal(readd.error, store.REVERSALS_DISABLED_ERROR);
   });
 
   it('listHistory: filtro Dirección (cualquiera / sin) y Confluencias (todas / ninguna)', async () => {
@@ -720,6 +784,52 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
       assert.equal(off.item.unlockOverride, false);
       assert.equal(off.item.effectiveLocked, false);
     });
+  });
+});
+
+describe('migración 013: catálogo cerrado de confluencias sobre una BD existente', () => {
+  let tempDir;
+  let store;
+
+  before(() => {
+    tempDir = makeTempDir('fs-hist-013-');
+  });
+
+  after(() => {
+    store?._resetForTests();
+    delete require.cache[STORE_PATH];
+    delete process.env.HISTORY_DATA_DIR;
+    rmTempDir(tempDir);
+  });
+
+  it('borra opciones sobrantes y sus asignaciones; conserva las 6 y sus asignaciones; reordena', async () => {
+    store = loadStore(tempDir);
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const ids = Object.fromEntries((await store.listConfluencias()).map((c) => [c.name, c.id]));
+    store._resetForTests();
+
+    // Estado pre-013: opciones extra, orden alterado y migración no aplicada.
+    const Database = require('better-sqlite3');
+    const db = new Database(path.join(tempDir, 'signals-history.sqlite'));
+    const now = new Date().toISOString();
+    const extra = db
+      .prepare(`INSERT INTO history_confluencias (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)`)
+      .run('Pullback-Continuo', '#92700c', 5, now).lastInsertRowid;
+    db.prepare(`INSERT INTO history_confluencias (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)`)
+      .run('FakeOut', '#92400e', 1, now);
+    db.prepare(`UPDATE history_confluencias SET sort_order = 999 WHERE name = 'Continuación'`).run();
+    const assign = db.prepare(`INSERT INTO signal_history_confluencias (history_id, confluencia_id) VALUES (?, ?)`);
+    assign.run(id, extra);
+    assign.run(id, ids['Soporte débil']);
+    db.prepare(`DELETE FROM schema_migrations WHERE id = '013_history_confluencias_catalog'`).run();
+    db.close();
+
+    store = loadStore(tempDir);
+    const catalog = await store.listConfluencias();
+    assert.deepEqual(catalog.map((c) => c.name), store.DEFAULT_HISTORY_CONFLUENCIAS.map((c) => c.name));
+    assert.equal(catalog.find((c) => c.name === 'Continuación').id, ids['Continuación']);
+    const item = await store.getById(id);
+    assert.deepEqual(item.confluencias.map((c) => c.name), ['Soporte débil']);
   });
 });
 

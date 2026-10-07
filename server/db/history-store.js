@@ -330,6 +330,7 @@ function applyHistoryMigrations(e) {
     ['unlock_override', 'INTEGER NOT NULL DEFAULT 0'],
     ['unlock_override_at', 'TEXT'],
   ]);
+  applyConfluenciasCatalogMigration(e, now);
   seedDefaultHistoryTags(e, now);
   seedDefaultHistoryConfluencias(e, now);
 }
@@ -345,8 +346,8 @@ const DEFAULT_HISTORY_TAGS = [
 ];
 
 /**
- * Seed durable de Confluencias (Notion-style). Colores aproximados al picker del usuario.
- * Solo INSERT OR IGNORE — no borra opciones creadas por el usuario.
+ * Catálogo cerrado de Confluencias: solo estas opciones existen (no se crean nuevas).
+ * Colores aproximados al picker del usuario.
  */
 const DEFAULT_HISTORY_CONFLUENCIAS = [
   { name: 'Continuación', color: '#2563eb', sortOrder: 10 },
@@ -355,14 +356,37 @@ const DEFAULT_HISTORY_CONFLUENCIAS = [
   { name: 'Micro tendencia', color: '#f87171', sortOrder: 40 },
   { name: 'Resistencia débil', color: '#9333ea', sortOrder: 50 },
   { name: 'Soporte débil', color: '#a16207', sortOrder: 60 },
-  { name: 'Pre-Entrada', color: '#db2777', sortOrder: 70 },
-  { name: 'FakeOut', color: '#92400e', sortOrder: 80 },
-  { name: 'Pullback', color: '#16a34a', sortOrder: 90 },
-  { name: 'All', color: '#4b5563', sortOrder: 100 },
-  { name: 'Tope ganancia enemiga', color: '#1f2937', sortOrder: 110 },
-  { name: 'Pool-liquidez', color: '#0f766e', sortOrder: 120 },
-  { name: 'Pullback-Continuo', color: '#92700c', sortOrder: 130 },
 ];
+
+/** Confluencias que solo se pueden asignar con reversiones activadas en el perfil MT5 activo. */
+const REVERSAL_CONFLUENCIAS = new Set(['Reversion', 'Macro tendencia']);
+
+const REVERSALS_DISABLED_ERROR = 'reversals_disabled';
+
+/**
+ * 013: deja el catálogo solo con DEFAULT_HISTORY_CONFLUENCIAS (borra el resto y sus
+ * asignaciones a señales) y fija su orden.
+ */
+function applyConfluenciasCatalogMigration(e, now) {
+  const migrationId = '013_history_confluencias_catalog';
+  if (e.get(`SELECT id FROM schema_migrations WHERE id = ?`, [migrationId])) return;
+  const names = DEFAULT_HISTORY_CONFLUENCIAS.map((c) => c.name);
+  const placeholders = names.map(() => '?').join(',');
+  e.run(
+    `DELETE FROM signal_history_confluencias WHERE confluencia_id IN (
+       SELECT id FROM history_confluencias WHERE name NOT IN (${placeholders})
+     )`,
+    names
+  );
+  e.run(`DELETE FROM history_confluencias WHERE name NOT IN (${placeholders})`, names);
+  for (const item of DEFAULT_HISTORY_CONFLUENCIAS) {
+    e.run(`UPDATE history_confluencias SET sort_order = ? WHERE name = ?`, [item.sortOrder, item.name]);
+  }
+  e.run(
+    `INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)`,
+    [migrationId, now]
+  );
+}
 
 function seedDefaultHistoryTags(e, nowIso) {
   const now = nowIso || new Date().toISOString();
@@ -525,9 +549,10 @@ function rowToTag(row) {
   };
 }
 
-/** Misma forma que Tag; catálogo Confluencias. */
+/** Misma forma que Tag; catálogo Confluencias (+ si exige reversiones activadas). */
 function rowToConfluencia(row) {
-  return rowToTag(row);
+  const tag = rowToTag(row);
+  return tag && { ...tag, requiresReversals: REVERSAL_CONFLUENCIAS.has(tag.name) };
 }
 
 /**
@@ -653,41 +678,28 @@ async function createTag(input = {}) {
 }
 
 /**
- * Crea confluencia durable (o reutiliza por name case-insensitive).
- * @param {{ name: string, color?: string|null, sortOrder?: number }} input
+ * Catálogo cerrado: no crea opciones nuevas; solo devuelve una existente por name
+ * (case-insensitive). Cualquier otro nombre se rechaza.
+ * @param {{ name: string }} input
  */
 async function createConfluencia(input = {}) {
   const e = await getEngine();
   const name = input.name != null ? String(input.name).trim() : '';
-  if (!name || name.length > 80) {
-    return { ok: false, error: 'name inválido (1–80 caracteres)' };
-  }
-  const color =
-    input.color != null && String(input.color).trim()
-      ? String(input.color).trim().slice(0, 32)
-      : null;
-  const sortOrder =
-    input.sortOrder != null && Number.isFinite(Number(input.sortOrder))
-      ? Math.trunc(Number(input.sortOrder))
-      : 200;
-  const existing = e.get(
-    `SELECT id, name, color, sort_order, created_at
-     FROM history_confluencias WHERE lower(name) = lower(?)`,
-    [name]
-  );
+  const existing = name
+    ? e.get(
+        `SELECT id, name, color, sort_order, created_at
+         FROM history_confluencias WHERE lower(name) = lower(?)`,
+        [name]
+      )
+    : null;
   if (existing) {
     return { ok: true, confluencia: rowToConfluencia(existing), created: false };
   }
-  const now = new Date().toISOString();
-  const info = e.run(
-    `INSERT INTO history_confluencias (name, color, sort_order, created_at) VALUES (?, ?, ?, ?)`,
-    [name, color, sortOrder, now]
-  );
-  const row = e.get(
-    `SELECT id, name, color, sort_order, created_at FROM history_confluencias WHERE id = ?`,
-    [Number(info.lastInsertRowid)]
-  );
-  return { ok: true, confluencia: rowToConfluencia(row), created: true };
+  const allowed = DEFAULT_HISTORY_CONFLUENCIAS.map((c) => c.name).join(', ');
+  return {
+    ok: false,
+    error: `No se pueden crear confluencias nuevas. Opciones disponibles: ${allowed}`,
+  };
 }
 
 /**
@@ -734,9 +746,11 @@ function replaceHistoryTags(e, historyId, rawIds) {
  * @param {any} e
  * @param {number} historyId
  * @param {unknown} rawIds
- * @returns {{ ok: true } | { ok: false, error: string }}
+ * @param {{ reversalsEnabled?: boolean }} [opts] reversalsEnabled === false impide añadir
+ *   Reversion / Macro tendencia (las ya asignadas se conservan o se pueden quitar).
+ * @returns {{ ok: true } | { ok: false, error: string, message?: string }}
  */
-function replaceHistoryConfluencias(e, historyId, rawIds) {
+function replaceHistoryConfluencias(e, historyId, rawIds, opts = {}) {
   if (!Array.isArray(rawIds)) {
     return { ok: false, error: 'confluenceIds debe ser un array de ids' };
   }
@@ -752,10 +766,28 @@ function replaceHistoryConfluencias(e, historyId, rawIds) {
       ids.push(n);
     }
   }
+  const names = new Map();
   for (const cid of ids) {
-    const exists = e.get(`SELECT id FROM history_confluencias WHERE id = ?`, [cid]);
+    const exists = e.get(`SELECT id, name FROM history_confluencias WHERE id = ?`, [cid]);
     if (!exists) {
       return { ok: false, error: `confluencia id ${cid} no existe` };
+    }
+    names.set(cid, String(exists.name));
+  }
+  if (opts.reversalsEnabled === false) {
+    const current = new Set(
+      (e.all(
+        `SELECT confluencia_id FROM signal_history_confluencias WHERE history_id = ?`,
+        [historyId]
+      ) || []).map((r) => Number(r.confluencia_id))
+    );
+    const blocked = ids.find((cid) => !current.has(cid) && REVERSAL_CONFLUENCIAS.has(names.get(cid)));
+    if (blocked != null) {
+      return {
+        ok: false,
+        error: REVERSALS_DISABLED_ERROR,
+        message: `«${names.get(blocked)}» requiere las reversiones activadas. Actívalas en Configuración (perfil MT5 activo).`,
+      };
     }
   }
   e.run(`DELETE FROM signal_history_confluencias WHERE history_id = ?`, [historyId]);
@@ -1223,7 +1255,12 @@ async function updateMt5Execution(id, real = {}) {
   return { ok: true, item: await getById(n) };
 }
 
-async function updateAnnotation(id, patch = {}) {
+/**
+ * @param {number} id
+ * @param {object} patch
+ * @param {{ reversalsEnabled?: boolean }} [opts] reversiones del perfil MT5 activo (ver replaceHistoryConfluencias)
+ */
+async function updateAnnotation(id, patch = {}, opts = {}) {
   const e = await getEngine();
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) {
@@ -1243,22 +1280,22 @@ async function updateAnnotation(id, patch = {}) {
   if (parsed.error) return { ok: false, error: parsed.error };
   const { sets, params } = parsed;
 
-  const hasTags = hasOwn('tagIds');
-  if (hasTags) {
-    const tagResult = replaceHistoryTags(e, n, patch.tagIds);
-    if (!tagResult.ok) {
-      return { ok: false, error: tagResult.error };
-    }
-  }
-
   const hasConfluencias = hasOwn('confluenceIds') || hasOwn('confluenciaIds');
   if (hasConfluencias) {
     const raw = hasOwn('confluenceIds')
       ? patch.confluenceIds
       : patch.confluenciaIds;
-    const confResult = replaceHistoryConfluencias(e, n, raw);
+    const confResult = replaceHistoryConfluencias(e, n, raw, opts);
     if (!confResult.ok) {
-      return { ok: false, error: confResult.error };
+      return { ok: false, error: confResult.error, message: confResult.message };
+    }
+  }
+
+  const hasTags = hasOwn('tagIds');
+  if (hasTags) {
+    const tagResult = replaceHistoryTags(e, n, patch.tagIds);
+    if (!tagResult.ok) {
+      return { ok: false, error: tagResult.error };
     }
   }
 
@@ -1746,8 +1783,10 @@ module.exports = {
   historyTz,
   MAX_RESULT_IMAGE_BYTES,
   LOCKED_ERROR,
+  REVERSALS_DISABLED_ERROR,
   DEFAULT_HISTORY_TAGS,
   DEFAULT_HISTORY_CONFLUENCIAS,
+  REVERSAL_CONFLUENCIAS,
   get DATA_DIR() {
     return getDataDir();
   },

@@ -8,6 +8,7 @@ const path = require('node:path');
 
 process.env.MT5_SETTINGS_PATH = path.join(os.tmpdir(), `mt5-test-${process.pid}-missing.json`);
 const { buildManualOrder, buildOrderFromSummary, reconcileOrder, symbolFor } = require('./mt5');
+const { resolveVolatilityAdjustment } = require('./volatility');
 
 const plan = (entry, sl, tp) => ({ verdict: 'ENTRAR', planDetails: { entry, sl, tp } });
 
@@ -67,6 +68,75 @@ describe('buildOrderFromSummary', () => {
   });
 });
 
+describe('ajuste de SL/TP por volatilidad (VIX)', () => {
+  const base = {
+    symbols: { us30: 'US30m' },
+    pipSize: { us30: 1 },
+    extraSlPips: 0,
+    extraTpPips: 0,
+    vixLowMax: 15,
+    vixNormalMax: 20,
+    vixHighMax: 30,
+    vixMultLow: 0.8,
+    vixMultNormal: 1,
+    vixMultHigh: 1.3,
+    vixMultExtreme: 1.6,
+  };
+  const build = (settings, points, summary) => {
+    const volatility = resolveVolatilityAdjustment(settings, points == null ? null : { points, source: 'yahoo' });
+    return buildOrderFromSummary('us30', summary, settings, { volatility });
+  };
+  const long = plan('51000', '50900', '51200');
+  const short = plan('51000', '51100', '50800');
+
+  it('toggle apagado: niveles intactos y sin nota de volatilidad', () => {
+    const off = { ...base, volatilityAdjustEnabled: false };
+    const res = build(off, 35, long);
+    assert.equal(res.volatility, null);
+    assert.deepEqual(res.order, { symbol: 'US30m', side: 'LONG', entry: 51000, sl: 50900, tp: 51200 });
+  });
+
+  it('toggle activo LONG: VIX alto ensancha (×1,3) y mantiene SL < entry < TP', () => {
+    const { order, volatility } = build({ ...base, volatilityAdjustEnabled: true }, 24, long);
+    assert.equal(order.sl, 50870);
+    assert.equal(order.tp, 51260);
+    assert.ok(order.sl < order.entry && order.entry < order.tp);
+    assert.equal(volatility.multiplier, 1.3);
+    assert.equal(volatility.level, 'alta');
+  });
+
+  it('toggle activo SHORT: VIX bajo estrecha (×0,8) y mantiene TP < entry < SL', () => {
+    const { order, volatility } = build({ ...base, volatilityAdjustEnabled: true }, 12, short);
+    assert.equal(order.sl, 51080);
+    assert.equal(order.tp, 50840);
+    assert.ok(order.tp < order.entry && order.entry < order.sl);
+    assert.match(volatility.note, /se estrechan/);
+  });
+
+  it('VIX normal no cambia nada (×1)', () => {
+    const { order } = build({ ...base, volatilityAdjustEnabled: true }, 17, long);
+    assert.equal(order.sl, 50900);
+    assert.equal(order.tp, 51200);
+  });
+
+  it('el multiplicador escala las distancias de la señal y después se suma el margen extra en pips', () => {
+    const settings = { ...base, volatilityAdjustEnabled: true, extraSlPips: 10, extraTpPips: 20 };
+    const { order } = build(settings, 35, long);
+    // extrema ×1,6: SL 160 pts, TP 320 pts; luego +10 / +20 pips (1 pip = 1)
+    assert.equal(order.sl, 51000 - 160 - 10);
+    assert.equal(order.tp, 51000 + 320 + 20);
+  });
+
+  it('sin dato de VIX la orden no se bloquea: ×1 y aviso', () => {
+    const { order, volatility } = build({ ...base, volatilityAdjustEnabled: true }, null, long);
+    assert.equal(order.sl, 50900);
+    assert.equal(order.tp, 51200);
+    assert.equal(volatility.multiplier, 1);
+    assert.equal(volatility.level, null);
+    assert.match(volatility.note, /No se pudo leer el VIX/);
+  });
+});
+
 describe('reconcileOrder (Recalcular)', () => {
   const sent = { price: 50628.4, sl: 50566.3, tp: 50752.8, volume: 0.92 };
 
@@ -90,6 +160,17 @@ describe('reconcileOrder (Recalcular)', () => {
     const lost = reconcileOrder(sent, { state: 'closed', profit: -57.2 });
     assert.equal(lost.annotation.resultado, 'perdida');
     assert.deepEqual(reconcileOrder(sent, { state: 'expired' }).annotation, { resultado: 'no_tomada' });
+  });
+
+  it('cerrada → guarda precio y horas reales de cierre (UTC) para el gráfico de resultado', () => {
+    const r = reconcileOrder(sent, {
+      state: 'closed', profit: -2.42, closePrice: 83069.38, openTime: 1791381039, closeTime: 1791381697,
+    });
+    assert.equal(r.sentPatch.closePrice, 83069.38);
+    assert.equal(r.sentPatch.openTime, '2026-10-07T13:50:39.000Z');
+    assert.equal(r.sentPatch.closeTime, '2026-10-07T14:01:37.000Z');
+    const oldBridge = reconcileOrder({ ...sent, ...r.sentPatch }, { state: 'closed', profit: -2.42 });
+    assert.equal(oldBridge.sentPatch.closeTime, '2026-10-07T14:01:37.000Z');
   });
 });
 

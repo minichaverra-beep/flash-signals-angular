@@ -309,6 +309,26 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 | `GET` | `/api/mt5/health?profile=` | Estado del puente del perfil (por defecto el activo), cuenta (demo/real), Algo Trading |
 | `GET` / `PATCH` | `/api/mt5/settings` | Lee perfiles + activo; `PATCH { profile, settings }` guarda un perfil, `PATCH { active }` cambia el perfil en uso. El token nunca se devuelve (`hasToken`) |
 | `POST` | `/api/mt5/push` | Envía `{ "historyId": 42 }`, la última señal terminada o `{ "market": "xauusd" }` (último reporte). Opcionales: `dryRun` (vista previa), `volume`, `riskPct`, `allowMultiple` |
+| `GET` | `/api/volatility/vix?profile=` | VIX actual `{ points, source, sourceLabel, asOf, stale, level, multiplier, attempts }` (caché 60 s). `502 { error }` si fallan el broker y Yahoo |
+| `GET` | `/api/volatility/atr?market=btc&timeframe=M5` | Movimiento típico (ATR14) del mercado con velas del broker (solo lectura) |
+| `POST` | `/api/volatility/calc` | Calculadora: `{ market, mood, riskPct, balance? }` → distancias SL/TP, lotes y dinero en juego |
+
+### Volatilidad (VIX) en `/configuracion`
+
+Sección por perfil con tres partes (todo se guarda con **Guardar**):
+
+- **Calcular VIX actual**: usa el símbolo VIX del broker si existe (campo opcional `vixSymbol`; vacío = el puente lo busca con `GET /symbols?query=VIX`) y, si no hay o no cotiza, Yahoo Finance `^VIX`. Muestra puntos, nivel (termómetro), fuente y hora. Cuenta Exness demo: no tiene símbolo VIX, así que sale de Yahoo. Si Node rechaza el certificado TLS (antivirus/proxy en Windows) se añade el almacén de certificados del sistema automáticamente.
+- **Ajustar SL/TP según la volatilidad (VIX)** (interruptor, **desactivado por defecto**): al enviar una operación desde Run operation (señales) las distancias entrada→SL y entrada→TP de la señal se multiplican por el multiplicador del nivel y **después** se suma el margen extra en pips. Si falla la lectura del VIX la orden no se bloquea: ×1 y aviso (`volatilityNote` en el resultado y en la vista previa). Con el interruptor apagado no se consulta el VIX. Duplicar y la operación manual no se ajustan.
+- **Calculadora de volatilidad**: mercado + % de riesgo + «qué tan movido está» (+ saldo opcional) → Stop Loss / Take Profit recomendados, lotes y dinero que se pierde o gana. **Usar estos valores** copia el margen extra y el riesgo % al formulario (sin guardar).
+
+| Nivel | Puntos VIX | Multiplicador SL/TP |
+|-------|------------|---------------------|
+| Baja | < 15 | ×0,8 |
+| Normal | 15 – 20 | ×1,0 |
+| Alta | 20 – 30 (30 incluido) | ×1,3 |
+| Extrema | > 30 | ×1,6 |
+
+Umbrales y multiplicadores son editables por perfil (umbrales crecientes; multiplicadores 0,2–4). Lógica pura en `server/volatility.js`; fuente del VIX en `server/vix-source.js`. Tras actualizar hay que **reiniciar la API y el puente** (`bridge.py` añade `GET /symbols` y `GET /symbol`, solo lectura).
 
 ## Limitaciones
 

@@ -324,6 +324,10 @@ function recalcSummaryProbabilidad(summary, { preview = null, flags = null, forc
   if (base == null) {
     return { summary: s, scoreCombined: null, changed: false };
   }
+  // Probabilidad calibrada en Python: la fórmula heurística v3 no debe sobrescribirla
+  if (s.probCalibrated || /calibrad[oa] walk-forward/i.test(String(preview || ''))) {
+    return { summary: s, scoreCombined: base, changed: false };
+  }
   if (already && !force) {
     return {
       summary: s,

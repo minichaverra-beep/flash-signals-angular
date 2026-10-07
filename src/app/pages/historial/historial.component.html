@@ -188,9 +188,8 @@
                 (keydown.enter)="openDetail(item)"
               >
                 <td class="mono">{{ item.createdAt | date: 'yyyy.MM.dd HH:mm' }}</td>
-                <td class="mono muted">
-                  #{{ item.id }}
-                  <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>
+                <td class="ticket-cell">
+                  <ng-container *ngTemplateOutlet="ticketCell; context: { $implicit: item }"></ng-container>
                 </td>
                 <td><strong>{{ item.market | uppercase }}</strong></td>
                 <td><span class="mt5-type" [attr.data-type]="s.type">{{ s.typeLabel }}</span></td>
@@ -224,6 +223,8 @@
       <table class="hist-table">
         <thead>
           <tr>
+            <th aria-label="Acciones"></th>
+            <th [attr.aria-sort]="ariaSort('id')"><button type="button" class="th-sort" [class.active]="sortBy === 'id'" (click)="toggleSort('id')">Ticket <span class="sort-ind">{{ sortIcon('id') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Fecha <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Mercado <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Sesgo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
@@ -251,14 +252,13 @@
             <th>
               <ng-container *ngTemplateOutlet="colFilterTpl; context: { col: 'confluencias', label: 'Confluencias', options: catalogConfluencias, noneLabel: 'Sin confluencias', hint: 'Muestra filas que tengan todas las elegidas' }"></ng-container>
             </th>
-            <th></th>
             <th [attr.aria-sort]="ariaSort('comment')"><button type="button" class="th-sort" [class.active]="sortBy === 'comment'" (click)="toggleSort('comment')">Comentarios <span class="sort-ind">{{ sortIcon('comment') }}</span></button></th>
           </tr>
         </thead>
         <tbody>
           <ng-container *ngFor="let row of displayRows; trackBy: trackByRow">
             <tr *ngIf="row.kind === 'calc_marker'" class="calc-change-row">
-              <td colspan="14">
+              <td colspan="15">
                 <div class="calc-change-bar">
                   <div class="calc-change-main">
                     <span class="calc-change-badge">Cambio de cálculo</span>
@@ -297,6 +297,16 @@
             </tr>
             <ng-container *ngIf="asItem(row) as item">
             <tr [attr.data-id]="item.id" [class.row-no-tomada]="isNoTomada(item)" [class.row-locked]="isLocked(item)">
+            <td class="actions-cell">
+              <div class="row-actions">
+                <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
+                <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
+                <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
+              </div>
+            </td>
+            <td class="ticket-cell">
+              <ng-container *ngTemplateOutlet="ticketCell; context: { $implicit: item }"></ng-container>
+            </td>
             <td>
               <div class="when">
                 <span class="no-tomada-badge" *ngIf="isNoTomada(item)">No tomada</span>
@@ -568,12 +578,15 @@
                   *ngIf="confluencePickerOpenId === item.id"
                   (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
                 >
-                  <p class="tag-menu-hint">Selecciona o crea una opción</p>
+                  <p class="tag-menu-hint">Selecciona una opción</p>
                   <button
                     type="button"
                     class="tag-option tag-option-pill"
                     *ngFor="let t of catalogConfluencias"
                     [class.active]="isConfluenceSelected(item, t.id)"
+                    [class.is-blocked]="isConfluenceBlocked(item, t)"
+                    [attr.aria-disabled]="isConfluenceBlocked(item, t) || null"
+                    [attr.title]="isConfluenceBlocked(item, t) ? reversalsBlockedTip : null"
                     [disabled]="isEditBlocked(item)"
                     (click)="toggleConfluence(item, t, $event)"
                   >
@@ -583,33 +596,8 @@
                       [style.background]="t.color || defaultTagColor"
                     >{{ t.name }}</span>
                   </button>
-                  <div class="tag-create">
-                    <input
-                      type="text"
-                      class="hist-input"
-                      [attr.id]="'new-conf-' + item.id"
-                      [value]="newConfluenceDraft"
-                      placeholder="Nueva confluencia…"
-                      maxlength="80"
-                      aria-label="Nueva confluencia"
-                      (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
-                      (input)="onNewConfluenceDraftInput($event)"
-                      (keydown.enter)="createAndAssignConfluence(item, $event)"
-                    />
-                    <button
-                      type="button"
-                      class="ghost sm"
-                      [disabled]="!newConfluenceDraft.trim() || isEditBlocked(item)"
-                      (click)="createAndAssignConfluence(item, $event)"
-                    >Crear</button>
-                  </div>
                 </div>
               </div>
-            </td>
-            <td class="actions-cell">
-              <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
-              <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
-              <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
             </td>
             <td class="comment-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
               <textarea
@@ -871,12 +859,15 @@
               *ngIf="confluencePickerOpenId === item.id"
               (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
             >
-              <p class="tag-menu-hint">Selecciona o crea una opción</p>
+              <p class="tag-menu-hint">Selecciona una opción</p>
               <button
                 type="button"
                 class="tag-option tag-option-pill"
                 *ngFor="let t of catalogConfluencias"
                 [class.active]="isConfluenceSelected(item, t.id)"
+                [class.is-blocked]="isConfluenceBlocked(item, t)"
+                [attr.aria-disabled]="isConfluenceBlocked(item, t) || null"
+                [attr.title]="isConfluenceBlocked(item, t) ? reversalsBlockedTip : null"
                 [disabled]="isEditBlocked(item)"
                 (click)="toggleConfluence(item, t, $event)"
               >
@@ -886,26 +877,6 @@
                   [style.background]="t.color || defaultTagColor"
                 >{{ t.name }}</span>
               </button>
-              <div class="tag-create">
-                <input
-                  type="text"
-                  class="hist-input"
-                  [attr.id]="'card-new-conf-' + item.id"
-                  [value]="newConfluenceDraft"
-                  placeholder="Nueva confluencia…"
-                  maxlength="80"
-                  aria-label="Nueva confluencia"
-                  (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
-                  (input)="onNewConfluenceDraftInput($event)"
-                  (keydown.enter)="createAndAssignConfluence(item, $event)"
-                />
-                <button
-                  type="button"
-                  class="ghost sm"
-                  [disabled]="!newConfluenceDraft.trim() || isEditBlocked(item)"
-                  (click)="createAndAssignConfluence(item, $event)"
-                >Crear</button>
-              </div>
             </div>
           </div>
         </div>
@@ -1536,11 +1507,15 @@
         <dd>{{ p.tp }}</dd>
         <dt>Lotes</dt>
         <dd>{{ p.volume }}</dd>
+        <ng-container *ngIf="p.volatilityNote">
+          <dt>Volatilidad</dt>
+          <dd>{{ p.volatilityNote }}</dd>
+        </ng-container>
       </dl>
       <p class="run-volume-note" *ngIf="p.volumeNote">⚠ {{ p.volumeNote }}</p>
       <p class="run-volume-note" *ngIf="p.checkWarning">⚠ {{ p.checkWarning }}</p>
       <p class="muted tiny">
-        SL y TP incluyen el margen extra en pips de Configuración. Mercado o LIMIT se recalcula con el precio
+        SL y TP incluyen el margen extra en pips de Configuración (y el ajuste por volatilidad si está activo). Mercado o LIMIT se recalcula con el precio
         del broker al confirmar. Solo se puede enviar una vez.
       </p>
     </ng-container>
@@ -1560,6 +1535,12 @@
 
   <p class="run-toast" *ngIf="runToast" [class.err]="runToastErr" role="status">{{ runToast }}</p>
 </div>
+
+<!-- Ticket (#id + indicador de bloqueo): tabla resumida y no resumida. -->
+<ng-template #ticketCell let-item>
+  #{{ item.id }}
+  <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>
+</ng-template>
 
 <!-- Candado por fila (tabla, tarjeta móvil y panel detalle): manual o por día anterior. -->
 <ng-template #lockBtn let-item>

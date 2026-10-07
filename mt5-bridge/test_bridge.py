@@ -73,5 +73,31 @@ class RatesTest(unittest.TestCase):
         self.assertEqual(out["rates"][0]["time"], 300)
 
 
+class SymbolsTest(unittest.TestCase):
+    def test_busca_por_nombre_o_descripcion(self):
+        symbols = (
+            SimpleNamespace(name="US30m", description="Dow Jones", path="Standard\\Indices\\US30m", visible=True),
+            SimpleNamespace(name="VIXm", description="Volatility Index", path="Indices\\VIXm", visible=False),
+        )
+        with mock.patch.object(bridge, "ensure_connected"), mock.patch.object(bridge.mt5, "symbols_get", return_value=symbols):
+            out = bridge.search_symbols("vix")
+        self.assertEqual([s["name"] for s in out["symbols"]], ["VIXm"])
+        with self.assertRaises(bridge.BridgeError):
+            bridge.search_symbols("v")
+
+    def test_ficha_del_simbolo(self):
+        info = SimpleNamespace(digits=2, point=0.01, trade_tick_size=0.01, trade_tick_value=0.01, trade_tick_value_loss=0.0,
+                               trade_contract_size=1.0, volume_min=0.01, volume_max=200.0, volume_step=0.01,
+                               trade_stops_level=0)
+        tick = SimpleNamespace(bid=100.0, ask=100.5)
+        with mock.patch.object(bridge, "ensure_connected"), \
+                mock.patch.object(bridge, "symbol_quote", return_value=(info, tick)), \
+                mock.patch.object(bridge, "account_currency", return_value="USD"):
+            out = bridge.symbol_details("BTCUSDm")
+        self.assertEqual((out["tickSize"], out["tickValue"], out["volumeMin"], out["currency"]), (0.01, 0.01, 0.01, "USD"))
+        with self.assertRaises(bridge.BridgeError):
+            bridge.symbol_details("")
+
+
 if __name__ == "__main__":
     unittest.main()

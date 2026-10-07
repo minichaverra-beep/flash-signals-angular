@@ -4,6 +4,7 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { VIX_DEFAULTS, thresholdsError } = require('./volatility');
 
 const SIGNAL_MARKETS = ['btc', 'us30', 'xauusd'];
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -48,6 +49,12 @@ function defaults() {
     extraTpPips: 30,
     /** Valor en precio de 1 pip por mercado. */
     pipSize: { btc: 1, us30: 1, xauusd: 0.1 },
+    /** Ajusta SL/TP de la señal según el nivel del VIX al enviar (desactivado por defecto). */
+    volatilityAdjustEnabled: false,
+    /** Símbolo del VIX en el broker; vacío = buscarlo en el puente (si no existe se usa Yahoo ^VIX). */
+    vixSymbol: '',
+    /** Umbrales (puntos VIX) y multiplicadores de SL/TP por nivel. */
+    ...VIX_DEFAULTS,
   };
 }
 
@@ -76,6 +83,13 @@ const NUMBER_FIELDS = {
   extraTpPips: { min: 0, max: 10000 },
   maxTradesPerDay: { min: 0, max: 100, integer: true },
   maxDailyDrawdownPct: { min: 0, max: 100 },
+  vixLowMax: { min: 0, max: 200, minExclusive: true },
+  vixNormalMax: { min: 0, max: 200, minExclusive: true },
+  vixHighMax: { min: 0, max: 200, minExclusive: true },
+  vixMultLow: { min: 0.2, max: 4 },
+  vixMultNormal: { min: 0.2, max: 4 },
+  vixMultHigh: { min: 0.2, max: 4 },
+  vixMultExtreme: { min: 0.2, max: 4 },
 };
 
 function validateBridgeUrl(errors, raw) {
@@ -140,6 +154,17 @@ const FIELD_VALIDATORS = {
     errors.push('reversalsEnabled: true/false');
     return undefined;
   },
+  volatilityAdjustEnabled(errors, raw) {
+    if (typeof raw === 'boolean') return raw;
+    errors.push('volatilityAdjustEnabled: true/false');
+    return undefined;
+  },
+  vixSymbol(errors, raw) {
+    const sym = String(raw ?? '').trim();
+    if (sym === '' || SYMBOL_RE.test(sym)) return sym;
+    errors.push('vixSymbol: símbolo inválido');
+    return undefined;
+  },
   ...Object.fromEntries(
     Object.entries(NUMBER_FIELDS).map(([key, range]) => [key, (errors, raw) => numberIn(errors, key, raw, range)])
   ),
@@ -190,7 +215,13 @@ function load() {
   // Formato antiguo (un solo perfil plano) → Conf principal.
   const rawProfiles = saved?.profiles ?? (saved ? { principal: saved } : {});
   const profiles = {};
-  for (const id of PROFILES) profiles[id] = merge(base, cleanPatch(rawProfiles[id]));
+  for (const id of PROFILES) {
+    const profile = merge(base, cleanPatch(rawProfiles[id]));
+    // Archivo editado a mano con umbrales desordenados: vuelven a los de fábrica.
+    profiles[id] = thresholdsError(profile)
+      ? { ...profile, vixLowMax: base.vixLowMax, vixNormalMax: base.vixNormalMax, vixHighMax: base.vixHighMax }
+      : profile;
+  }
   const active = PROFILES.includes(saved?.active) ? saved.active : 'principal';
   return { active, profiles };
 }
@@ -252,7 +283,10 @@ function update(patch, profile = getActive()) {
   const { value, errors } = validatePatch(patch);
   if (errors.length) throw badRequest(errors);
   const s = state();
-  const next = { ...s, profiles: { ...s.profiles, [profile]: merge(s.profiles[profile], value) } };
+  const merged = merge(s.profiles[profile], value);
+  const orderError = thresholdsError(merged);
+  if (orderError) throw badRequest([orderError]);
+  const next = { ...s, profiles: { ...s.profiles, [profile]: merged } };
   persist(next);
   return next.profiles[profile];
 }
