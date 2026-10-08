@@ -60,6 +60,8 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
 
   readonly profileIds = PROFILE_IDS;
+  /** Perfiles visibles en la pantalla (la «secundaria» está oculta; sigue existiendo en el backend). */
+  readonly visibleProfileIds: Mt5ProfileId[] = ['principal'];
   readonly markets: { id: Mt5SignalMarket; label: string; hint: string }[] = [
     { id: 'btc', label: 'BTC', hint: 'ej. BTCUSD, BTCUSD.m' },
     { id: 'us30', label: 'US30', hint: 'ej. US30, US30.cash, DJ30' },
@@ -180,7 +182,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         this.loading = false;
         this.state = s;
         for (const id of PROFILE_IDS) this.drafts[id] = this.toDraft(s.profiles[id]);
-        this.editing = s.active;
+        this.editing = this.visibleProfileIds.includes(s.active) ? s.active : this.visibleProfileIds[0];
         this.health = null;
         if (!this.calcSeeded) {
           this.calcSeeded = true;

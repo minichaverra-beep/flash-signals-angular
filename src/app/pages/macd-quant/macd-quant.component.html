@@ -118,14 +118,7 @@
   <section class="block history-block" aria-labelledby="hist-title">
     <div class="block-head">
       <h2 id="hist-title">Historial preservado · {{ marketLabel() }}</h2>
-      <button
-        type="button"
-        class="btn-ghost sm"
-        [disabled]="historyLoading"
-        (click)="loadHistory()"
-      >
-        {{ historyLoading ? 'Cargando…' : 'Actualizar' }}
-      </button>
+      <!-- Oculto: botón «Actualizar» (loadHistory) -->
     </div>
     <p class="block-lead hide-on-phone">
       Análisis guardados en SQLite local (copia durable del PNG). Soft-filter E1 —

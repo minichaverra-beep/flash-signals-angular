@@ -267,6 +267,19 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+/* Botón solo-icono («Ver detalle» → ojo) */
+.ghost.sm.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.5rem;
+  line-height: 1;
+}
+
+.eye-icon {
+  display: block;
+}
+
 .panel {
   background: color-mix(in srgb, var(--panel) 82%, #1a1010);
   border: 1px solid var(--border);
@@ -1305,6 +1318,8 @@ tr.row-locked > td:first-child,
 
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.4rem;
   margin-top: 0.65rem;
 }
@@ -1637,8 +1652,13 @@ tr.row-no-tomada:hover > td {
   position: fixed;
   inset: 0;
   z-index: 80;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   padding: 1.5rem;
   background: transparent;
   pointer-events: none;
@@ -1654,11 +1674,18 @@ tr.row-no-tomada:hover > td {
   backdrop-filter: blur(4px);
 }
 
-.lightbox img {
+/* `> img` + width/height auto: la imagen conserva su proporción, cabe en el viewport
+   (restando el padding) y queda centrada en cualquier tamaño de pantalla. */
+.lightbox > img {
   position: relative;
   z-index: 81;
-  max-width: min(1100px, 94vw);
-  max-height: 88vh;
+  display: block;
+  flex: 0 0 auto;
+  margin: auto;
+  width: auto;
+  height: auto;
+  max-width: min(1100px, 100%);
+  max-height: 100%;
   object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -1934,6 +1961,8 @@ tr.row-no-tomada:hover > td {
 
 .run-sent-actions {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 0.3rem;
 }
@@ -2003,6 +2032,12 @@ tr.row-no-tomada:hover > td {
     font-weight: 500;
     opacity: 0.8;
   }
+}
+
+.params-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .params-table {
@@ -2612,4 +2647,436 @@ code {
 
 .card-annotate .tag-picker {
   width: 100%;
+}
+
+/* —— Teléfono (≤ 768px): lista, drawer y modales —— */
+@media (max-width: 768px) {
+  /* La tabla nunca empuja la página: desplaza dentro de su contenedor. */
+  .table-wrap {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
+  /* Vista Resumido: primera columna (Hora) fija al desplazar horizontalmente. */
+  .mt5-table th:first-child,
+  .mt5-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #160e0e;
+    box-shadow: 1px 0 0 color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  .mt5-table thead th:first-child {
+    z-index: 3;
+    background: color-mix(in srgb, var(--panel-deep) 92%, black);
+  }
+
+  .mt5-row:nth-child(even) > td:first-child {
+    background: color-mix(in srgb, var(--panel-deep) 40%, #160e0e);
+  }
+
+  .mt5-row:hover > td:first-child,
+  .mt5-row:focus-visible > td:first-child {
+    background: color-mix(in srgb, var(--gold) 10%, #160e0e);
+  }
+
+  .mt5-table tfoot td:first-child {
+    background: color-mix(in srgb, var(--panel-deep) 92%, black);
+  }
+
+  /* Botones de operación (Run / Parámetros / Duplicar / Recalcular): objetivo táctil ≥ 40px. */
+  .run-btn,
+  .params-btn,
+  .dup-btn,
+  .recalc-btn {
+    min-height: 2.5rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+  }
+
+  .lock-btn {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .drawer img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .unlock-actions {
+    flex-wrap: wrap;
+  }
+
+  .unlock-actions button {
+    min-height: 2.5rem;
+  }
+}
+
+/* —— Teléfono estrecho (≤ 480px, p.ej. Motorola Edge Neo 40 a 412px) —— */
+@media (max-width: 480px) {
+  .section-title {
+    font-size: 1.15rem;
+    margin: 1rem 0 0.6rem;
+  }
+
+  /* Barra de filtros: segmentos a ancho completo y acciones en 2 columnas. */
+  .toolbar {
+    padding: 0.55rem 0.6rem;
+  }
+
+  .seg.filters {
+    width: 100%;
+  }
+
+  .seg.filters button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  .toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .toolbar-actions .ghost,
+  .toolbar-actions .danger {
+    width: 100%;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.82rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Cabecera del panel: toggles y exportación en línea propia. */
+  .panel,
+  .panel.table-panel {
+    padding: 0.85rem 0.65rem 1rem;
+    border-radius: 12px;
+  }
+
+  .meta-row {
+    gap: 0.45rem 0.75rem;
+  }
+
+  .compact-toggle,
+  .auto-capture-toggle + .compact-toggle {
+    margin-left: 0;
+    min-height: 2.5rem;
+  }
+
+  .export-bar {
+    gap: 0.35rem;
+    padding: 0.3rem;
+  }
+
+  .export-scope button,
+  .export-btn {
+    min-height: 2.4rem;
+  }
+
+  .export-divider {
+    display: none;
+  }
+
+  /* Tabla resumida más densa para que quepan más columnas antes de desplazar. */
+  .mt5-table {
+    font-size: 0.74rem;
+  }
+
+  .mt5-table th,
+  .mt5-table td {
+    padding: 0.4rem 0.45rem;
+  }
+
+  /* Tarjetas (vista no resumida) */
+  .hist-card {
+    padding: 0.75rem 0.7rem;
+  }
+
+  .hist-card header {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .header-badges {
+    justify-content: flex-start;
+  }
+
+  .badge {
+    max-width: 100%;
+  }
+
+  .hit-rate-row {
+    flex-wrap: wrap;
+  }
+
+  .hit-rate-row .hit-rate-adv {
+    flex-basis: 100%;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .hit-rate-row .hit-rate-factors {
+    justify-content: flex-start;
+  }
+
+  /* Captura, «+ Dirección» y «+ Confluencias» centrados en la tarjeta. */
+  .card-shot {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .card-shot .shot-thumb {
+    width: 4rem;
+    height: 3rem;
+  }
+
+  .card-shot .shot-caption {
+    flex: 1 1 10rem;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .card-annotate .tag-chips {
+    justify-content: center;
+  }
+
+  .card-annotate .btn-attach {
+    width: 100%;
+    white-space: normal;
+    min-height: 2.5rem;
+  }
+
+  .tag-menu,
+  .tag-menu-confluencias {
+    min-width: 0;
+    width: min(20rem, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+  }
+
+  /* Acciones de la tarjeta: botones a 2 columnas, insignia «Enviada» en su propia línea. */
+  .card-actions {
+    gap: 0.35rem;
+  }
+
+  .card-actions .run-sent {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .card-actions > button {
+    flex: 1 1 calc(50% - 0.2rem);
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.82rem;
+    white-space: normal;
+  }
+
+  .card-actions .lock-btn {
+    flex: 0 0 2.5rem;
+    padding: 0;
+  }
+
+  .run-sent-actions {
+    width: 100%;
+  }
+
+  .run-sent-actions > button {
+    flex: 1 1 calc(50% - 0.2rem);
+    min-width: 0;
+  }
+
+  .pager {
+    justify-content: center;
+  }
+
+  .pager .ghost.sm,
+  .pager-size {
+    min-height: 2.5rem;
+  }
+
+  /* Drawer «Ver detalle» */
+  .drawer,
+  .drawer.expanded {
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding: 0.85rem 0.7rem 1.5rem;
+  }
+
+  .drawer-head {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .drawer-head h2 {
+    font-size: 1.05rem;
+  }
+
+  .drawer-head-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .drawer-head-actions .ghost {
+    flex: 1 1 auto;
+    min-height: 2.5rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .mode-tabs {
+    gap: 0.35rem;
+  }
+
+  .mode-tabs button {
+    flex: 1 1 calc(50% - 0.2rem);
+    min-height: 2.5rem;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .detail-annotate {
+    grid-template-columns: 1fr;
+    padding: 0.7rem 0.7rem;
+    gap: 0.55rem;
+  }
+
+  .result-shot {
+    padding: 0.7rem 0.7rem 0.8rem;
+  }
+
+  .result-shot-head {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .result-shot-actions {
+    width: 100%;
+  }
+
+  .result-shot-actions .btn-attach,
+  .result-shot-actions .ghost {
+    flex: 1 1 auto;
+    min-height: 2.5rem;
+    white-space: normal;
+  }
+
+  .result-shot-preview img {
+    max-height: 60vh;
+  }
+
+  .lightbox {
+    padding: 0.5rem;
+  }
+
+  .lightbox > img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+
+  .lightbox-close {
+    top: 0.5rem;
+    right: 0.5rem;
+    min-height: 2.5rem;
+  }
+
+  /* Modales (unlock, cambio de cálculo, exportar, Run, Parámetros) */
+  .unlock-dialog,
+  .params-dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1rem 0.85rem 1.1rem;
+    border-radius: 14px;
+  }
+
+  .unlock-dialog h2 {
+    font-size: 1.1rem;
+  }
+
+  .unlock-dialog .muted {
+    font-size: 0.88rem;
+  }
+
+  .unlock-actions {
+    gap: 0.4rem;
+  }
+
+  .unlock-actions button {
+    flex: 1 1 calc(50% - 0.2rem);
+    min-width: 0;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.85rem;
+    white-space: normal;
+  }
+
+  .export-confirm-list {
+    gap: 0.35rem 0.6rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.82rem;
+  }
+
+  .export-confirm-list dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .params-leg {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .params-leg h3 {
+    font-size: 0.88rem;
+    line-height: 1.35;
+  }
+
+  .params-table {
+    font-size: 0.76rem;
+  }
+
+  .params-table th,
+  .params-table td {
+    padding: 0.25rem 0.3rem;
+  }
+
+  .params-table td {
+    white-space: nowrap;
+  }
+
+  .params-table thead th {
+    font-size: 0.66rem;
+  }
+
+  .params-facts {
+    font-size: 0.78rem;
+    padding-left: 1rem;
+  }
+
+  .run-toast {
+    right: 0.5rem;
+    left: 0.5rem;
+    bottom: 0.75rem;
+    max-width: none;
+    font-size: 0.8rem;
+  }
 }

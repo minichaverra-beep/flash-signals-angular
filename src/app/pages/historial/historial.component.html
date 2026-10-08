@@ -31,29 +31,8 @@
     </fieldset>
     <div class="toolbar-actions">
       <span class="lock-badge" title="Borrar filas requiere contraseña">🔒 Bloqueo activo</span>
-      <button type="button" class="ghost" (click)="openCalcMarkerDialog()" [disabled]="loading">
-        + Cambio de cálculo
-      </button>
-      <button
-        type="button"
-        class="ghost"
-        (click)="recalcAllProbabilidad()"
-        [disabled]="loading || recalcBusy || !total"
-        title="Recalcula Probabilidad v3: bias + Premium/Discount + acuerdo"
-      >
-        {{ recalcBusy ? 'Recalculando…' : 'Actualizar Probabilidad' }}
-      </button>
-      <button type="button" class="ghost" (click)="load()" [disabled]="loading">
-        {{ loading ? 'Cargando…' : 'Actualizar' }}
-      </button>
-      <button
-        type="button"
-        class="danger"
-        (click)="clearAll()"
-        [disabled]="clearing || !total"
-      >
-        {{ clearing ? 'Limpiando…' : 'Limpiar historial' }}
-      </button>
+      <!-- Ocultos: «+ Cambio de cálculo» (openCalcMarkerDialog), «Actualizar Probabilidad» (recalcAllProbabilidad),
+           «Actualizar» (load) y «Limpiar historial» (clearAll) -->
     </div>
   </div>
 
@@ -291,7 +270,9 @@
             <td class="actions-cell">
               <div class="row-actions">
                 <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
-                <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
+                <button type="button" class="ghost sm icon-btn" title="Ver detalle" aria-label="Ver detalle" (click)="openDetail(item)">
+                  <ng-container *ngTemplateOutlet="eyeIcon"></ng-container>
+                </button>
                 <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
               </div>
             </td>
@@ -313,42 +294,8 @@
               >{{ biasText(itemBias(item)) }}</span>
             </td>
             <td class="run-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-              <ng-container *ngIf="sentInfo(item) as s; else runBtn">
-                <div class="run-sent-wrap">
-                  <span class="run-sent has-tip" [attr.data-tooltip]="sentTip(s)">
-                    ✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small>
-                  </span>
-                  <span class="run-state muted tiny" *ngIf="sentStateLabel(s) as st">
-                    {{ st }}<ng-container *ngIf="s.profit != null"> · {{ s.profit | number:'1.2-2' }} USD</ng-container>
-                  </span>
-                  <span class="run-state muted tiny" *ngIf="s.duplicate as d">
-                    + duplicada<ng-container *ngIf="d.order"> #{{ d.order }}</ng-container><ng-container *ngIf="sentStateLabel(d) as dst"> · {{ dst }}</ng-container><ng-container *ngIf="d.profit != null"> · {{ d.profit | number:'1.2-2' }} USD</ng-container>
-                  </span>
-                  <div class="run-sent-actions">
-                    <button
-                      type="button"
-                      class="params-btn sm has-tip"
-                      data-tooltip="Objetivo, SL actual en dinero y pips, R:R y flotante (se actualiza solo y con Recalcular)"
-                      (click)="openParams(item, $event)"
-                    >⚙ Parámetros</button>
-                    <button
-                      type="button"
-                      class="dup-btn sm has-tip"
-                      *ngIf="canDuplicate(s)"
-                      [attr.data-tooltip]="duplicateTip(s)"
-                      [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
-                      (click)="duplicateOperation(item, $event)"
-                    >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>
-                    <button
-                      type="button"
-                      class="recalc-btn sm has-tip"
-                      data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
-                      [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
-                      (click)="recalcOperation(item, $event)"
-                    >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
-                  </div>
-                </div>
-              </ng-container>
+              <!-- Oculto: bloque «✓ Enviada #… / estado · USD / + duplicada / ⚙ Parámetros · ⧉ Duplicar · ↻ Recalcular» -->
+              <ng-container *ngIf="sentInfo(item); else runBtn"></ng-container>
               <ng-template #runBtn>
                 <span *ngIf="canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip()">
                   <button
@@ -869,7 +816,7 @@
           <button
             type="button"
             class="params-btn sm"
-            *ngIf="sentInfo(item)"
+            *ngIf="canShowParams(item, sentInfo(item))"
             (click)="openParams(item, $event)"
           >⚙ Parámetros</button>
           <button
@@ -897,7 +844,9 @@
             (click)="openRun(item, $event)"
           >▶ Run</button>
           <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
-          <button type="button" class="ghost sm" (click)="openDetail(item)">Ver detalle</button>
+          <button type="button" class="ghost sm icon-btn" title="Ver detalle" aria-label="Ver detalle" (click)="openDetail(item)">
+            <ng-container *ngTemplateOutlet="eyeIcon"></ng-container>
+          </button>
           <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
         </div>
       </article>
@@ -1553,6 +1502,7 @@
           <span [class.run-long]="leg.side === 'LONG'" [class.run-short]="leg.side === 'SHORT'"> · {{ leg.side }} {{ leg.volume }} lotes</span>
           <span class="params-state"> · {{ legStateLabel(leg) }}</span>
         </h3>
+        <div class="params-table-wrap">
         <table class="params-table">
           <thead>
             <tr><th scope="col">Nivel</th><th scope="col">Precio</th><th scope="col">Pips</th><th scope="col">Dinero</th></tr>
@@ -1582,6 +1532,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
         <ul class="params-facts">
           <li *ngIf="leg.rr != null">R:R <strong>1:{{ leg.rr }}</strong></li>
           <li *ngIf="leg.slLocksProfit">✓ El SL ya asegura ganancia (break-even o trailing)</li>
@@ -1622,6 +1573,14 @@
 </div>
 
 <!-- Ticket (#id + indicador de bloqueo): tabla resumida y no resumida. -->
+<!-- Icono de ojo del botón «Ver detalle» -->
+<ng-template #eyeIcon>
+  <svg class="eye-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+</ng-template>
+
 <ng-template #ticketCell let-item>
   #{{ item.id }}
   <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>

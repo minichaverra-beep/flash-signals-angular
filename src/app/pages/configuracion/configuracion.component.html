@@ -21,12 +21,13 @@
   <ng-container *ngIf="state as st">
     <section class="panel active-panel">
       <h2>Configuración para operar en MT5</h2>
-      <p class="muted tiny">Las operaciones que confirmes desde Señales se envían con el perfil seleccionado aquí.</p>
+      <p class="muted tiny hide-on-phone">Las operaciones que confirmes desde Señales se envían con el perfil seleccionado aquí.</p>
+      <!-- Solo perfiles visibles (la «secundaria» está oculta) -->
       <div class="profile-toggle" role="radiogroup" aria-label="Perfil activo para MT5">
         <button
           type="button"
           role="radio"
-          *ngFor="let id of profileIds"
+          *ngFor="let id of visibleProfileIds"
           [attr.aria-checked]="st.active === id"
           [class.active]="st.active === id"
           [disabled]="switching"
@@ -41,11 +42,11 @@
       </div>
     </section>
 
-    <div class="profile-tabs" role="tablist" aria-label="Perfil a editar">
+    <div class="profile-tabs" role="tablist" aria-label="Perfil a editar" *ngIf="visibleProfileIds.length > 1">
       <button
         type="button"
         role="tab"
-        *ngFor="let id of profileIds"
+        *ngFor="let id of visibleProfileIds"
         [attr.aria-selected]="editing === id"
         [class.active]="editing === id"
         (click)="edit(id)"
@@ -58,7 +59,7 @@
     <form *ngIf="draft as d" (ngSubmit)="save()">
       <section class="panel">
         <h2>Conexión con MT5 · {{ label(editing) }}</h2>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           Puente local <code>mt5-bridge/bridge.py</code> (<code>.\run-mt5-bridge.ps1</code>) con el terminal MT5 abierto y
           <strong>Algo Trading</strong> activado. Para otra cuenta/terminal usa otro puerto (<code>MT5_BRIDGE_PORT=8766</code>).
         </p>
@@ -89,7 +90,7 @@
             <span class="spinner" *ngIf="testing" aria-hidden="true"></span>
             Probar conexión
           </button>
-          <small class="muted">Usa la configuración guardada de {{ label(editing) }}.</small>
+          <small class="muted hide-on-phone">Usa la configuración guardada de {{ label(editing) }}.</small>
         </div>
 
         <div class="health" *ngIf="health as h" [class.bad]="!h.ok">
@@ -116,7 +117,7 @@
 
       <section class="panel">
         <h2>Símbolos del broker</h2>
-        <p class="muted tiny">Nombre exacto del símbolo en tu MT5 (ventana Observación del mercado).</p>
+        <p class="muted tiny hide-on-phone">Nombre exacto del símbolo en tu MT5 (ventana Observación del mercado).</p>
         <div class="grid">
           <div class="field" *ngFor="let m of markets">
             <label [for]="'cfg-sym-' + m.id">{{ m.label }}</label>
@@ -141,7 +142,7 @@
           <div class="field" *ngIf="d.lotMode === 'risk'">
             <label for="cfg-risk">Riesgo por operación (% equity)</label>
             <input id="cfg-risk" name="riskPct" type="number" min="0.01" max="5" step="0.05" [(ngModel)]="d.form.riskPct" />
-            <small class="muted">
+            <small class="muted hide-on-phone">
               Lotes = equity × riesgo % ÷ pérdida hasta el SL (con el margen extra). Si sale menos que el lote
               mínimo del broker se envía el mínimo y se avisa el riesgo real.
             </small>
@@ -149,14 +150,14 @@
           <div class="field" *ngIf="d.lotMode === 'fixed'">
             <label for="cfg-volume">Lotes por operación</label>
             <input id="cfg-volume" name="volume" type="number" min="0.01" max="100" step="0.01" [(ngModel)]="d.fixedVolume" />
-            <small class="muted">Siempre podrás cambiarlos en el diálogo de confirmación.</small>
+            <small class="muted hide-on-phone">Siempre podrás cambiarlos en el diálogo de confirmación.</small>
           </div>
         </div>
       </section>
 
       <section class="panel">
         <h2>Margen extra de SL / TP</h2>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           Se suma a los niveles de la señal al enviar: el SL se aleja de la entrada y el TP también. 0 = niveles exactos.
         </p>
         <div class="grid">
@@ -190,7 +191,7 @@
 
       <section class="panel vol-panel">
         <h2>Volatilidad (VIX) · {{ label(editing) }}</h2>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           El VIX mide cuánto se espera que se mueva la bolsa de EE. UU.: con VIX alto los mercados se agitan más y un
           SL/TP corto salta por simple ruido; con VIX bajo hay poco movimiento y un SL/TP largo es innecesario.
         </p>
@@ -222,12 +223,12 @@
             {{ d.form.volatilityAdjustEnabled ? 'Activado' : 'Desactivado' }}
           </small>
         </div>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           Si está activo, con VIX alto el SL/TP se ensanchan y con VIX bajo se estrechan. Se multiplica la distancia de
           la señal (entrada → SL y entrada → TP) y después se suma el margen extra en pips. Desactivado no se consulta
           el VIX al enviar.
         </p>
-        <p class="vol-note" *ngIf="d.form.volatilityAdjustEnabled" role="note">
+        <p class="vol-note hide-on-phone" *ngIf="d.form.volatilityAdjustEnabled" role="note">
           Cada envío lee el VIX (se reutiliza durante 60 s). Si no se puede leer, la orden se envía igual con ×1 y un
           aviso. «Copiar», «Duplicar» y la operación manual no se ajustan.
         </p>
@@ -238,7 +239,7 @@
               <span class="spinner" *ngIf="vixLoading" aria-hidden="true"></span>
               Calcular VIX actual
             </button>
-            <small class="muted">Usa el símbolo VIX de tu broker y, si no existe, Yahoo Finance (^VIX).</small>
+            <small class="muted hide-on-phone">Usa el símbolo VIX de tu broker y, si no existe, Yahoo Finance (^VIX).</small>
           </div>
           <p class="msg err" *ngIf="vixError">{{ vixError }}</p>
 
@@ -264,7 +265,7 @@
               <ng-container *ngIf="v.stale"> · mercado cerrado: es el último cierre</ng-container>
               <ng-container *ngIf="v.cached"> · lectura guardada de hace menos de 1 min</ng-container>
             </p>
-            <p class="muted tiny" *ngFor="let a of v.attempts">· {{ a }}</p>
+            <p class="muted tiny hide-on-phone" *ngFor="let a of v.attempts">· {{ a }}</p>
           </div>
         </div>
 
@@ -318,7 +319,7 @@
         <p class="reversal-warning-alert" *ngIf="thresholdsInvalid">
           Los límites deben ir de menor a mayor (Baja &lt; Normal &lt; Alta); si no, no se podrá guardar.
         </p>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           ×1,3 = el SL y el TP quedan un 30 % más lejos de la entrada; ×0,8 = un 20 % más cerca. Rango permitido 0,2–4.
         </p>
 
@@ -326,14 +327,14 @@
           <div class="field">
             <label for="cfg-vix-symbol">Símbolo VIX del broker (opcional)</label>
             <input id="cfg-vix-symbol" name="vixSymbol" type="text" [(ngModel)]="d.form.vixSymbol" placeholder="vacío = buscarlo solo" />
-            <small class="muted">Muchos brokers (p. ej. Exness) no lo ofrecen; entonces se usa Yahoo Finance.</small>
+            <small class="muted hide-on-phone">Muchos brokers (p. ej. Exness) no lo ofrecen; entonces se usa Yahoo Finance.</small>
           </div>
         </div>
 
         <!-- Calculadora de volatilidad (sin matemáticas) -->
         <div class="calc-card">
           <h3 class="sub-title">Calculadora de volatilidad</h3>
-          <p class="muted tiny">
+          <p class="muted tiny hide-on-phone">
             Responde unas preguntas sencillas y te digo dónde poner el Stop Loss y el Take Profit y cuántos lotes usar.
             Solo lee el mercado de tu broker: no envía ninguna operación.
           </p>
@@ -368,7 +369,7 @@
               />
               <strong class="slider-value">{{ num(calcRisk, 1) }} %</strong>
             </div>
-            <p class="muted tiny">Lo habitual es entre 0,5 % y 1 %. Más bajo = duermes más tranquilo.</p>
+            <p class="muted tiny hide-on-phone">Lo habitual es entre 0,5 % y 1 %. Más bajo = duermes más tranquilo.</p>
           </div>
 
           <div class="calc-step">
@@ -387,7 +388,7 @@
               </button>
             </fieldset>
             <p class="muted tiny" *ngIf="calcMoodFromVix && vix">✔ Elegido por ti según el VIX de ahora ({{ num(vix.points) }} puntos).</p>
-            <p class="muted tiny" *ngIf="!calcMoodFromVix">Consejo: pulsa «Calcular VIX actual» y lo elijo yo por ti.</p>
+            <p class="muted tiny hide-on-phone" *ngIf="!calcMoodFromVix">Consejo: pulsa «Calcular VIX actual» y lo elijo yo por ti.</p>
           </div>
 
           <div class="calc-step">
@@ -405,7 +406,7 @@
                 (ngModelChange)="onCalcBalanceChange()"
                 (keydown.enter)="$event.preventDefault()"
               />
-              <small class="muted">Se rellena con «Probar conexión»; si lo dejas vacío uso el saldo que MT5 informa.</small>
+              <small class="muted hide-on-phone">Se rellena con «Probar conexión»; si lo dejas vacío uso el saldo que MT5 informa.</small>
             </div>
           </div>
 
@@ -419,19 +420,19 @@
                   <span class="tile-label">Stop Loss</span>
                   <span class="tile-big">{{ num(r.plan.slPips, 1) }}<small> pips</small></span>
                   <span class="tile-sub">≈ {{ num(r.plan.slDistance) }} puntos de precio</span>
-                  <p class="tile-explain">Si el mercado va tanto en tu contra, la operación se cierra sola para frenar la pérdida.</p>
+                  <p class="tile-explain hide-on-phone">Si el mercado va tanto en tu contra, la operación se cierra sola para frenar la pérdida.</p>
                 </div>
                 <div class="result-tile tp">
                   <span class="tile-label">Take Profit</span>
                   <span class="tile-big">{{ num(r.plan.tpPips, 1) }}<small> pips</small></span>
                   <span class="tile-sub">≈ {{ num(r.plan.tpDistance) }} puntos de precio</span>
-                  <p class="tile-explain">Si va tanto a tu favor, se cierra sola con ganancia: el doble de lo que arriesgas.</p>
+                  <p class="tile-explain hide-on-phone">Si va tanto a tu favor, se cierra sola con ganancia: el doble de lo que arriesgas.</p>
                 </div>
                 <div class="result-tile lots">
                   <span class="tile-label">Tamaño sugerido</span>
                   <span class="tile-big">{{ num(r.plan.lots, 2) }}<small> lotes</small></span>
                   <span class="tile-sub">{{ r.symbol }}</span>
-                  <p class="tile-explain">Ajustado para que, si falla, pierdas aproximadamente lo que elegiste.</p>
+                  <p class="tile-explain hide-on-phone">Ajustado para que, si falla, pierdas aproximadamente lo que elegiste.</p>
                 </div>
               </div>
 
@@ -452,7 +453,7 @@
 
               <div class="actions use-row">
                 <button type="button" class="primary" (click)="useCalcValues()">Usar estos valores</button>
-                <small class="muted">
+                <small class="muted hide-on-phone">
                   Copia al formulario (sin guardar) un margen extra de <strong>SL +{{ r.plan.extraSlPips }} pips</strong> y
                   <strong>TP +{{ r.plan.extraTpPips }} pips</strong>, y el riesgo de <strong>{{ num(r.riskPct, 1) }} %</strong>.
                 </small>
@@ -494,12 +495,12 @@
           <div class="field">
             <label for="cfg-dev">Distancia máx. broker ↔ señal (%)</label>
             <input id="cfg-dev" name="maxDeviationPct" type="number" min="0.05" max="10" step="0.05" [(ngModel)]="d.form.maxDeviationPct" />
-            <small class="muted">Si el precio del broker está más lejos de la entrada, no se envía.</small>
+            <small class="muted hide-on-phone">Si el precio del broker está más lejos de la entrada, no se envía.</small>
           </div>
           <div class="field">
             <label for="cfg-exp">Caducidad orden LIMIT (min)</label>
             <input id="cfg-exp" name="expiryMinutes" type="number" min="0" max="1440" step="5" [(ngModel)]="d.form.expiryMinutes" />
-            <small class="muted">0 = sin caducidad (hasta cancelarla).</small>
+            <small class="muted hide-on-phone">0 = sin caducidad (hasta cancelarla).</small>
           </div>
           <div class="field">
             <label for="cfg-slip">Deslizamiento máx. a mercado (puntos)</label>
@@ -551,12 +552,12 @@
           <div class="field">
             <label for="cfg-max-trades">Límite de operaciones por día</label>
             <input id="cfg-max-trades" name="maxTradesPerDay" type="number" min="0" max="100" step="1" [(ngModel)]="d.form.maxTradesPerDay" />
-            <small class="muted">0 = sin límite. Cuenta las entradas de hoy y las órdenes pendientes abiertas hoy.</small>
+            <small class="muted hide-on-phone">0 = sin límite. Cuenta las entradas de hoy y las órdenes pendientes abiertas hoy.</small>
           </div>
           <div class="field">
             <label for="cfg-max-dd">Límite de drawdown de hoy (%)</label>
             <input id="cfg-max-dd" name="maxDailyDrawdownPct" type="number" min="0" max="100" step="0.5" [(ngModel)]="d.form.maxDailyDrawdownPct" />
-            <small class="muted">0 = sin límite. Pérdida de hoy (cerrada + flotante) sobre el balance al inicio del día.</small>
+            <small class="muted hide-on-phone">0 = sin límite. Pérdida de hoy (cerrada + flotante) sobre el balance al inicio del día.</small>
           </div>
         </div>
       </section>
@@ -568,10 +569,10 @@
             {{ saving ? 'Guardando…' : 'Guardar ' + label(editing) }}
           </button>
           <button type="button" class="ghost" (click)="discard()" [disabled]="saving">Descartar cambios</button>
-          <button type="button" class="ghost" (click)="copyFromOther()" [disabled]="saving">Copiar de {{ label(otherProfile) }}</button>
+          <!-- Oculto: botón «Copiar de <otro perfil>» (copyFromOther) -->
           <button type="button" class="ghost" (click)="restoreDefaults()" [disabled]="saving">Valores por defecto</button>
         </div>
-        <p class="muted tiny">
+        <p class="muted tiny hide-on-phone">
           Solo en el puente (variables de entorno, por seguridad): <code>MT5_ALLOW_REAL=1</code> para cuentas reales,
           <code>MT5_MAGIC</code>, <code>MT5_TERMINAL_PATH</code>, <code>MT5_LOGIN</code>/<code>MT5_PASSWORD</code>/<code>MT5_SERVER</code>.
         </p>

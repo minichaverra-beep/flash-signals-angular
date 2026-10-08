@@ -51,6 +51,7 @@ import {
 } from './historial-export';
 import { isAutoLocked, isEffectivelyLocked, isPastDay } from './historial-lock';
 import { ShotCaption, shotCaption } from './historial-shot-caption';
+import { canShowParams } from './historial-params-visibility';
 import { SignalJobService, jobKind } from '../../services/signal-job.service';
 import { SignalRunFormComponent } from '../../shared/signal-run-form.component';
 import { Subscription } from 'rxjs';
@@ -471,6 +472,11 @@ export class HistorialComponent implements OnInit, OnDestroy {
   paramsError = '';
   private paramsTimer: ReturnType<typeof setInterval> | null = null;
   private static readonly PARAMS_REFRESH_MS = 15_000;
+
+  /** «⚙ Parámetros» solo mientras alguna pata siga viva, sin resultado ganada/perdida y fila no bloqueada. */
+  canShowParams(item: HistoryListItem, s: Mt5SentEntry | null | undefined): boolean {
+    return canShowParams(item.resultado, s, this.isLocked(item));
+  }
 
   openParams(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
