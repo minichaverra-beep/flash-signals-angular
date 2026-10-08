@@ -73,3 +73,8 @@ mt5-bridge/__pycache__/
 
 # Paquete Android (pack-for-android.ps1)
 android/out/
+android/app-launcher/.gradle/
+android/app-launcher/build/
+android/app-launcher/app/build/
+android/app-launcher/local.properties
+android/app-launcher/app/src/main/assets/

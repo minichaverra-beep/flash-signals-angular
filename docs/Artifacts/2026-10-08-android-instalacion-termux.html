@@ -177,6 +177,7 @@
 
     <nav class="toc" aria-label="Contenido">
       <a href="#como-funciona">Cómo funciona</a>
+      <a href="#apk">Opción APK</a>
       <a href="#requisitos">Requisitos</a>
       <a href="#empaquetar">1 · Empaquetar</a>
       <a href="#copiar">2 · Copiar</a>
@@ -209,6 +210,39 @@
         Sí, la primera instalación descarga Ubuntu, Node y las librerías Python (gratis, ~2–3 GB). Después, los análisis
         usan internet solo para los datos de mercado (yfinance / Binance), igual que en el PC. No hay servidores de pago.
       </div>
+    </section>
+
+    <section class="card" id="apk">
+      <h2>Opción recomendada · APK Flash Signals</h2>
+      <p>
+        El APK <code>FlashSignals.apk</code> trae el paquete completo dentro y hace los pasos 2, 4 y 5 por ti con botones:
+        copia el paquete a <code>Download/FlashSignals/</code>, le pide a Termux que lo instale, arranca el servidor en
+        segundo plano y muestra la interfaz dentro de la app. Termux sigue siendo necesario (se instala una vez y no hay que usarlo).
+      </p>
+      <div class="code">
+        <div class="code-head">PowerShell en el PC · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <pre>.\android\build-apk.ps1              # empaqueta + compila → android\out\FlashSignals.apk
+.\android\build-apk.ps1 -SkipBuild   # sin recompilar Angular
+.\android\build-apk.ps1 -SkipPack    # reutiliza el paquete de android\out</pre>
+      </div>
+      <ol>
+        <li>Copia <code>FlashSignals.apk</code> al teléfono e instálalo (permite <em>instalar apps desconocidas</em>).</li>
+        <li>En la app: <strong>1 · Instalar Termux</strong> (abre F-Droid). Abre Termux una vez y vuelve.</li>
+        <li><strong>2 · Permitir que Flash Signals use Termux</strong>: copia un comando y abre Termux; mantén pulsado → <em>Pegar</em> → Enter. Solo una vez.</li>
+        <li><strong>3 · Instalar / actualizar</strong>: acepta el permiso <em>Ejecutar comandos en Termux</em> y el de almacenamiento. Se abre Termux con el progreso (20–40 min).</li>
+        <li><strong>4 · Iniciar y abrir</strong>: arranca el servidor y muestra la UI. Las siguientes veces basta con abrir la app.</li>
+      </ol>
+      <div class="note warn">
+        <strong>Limitaciones del APK</strong>
+        Las exportaciones Excel/PDF generadas en el navegador (<code>blob:</code>) no se descargan dentro de la app: ábrelas en
+        Chrome en <code>http://localhost:3847</code>. Actualizar = compilar un APK nuevo, instalarlo encima y pulsar el paso 3.
+      </div>
+      <div class="note">
+        <strong>Antivirus con inspección TLS (AVG)</strong>
+        <code>build-apk.ps1</code> le indica a Gradle que use el almacén de certificados de Windows
+        (<code>-Djavax.net.ssl.trustStoreType=Windows-ROOT</code>); sin eso falla con <code>PKIX path building failed</code>.
+      </div>
+      <p>Los pasos manuales de abajo siguen sirviendo si prefieres no usar el APK.</p>
     </section>
 
     <section class="card" id="requisitos">

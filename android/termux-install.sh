@@ -19,15 +19,18 @@ DISTRO=ubuntu
 APP=/opt/flash
 PKG_DIR="$HOME/flash-pkg"
 
-if [[ ! -d "$HOME/storage" ]]; then
+if ! ls /sdcard/Download >/dev/null 2>&1; then
   echo ">> Concede el permiso de almacenamiento en el diálogo de Android..."
   termux-setup-storage
-  sleep 5
+  for _ in $(seq 1 120); do
+    ls /sdcard/Download >/dev/null 2>&1 && break
+    sleep 1
+  done
 fi
 
 BUNDLE="${BUNDLE:-}"
 if [[ -z "$BUNDLE" ]]; then
-  for cand in /sdcard/Download/flash-android.tar.gz "$HOME/storage/downloads/flash-android.tar.gz"; do
+  for cand in /sdcard/Download/flash-android.tar.gz /sdcard/Download/FlashSignals/flash-android.tar.gz; do
     [[ -f "$cand" ]] && BUNDLE="$cand" && break
   done
 fi
@@ -75,6 +78,15 @@ proot-distro login $DISTRO -- bash $APP/start.sh
 EOF
 chmod +x "$HOME/flash-start.sh"
 
+# Lo usa el APK Flash Signals (RUN_COMMAND en segundo plano): sin abrir navegador
+cat > "$HOME/flash-server.sh" <<EOF
+#!/data/data/com.termux/files/usr/bin/bash
+pgrep -f 'server/index.js' >/dev/null && exit 0
+termux-wake-lock
+exec proot-distro login $DISTRO -- bash $APP/start.sh
+EOF
+chmod +x "$HOME/flash-server.sh"
+
 # Ícono para Termux:Widget (opcional)
 mkdir -p "$HOME/.shortcuts"
 cp -f "$HOME/flash-start.sh" "$HOME/.shortcuts/Flash Signals"
@@ -84,6 +96,7 @@ rm -f "$PKG_DIR/flash-android.tar.gz"
 
 echo ""
 echo "Instalación completa."
+echo "  App:       abre Flash Signals y pulsa 'Iniciar y abrir'"
 echo "  Arrancar:  ~/flash-start.sh   (o widget 'Flash Signals')"
 echo "  Abrir:     http://localhost:3847 en Chrome"
 echo "  Detener:   Ctrl+C en Termux"

@@ -172,6 +172,10 @@ Corre API + UI + pipeline Python en el teléfono, sin servidor de pago. Las señ
    `bash /sdcard/Download/termux-install.sh` (requiere internet la primera vez: apt, pip, npm).
 4. Arranca con `~/flash-start.sh` y abre `http://localhost:3847`.
 
+**APK (recomendado):** `.\android\build-apk.ps1` genera `android\out\FlashSignals.apk` con el paquete embebido.
+La app instala vía Termux (`RUN_COMMAND`), arranca el servidor y muestra la UI en un WebView. Requiere Termux (F-Droid) y,
+una vez, pegar en Termux `allow-external-apps = true` (la app copia el comando). Guía: `docs/Artifacts/2026-10-08-android-instalacion-termux.html`.
+
 Actualizar: repite 1–3; se conservan `data/` (historial) y `live/`. `--fresh` reinstala desde cero.
 Opciones: `SKIP_NEURAL=1` (sin torch), `WITH_OCR=1` (onnxruntime + rapidocr).
 En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de procesos secundarios* y quita Termux de la optimización de batería.

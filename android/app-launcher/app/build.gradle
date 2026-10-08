@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.danilo.flashsignals'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.danilo.flashsignals'
+        minSdk 29
+        // 34: evita el edge-to-edge forzado de Android 15 (APK de uso personal, sin Play Store)
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    androidResources {
+        noCompress 'bundle', 'sh'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
