@@ -66,7 +66,9 @@ public class MainActivity extends Activity {
     private static final String ENABLE_CMD =
             "mkdir -p ~/.termux && echo 'allow-external-apps = true' >> ~/.termux/termux.properties && termux-reload-settings";
     private static final String START_CMD = "bash ~/flash-server.sh";
-    private static final String STOP_CMD = "pkill -f 'server/index.js'; termux-wake-unlock";
+    private static final String STOP_CMD =
+            "pkill -f 'server/index.js'; pkill -f 'mt5-bridge/bridge.py'; pkill -f flash-mt5-tunnel.sh; "
+                    + "pkill -f 'ssh -N -i .*flash_mt5'; termux-wake-unlock";
 
     private static final String PREFS = "flash";
     private static final String KEY_INSTALLED = "installed";

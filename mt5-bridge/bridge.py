@@ -8,6 +8,9 @@ abierto en este mismo Windows:
 SL y TP siempre van adjuntos a la orden.
 
 Solo escucha en 127.0.0.1. Cuentas REAL bloqueadas salvo MT5_ALLOW_REAL=1.
+
+MT5_BACKEND=metaapi usa metaapi_mt5 (MetaApi en la nube) en lugar del terminal de Windows:
+así el puente corre en Android/Linux sin PC.
 """
 import ctypes
 import json
@@ -16,11 +19,19 @@ import os
 import tempfile
 import time
 from contextlib import contextmanager
-from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-import MetaTrader5 as mt5
+try:
+    from ctypes import wintypes
+except (ImportError, ValueError):  # fuera de Windows: solo lo usa la activación de 'Algo Trading'
+    wintypes = None
+
+BACKEND = os.environ.get("MT5_BACKEND", "terminal").strip().lower()
+if BACKEND == "metaapi":
+    import metaapi_mt5 as mt5
+else:
+    import MetaTrader5 as mt5
 
 HOST = os.environ.get("MT5_BRIDGE_HOST", "127.0.0.1")
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
@@ -197,6 +208,8 @@ def account_guard():
     if not is_demo and not ALLOW_REAL:
         raise BridgeError(403, "Cuenta REAL bloqueada. Define MT5_ALLOW_REAL=1 si de verdad quieres operar en real.")
     if not ensure_algo_trading():
+        if BACKEND == "metaapi":
+            raise BridgeError(409, "MetaApi indica que la cuenta no puede operar (¿añadida con contraseña de inversor?).")
         term = mt5.terminal_info()
         if term is not None and term.tradeapi_disabled:
             raise BridgeError(409, "MT5 tiene desactivado el trading por la API de Python (Opciones > Asesores Expertos).")
@@ -225,6 +238,7 @@ def health():
         },
         "allowReal": ALLOW_REAL,
         "magic": MAGIC,
+        "backend": BACKEND,
     }
 
 
@@ -995,7 +1009,7 @@ def main():
     if HOST not in LOOPBACK_HOSTS:
         raise SystemExit(f"[mt5-bridge] MT5_BRIDGE_HOST={HOST!r} no es loopback: el puente no se expone a la red.")
     server = HTTPServer((HOST, PORT), Handler)
-    print(f"[mt5-bridge] Escuchando en {HOST}:{PORT} (solo loopback, magic={MAGIC}, allowReal={ALLOW_REAL})")
+    print(f"[mt5-bridge] Escuchando en {HOST}:{PORT} (solo loopback, backend={BACKEND}, magic={MAGIC}, allowReal={ALLOW_REAL})")
     try:
         # HTTP sin TLS aceptable: solo loopback (LOOPBACK_HOSTS).
         server.serve_forever()  # NOSONAR
