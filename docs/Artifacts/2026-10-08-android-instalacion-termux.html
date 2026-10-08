@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Instalar en Android · Termux + Ubuntu · Flash Signals</title>
+  <meta name="description" content="Cómo instalar Flash Signals y Cursor Trading en Android (Motorola Edge 40 Neo, Android 15) con Termux + Ubuntu proot: empaquetar en el PC, copiar por USB, instalar, arrancar, actualizar y solución de problemas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: 1040px; margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 24px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+      display: flex; align-items: center; gap: 10px;
+    }
+    h2 .n {
+      display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; flex-shrink: 0;
+      border-radius: 50%; font-size: 0.9rem; color: #120c0c; background: var(--fire);
+    }
+    h3 { font-size: 0.95rem; margin: 16px 0 8px; color: #7ec8c9; }
+    p { margin-bottom: 10px; }
+    a { color: var(--fire); }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 72ch; }
+    .toc {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px;
+    }
+    .toc a {
+      font-size: 0.8rem; color: var(--muted); text-decoration: none;
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--stroke); background: var(--bg-elev);
+    }
+    .toc a:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+    section.card {
+      background: color-mix(in srgb, var(--bg-card) 85%, #1a1010);
+      border: 1px solid var(--stroke); border-radius: 16px;
+      padding: 22px 24px; margin-bottom: 16px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+    ul, ol { margin: 0 0 12px 1.3rem; }
+    li { margin-bottom: 6px; }
+    code {
+      font-family: var(--mono); font-size: 0.85em;
+      color: color-mix(in srgb, var(--gold) 60%, white);
+      background: rgba(0, 0, 0, 0.3); padding: 1px 6px; border-radius: 5px;
+    }
+    .code {
+      position: relative; margin: 10px 0 14px;
+      background: #0e0808; border: 1px solid var(--stroke); border-radius: var(--radius);
+    }
+    .code-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; border-bottom: 1px solid var(--stroke);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .code pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; color: #f3e6d0;
+    }
+    .copy {
+      font: inherit; font-size: 0.7rem; cursor: pointer;
+      color: var(--gold); background: transparent;
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      border-radius: 6px; padding: 2px 8px;
+    }
+    .copy:hover { background: rgba(255, 215, 0, 0.1); }
+    .note {
+      border-radius: var(--radius); padding: 12px 14px; margin: 12px 0;
+      border: 1px solid var(--stroke); background: var(--info-dim); font-size: 0.92rem;
+    }
+    .note.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .note.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+    .note.err { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+    .note strong:first-child { display: block; margin-bottom: 4px; }
+    .flow {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0 4px;
+    }
+    .flow div {
+      position: relative; padding: 12px; border-radius: var(--radius);
+      border: 1px solid var(--stroke); background: var(--bg-elev); font-size: 0.85rem;
+    }
+    .flow strong { display: block; color: var(--gold); font-size: 0.9rem; }
+    .flow small { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 8px 0 12px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--stroke); vertical-align: top; }
+    th { color: var(--gold); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .table-wrap { overflow-x: auto; }
+    .check { list-style: none; margin-left: 0; }
+    .check li { padding-left: 1.7rem; position: relative; }
+    .check li::before {
+      content: ""; position: absolute; left: 0; top: 0.3rem; width: 1rem; height: 1rem;
+      border: 2px solid var(--ok); border-radius: 4px;
+    }
+    footer { margin-top: 24px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="chips">
+        <span class="chip fire">Android 15</span>
+        <span class="chip teal">Termux · Ubuntu proot</span>
+        <span class="chip ok">Sin servidor de pago</span>
+        <span class="chip warn">Guía práctica</span>
+      </div>
+      <h1>Instalar Flash Signals en Android</h1>
+      <p class="hero-sub">
+        Cómo correr la app (API Express + UI Angular) y el stack <strong>Cursor Trading</strong> (Python, ML, Neural)
+        en un <strong>Motorola Edge 40 Neo</strong> con Android 15: se empaqueta todo en el PC, se copia por USB y se
+        instala con un solo script en <strong>Termux</strong>. Todo corre en el teléfono, en <code>http://localhost:3847</code>.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Contenido">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#requisitos">Requisitos</a>
+      <a href="#empaquetar">1 · Empaquetar</a>
+      <a href="#copiar">2 · Copiar</a>
+      <a href="#termux">3 · Termux</a>
+      <a href="#instalar">4 · Instalar</a>
+      <a href="#arrancar">5 · Arrancar</a>
+      <a href="#android15">6 · Android 15</a>
+      <a href="#actualizar">Actualizar</a>
+      <a href="#limites">Limitaciones</a>
+      <a href="#problemas">Problemas</a>
+      <a href="#checklist">Checklist</a>
+    </nav>
+
+    <section class="card" id="como-funciona">
+      <h2>Cómo funciona</h2>
+      <div class="flow">
+        <div><strong>Chrome (Android)</strong><small>http://localhost:3847<br />UI Angular ya compilada</small></div>
+        <div><strong>API Express</strong><small>Node 22 · <code>SERVE_WEB=1</code><br />Sirve la UI y <code>/api</code></small></div>
+        <div><strong>analyze.sh</strong><small><code>SIGNAL_RUNNER=bash</code><br />Reemplaza los <code>.ps1</code></small></div>
+        <div><strong>Python venv</strong><small>pandas · sklearn · torch<br />Modelos <code>.joblib</code> / <code>.pt</code></small></div>
+      </div>
+      <ul>
+        <li><strong>Termux</strong> es la terminal Linux de Android. Dentro corre un <strong>Ubuntu ARM64</strong> (proot, sin root) donde se instalan Node y Python.</li>
+        <li>Un solo proceso: la API sirve la interfaz compilada en el mismo puerto. <strong>No hace falta Angular CLI</strong> ni <code>ng serve</code> en el teléfono.</li>
+        <li>Las señales se ejecutan con <code>Cursor Trading/scripts/analyze/analyze.sh</code>, que acepta los mismos flags que los <code>.ps1</code> (<code>-ML</code>, <code>-Neural</code>, <code>-Bullish</code>, <code>-Entry</code>…).</li>
+        <li>Las versiones de Python (scikit-learn, numpy, joblib…) se <strong>copian del PC</strong> para que los modelos entrenados carguen igual.</li>
+      </ul>
+      <div class="note">
+        <strong>¿Necesita internet?</strong>
+        Sí, la primera instalación descarga Ubuntu, Node y las librerías Python (gratis, ~2–3 GB). Después, los análisis
+        usan internet solo para los datos de mercado (yfinance / Binance), igual que en el PC. No hay servidores de pago.
+      </div>
+    </section>
+
+    <section class="card" id="requisitos">
+      <h2>Requisitos</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dónde</th><th>Qué</th></tr></thead>
+          <tbody>
+            <tr><td>PC Windows</td><td>Los repos <code>flash-signals-angular</code> y <code>Cursor Trading</code> en la rama <code>feature/android-mobile</code>, Node + npm, Python del stack</td></tr>
+            <tr><td>Teléfono</td><td>Android 7+ ARM64 (Edge 40 Neo: Dimensity 7030, 8–12 GB RAM). ~4 GB libres</td></tr>
+            <tr><td>Conexión</td><td>Cable USB (o cualquier forma de copiar ~95 MB) y Wi-Fi para la primera instalación</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="empaquetar">
+      <h2><span class="n">1</span>Empaquetar en el PC</h2>
+      <p>
+        Detén la API si está corriendo (para que el historial <code>.sqlite</code> quede consistente) y ejecuta el
+        empaquetador. Compila Angular, copia ambos repos sin <code>.git</code> ni <code>node_modules</code>
+        (incluye <code>models/</code>, <code>data/*.parquet</code> y el modelo neural <code>.pt</code>) y fija las versiones Python.
+      </p>
+      <div class="code">
+        <div class="code-head">PowerShell · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <pre>cd "D:\Danilo\Trading\flash-signals-angular"
+.\android\pack-for-android.ps1
+
+# Ya compilaste Angular y no cambiaste la UI:
+.\android\pack-for-android.ps1 -SkipBuild</pre>
+      </div>
+      <p>Genera dos archivos:</p>
+      <div class="code">
+        <div class="code-head">Salida esperada</div>
+        <pre>Listo (94.3 MB):
+  D:\Danilo\Trading\flash-signals-angular\android\out\flash-android.tar.gz
+  D:\Danilo\Trading\flash-signals-angular\android\out\termux-install.sh</pre>
+      </div>
+    </section>
+
+    <section class="card" id="copiar">
+      <h2><span class="n">2</span>Copiar al teléfono</h2>
+      <ol>
+        <li>Conecta el Motorola por USB y en la notificación elige <strong>Transferencia de archivos</strong>.</li>
+        <li>En el Explorador de Windows abre <em>motorola edge 40 neo → Almacenamiento interno → Download</em>.</li>
+        <li>Copia <code>flash-android.tar.gz</code> y <code>termux-install.sh</code> ahí.</li>
+      </ol>
+      <div class="note ok">
+        <strong>Alternativa sin cable</strong>
+        Google Drive, Telegram “Mensajes guardados” o similar: lo importante es que ambos archivos terminen en
+        <code>Download/</code> con esos nombres exactos.
+      </div>
+    </section>
+
+    <section class="card" id="termux">
+      <h2><span class="n">3</span>Instalar Termux</h2>
+      <ol>
+        <li>Descarga Termux desde <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">F-Droid</a> o desde <a href="https://github.com/termux/termux-app/releases" target="_blank" rel="noopener">GitHub Releases</a> (archivo <code>…arm64-v8a.apk</code>).</li>
+        <li>Si Android lo pide, permite <em>Instalar apps desconocidas</em> para el navegador o el gestor de archivos.</li>
+        <li>Opcional: instala también <strong>Termux:Widget</strong> desde la <strong>misma fuente</strong> para tener un ícono de arranque.</li>
+      </ol>
+      <div class="note err">
+        <strong>No uses la versión de Play Store</strong>
+        Está desactualizada y sus repositorios de paquetes fallan. Termux y sus complementos (Widget) deben venir de la
+        misma fuente (todo F-Droid o todo GitHub), si no Android rechaza la combinación.
+      </div>
+    </section>
+
+    <section class="card" id="instalar">
+      <h2><span class="n">4</span>Ejecutar el instalador</h2>
+      <p>Abre Termux y ejecuta:</p>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>bash /sdcard/Download/termux-install.sh</pre>
+      </div>
+      <p>Qué hace (20–40 min la primera vez, según Wi-Fi):</p>
+      <ol>
+        <li>Pide el permiso de <strong>almacenamiento</strong> (acepta el diálogo de Android).</li>
+        <li>Instala <code>proot-distro</code> y un <strong>Ubuntu ARM64</strong>.</li>
+        <li>Extrae el paquete en <code>/opt/flash</code> dentro de Ubuntu.</li>
+        <li>Instala Python 3 + venv con las versiones del PC, <strong>torch</strong> (Neural), Node 22 y las dependencias npm del server.</li>
+        <li>Verifica que los modelos <code>models/*.joblib</code> cargan.</li>
+        <li>Crea <code>~/flash-start.sh</code> y el atajo de widget <em>Flash Signals</em>.</li>
+      </ol>
+      <h3>Opciones</h3>
+      <div class="code">
+        <div class="code-head">Termux · variantes<button class="copy" type="button">Copiar</button></div>
+        <pre># Sin torch (ahorra ~600 MB; -Neural no estará disponible)
+SKIP_NEURAL=1 bash /sdcard/Download/termux-install.sh
+
+# Con OCR (onnxruntime + rapidocr, para extraer ops de capturas)
+WITH_OCR=1 bash /sdcard/Download/termux-install.sh
+
+# Reinstalar desde cero (borra historial y live/ del teléfono)
+bash /sdcard/Download/termux-install.sh --fresh</pre>
+      </div>
+      <div class="note warn">
+        <strong>Mantén la pantalla encendida durante la instalación</strong>
+        Si Android suspende Termux a mitad de la descarga, vuelve a ejecutar el mismo comando: es seguro repetirlo.
+      </div>
+    </section>
+
+    <section class="card" id="arrancar">
+      <h2><span class="n">5</span>Arrancar y usar</h2>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>~/flash-start.sh</pre>
+      </div>
+      <ul>
+        <li>Activa el <em>wake lock</em> de Termux y a los ~8 s abre Chrome en <code>http://localhost:3847</code>.</li>
+        <li>Con Termux:Widget: añade el widget a la pantalla de inicio y toca <strong>Flash Signals</strong>.</li>
+        <li>Para detener: vuelve a Termux y pulsa <kbd>Ctrl</kbd>+<kbd>C</kbd> (en el teclado extra de Termux: <code>CTRL</code> y luego <code>c</code>).</li>
+        <li>Consejo: en Chrome, menú ⋮ → <em>Añadir a pantalla de inicio</em> para abrir la UI como app.</li>
+      </ul>
+      <h3>Comprobar que todo responde</h3>
+      <div class="code">
+        <div class="code-head">Segunda sesión de Termux (desliza desde la izquierda → New session)<button class="copy" type="button">Copiar</button></div>
+        <pre>curl -s http://localhost:3847/api/health
+# Debe incluir: "signalRunner":"bash","signalsRunnable":true</pre>
+      </div>
+      <h3>Correr un análisis desde la terminal (sin UI)</h3>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>proot-distro login ubuntu
+cd "/opt/flash/Cursor Trading"
+PYTHON=/opt/flash/venv/bin/python MPLBACKEND=Agg \
+  bash scripts/analyze/analyze.sh btc light -ML -Neural</pre>
+      </div>
+    </section>
+
+    <section class="card" id="android15">
+      <h2><span class="n">6</span>Ajustes de Android 15 (evitar que mate el servidor)</h2>
+      <p>Android cierra procesos en segundo plano agresivamente. Haz esto una vez:</p>
+      <ol>
+        <li><strong>Batería:</strong> Ajustes → Apps → Termux → Batería → <em>Sin restricciones</em>.</li>
+        <li><strong>Procesos secundarios:</strong> activa Opciones de desarrollador (Ajustes → Acerca del teléfono → toca 7 veces <em>Número de compilación</em>) y luego Sistema → Opciones de desarrollador → <em>Desactivar restricciones de procesos secundarios</em>.</li>
+        <li>Deja la notificación de Termux visible (el wake lock la mantiene).</li>
+      </ol>
+      <h3>Alternativa por ADB (si no aparece la opción)</h3>
+      <div class="code">
+        <div class="code-head">PowerShell en el PC · con depuración USB activa<button class="copy" type="button">Copiar</button></div>
+        <pre>adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
+adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+adb shell settings put global settings_enable_monitor_phantom_procs false</pre>
+      </div>
+      <div class="note">
+        <strong>Señal típica de este problema</strong>
+        Termux muestra <code>[Process completed (signal 9)]</code> tras unos minutos en segundo plano.
+      </div>
+    </section>
+
+    <section class="card" id="actualizar">
+      <h2>Actualizar tras cambios en el PC</h2>
+      <ol>
+        <li>En el PC: <code>.\android\pack-for-android.ps1</code> (con la API detenida).</li>
+        <li>Copia de nuevo <code>flash-android.tar.gz</code> (y <code>termux-install.sh</code>) a <code>Download/</code>, reemplazando los anteriores.</li>
+        <li>En Termux: <code>bash /sdcard/Download/termux-install.sh</code>.</li>
+      </ol>
+      <div class="note ok">
+        <strong>Qué se conserva</strong>
+        El historial del teléfono (<code>flash-signals-angular/data</code>: SQLite, capturas) y <code>Cursor Trading/live</code>.
+        Se actualizan código, UI, modelos y <code>.parquet</code>. Reentrena en el PC y vuelve a empaquetar: en el teléfono es lento.
+      </div>
+    </section>
+
+    <section class="card" id="limites">
+      <h2>Limitaciones</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Función</th><th>En Android</th><th>Motivo / alternativa</th></tr></thead>
+          <tbody>
+            <tr><td>Señales Context / Light / High / History</td><td>Sí</td><td>Vía <code>analyze.sh</code></td></tr>
+            <tr><td>ML (<code>.joblib</code>)</td><td>Sí</td><td>Versiones fijadas desde el PC</td></tr>
+            <tr><td>Neural (<code>-Neural</code>)</td><td>Sí, si torch se instaló</td><td>Más lento que en el PC; <code>SKIP_NEURAL=1</code> lo omite</td></tr>
+            <tr><td>MACD-quant, historial, wiki</td><td>Sí</td><td>SQLite local (better-sqlite3 o sql.js)</td></tr>
+            <tr><td>Envío a MetaTrader 5</td><td>No</td><td>La librería <code>MetaTrader5</code> solo existe en Windows; opera MT5 desde el PC</td></tr>
+            <tr><td>Reentrenar modelos</td><td>Posible, lento</td><td>Entrena en el PC y reempaqueta</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note warn">
+        <strong>Solo localhost</strong>
+        La API escucha en <code>127.0.0.1</code>. No la expongas a la red (<code>BIND_HOST=0.0.0.0</code>) salvo en una
+        Wi-Fi de confianza: cualquiera en esa red podría usarla.
+      </div>
+    </section>
+
+    <section class="card" id="problemas">
+      <h2>Solución de problemas</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mensaje</th><th>Causa</th><th>Solución</th></tr></thead>
+          <tbody>
+            <tr><td><code>no encuentro flash-android.tar.gz en Download/</code></td><td>Archivo con otro nombre (p. ej. <code>(1)</code>) o sin permiso de almacenamiento</td><td>Renómbralo; ejecuta <code>termux-setup-storage</code> y acepta</td></tr>
+            <tr><td><code>Repository under maintenance</code> / errores de <code>pkg</code></td><td>Mirror de Termux caído</td><td><code>termux-change-repo</code> → elige otro mirror y reintenta</td></tr>
+            <tr><td><code>[Process completed (signal 9)]</code></td><td>Android mató el proceso</td><td>Ver <a href="#android15">Ajustes de Android 15</a></td></tr>
+            <tr><td><code>[warn] torch no se instaló</code></td><td>Descarga fallida o sin espacio</td><td>Libera espacio y en Ubuntu: <code>/opt/flash/venv/bin/pip install torch torchvision</code></td></tr>
+            <tr><td>Error al cargar <code>.joblib</code> (<code>InconsistentVersionWarning</code>, <code>ModuleNotFoundError</code>)</td><td>Versión de scikit-learn/numpy distinta a la del PC</td><td>Reempaqueta desde el PC con el mismo Python con el que entrenaste</td></tr>
+            <tr><td><code>better-sqlite3 no disponible … usando sql.js</code></td><td>Sin binario nativo ARM64</td><td>Nada: es el fallback previsto y funciona igual</td></tr>
+            <tr><td><code>EADDRINUSE :3847</code></td><td>Otra instancia corriendo</td><td>Cierra la otra sesión de Termux o usa <code>PORT=3850 ~/flash-start.sh</code> y abre ese puerto</td></tr>
+            <tr><td><code>Puente MT5 no disponible</code></td><td>MT5 no existe en Android</td><td>Esperado; las órdenes se envían desde el PC</td></tr>
+            <tr><td><code>bad interpreter</code> / <code>$'\r': command not found</code></td><td>Script con finales de línea de Windows</td><td>Usa el <code>termux-install.sh</code> generado en <code>android\out</code> (ya convertido a LF)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="checklist">
+      <h2>Checklist final</h2>
+      <ul class="check">
+        <li>Paquete generado en el PC con la API detenida.</li>
+        <li><code>flash-android.tar.gz</code> y <code>termux-install.sh</code> en <code>Download/</code> del teléfono.</li>
+        <li>Termux (y Termux:Widget) instalados desde F-Droid o GitHub, misma fuente.</li>
+        <li>Instalador terminado con “Instalación completa” y modelos <code>OK</code>.</li>
+        <li>Termux con batería <em>Sin restricciones</em> y restricciones de procesos secundarios desactivadas.</li>
+        <li><code>~/flash-start.sh</code> abre <code>http://localhost:3847</code> en Chrome.</li>
+        <li><code>/api/health</code> muestra <code>"signalRunner":"bash"</code>.</li>
+        <li>Primer análisis BTC Light completado desde la UI.</li>
+      </ul>
+    </section>
+
+    <footer>Flash Signals · fire &amp; shadow · Danilo Chaverra · Instalación en Android (Termux + Ubuntu proot) · 2026-10-08</footer>
+  </main>
+
+  <script>
+    document.querySelectorAll('.copy').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const pre = btn.closest('.code').querySelector('pre');
+        try {
+          await navigator.clipboard.writeText(pre.innerText);
+          btn.textContent = 'Copiado';
+        } catch {
+          btn.textContent = 'Selecciona y copia';
+        }
+        setTimeout(() => (btn.textContent = 'Copiar'), 1600);
+      });
+    });
+  </script>
+</body>
+</html>
