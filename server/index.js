@@ -24,6 +24,12 @@ const vixSource = require('./vix-source');
 const { resolveVolatilityAdjustment } = require('./volatility');
 const { registerVolatilityRoutes } = require('./volatility-routes');
 const {
+  resolveSignalRunner,
+  signalScriptPath,
+  signalSpawnSpec,
+  signalCommandLine,
+} = require('./signal-runner');
+const {
   pickLatestChart,
   isChartStale,
   parseDataFreshness,
@@ -57,8 +63,9 @@ for (const origin of String(process.env.CORS_ORIGINS || '')
   ALLOWED_ORIGINS.add(origin);
 }
 
-/** En Linux (Docker) no hay powershell.exe fiable para el pipeline Windows. */
-const SIGNALS_RUNNABLE = process.platform === 'win32';
+/** powershell (Windows) | bash (Android/Linux con stack Python) | none (Docker solo UI). */
+const SIGNAL_RUNNER = resolveSignalRunner(process.env.SIGNAL_RUNNER, process.platform);
+const SIGNALS_RUNNABLE = SIGNAL_RUNNER !== 'none';
 const MARKETS = new Set(['btc', 'us30', 'xauusd', 'ukoil']);
 /** Mercados con pipeline E1 (analyze-*.ps1). ukoil = solo MACD-quant por ahora. */
 const SIGNAL_MARKETS = new Set(['btc', 'us30', 'xauusd']);
@@ -386,15 +393,8 @@ function livePath(...parts) {
 
 function scriptFor(market, tier) {
   const m = MARKETS.has(market) ? market : 'btc';
-  const map = {
-    context: `analyze-${m}-context.ps1`,
-    light: `analyze-${m}-light.ps1`,
-    high: `analyze-${m}-high.ps1`,
-    history: `analyze-${m}-history.ps1`,
-  };
-  const name = map[tier];
-  if (!name) return null;
-  return path.join(TRADING_ROOT, 'scripts', 'analyze', name);
+  if (!TIERS.has(tier)) return null;
+  return signalScriptPath(TRADING_ROOT, SIGNAL_RUNNER, m, tier);
 }
 
 function buildPsArgs(body) {
@@ -979,10 +979,11 @@ app.get('/api/health', (_req, res) => {
     tradingRootExists: rootOk,
     jobStatus: currentJob.status,
     platform: process.platform,
+    signalRunner: SIGNAL_RUNNER,
     signalsRunnable: SIGNALS_RUNNABLE,
     signalsNote: SIGNALS_RUNNABLE
-      ? 'API en Windows: puede spawnear .ps1 del stack Cursor Trading.'
-      : 'API en contenedor/no-Windows: health y lectura de live/ OK; para EJECUTAR señales usa run-api.ps1 en el host Windows.',
+      ? `API puede ejecutar el pipeline de Cursor Trading (${SIGNAL_RUNNER}).`
+      : 'API sin runner (SIGNAL_RUNNER=none): health y lectura de live/ OK; para EJECUTAR señales usa run-api.ps1 en Windows o SIGNAL_RUNNER=bash en Android/Linux.',
   });
 });
 app.get('/api/signals/status', (_req, res) => {
@@ -2553,7 +2554,7 @@ app.post('/api/signals/run', (req, res) => {
   // «Tendencia actual»: el bias se resuelve tras crear el job (detector H1) y antes del .ps1.
   const wantsTrend = !!body.trendBias && !body.bullish && !body.bearish && tier !== 'context';
   body.trendBias = wantsTrend;
-  const command = signalCommand(scriptResolved, buildPsArgs(body));
+  const command = signalCommand(scriptResolved, buildPsArgs(body), market, tier);
 
   if (!SIGNALS_RUNNABLE) {
     return res.status(503).json({
@@ -2607,7 +2608,7 @@ app.post('/api/signals/run', (req, res) => {
           method: decision.method,
           source: result?.source ?? null,
         };
-        job.command = signalCommand(scriptResolved, buildPsArgs(body));
+        job.command = signalCommand(scriptResolved, buildPsArgs(body), market, tier);
         pushJobLines(job, [decision.log, `>> ${job.command}`]);
         launchSignalScript(job, scriptResolved, buildPsArgs(body), env);
       });
@@ -2621,8 +2622,8 @@ app.post('/api/signals/run', (req, res) => {
   });
 });
 
-function signalCommand(scriptResolved, psArgs) {
-  return `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptResolved}" ${psArgs.join(' ')}`;
+function signalCommand(scriptResolved, psArgs, market, tier) {
+  return signalCommandLine(signalSpawnSpec(SIGNAL_RUNNER, scriptResolved, market, tier, psArgs));
 }
 
 /** Líneas propias de la API en el log del job (emitidas como job:progress). */
@@ -2633,16 +2634,13 @@ function pushJobLines(job, lines) {
 
 function launchSignalScript(job, scriptResolved, psArgs, env) {
   const { market, tier } = job;
-  const child = spawn(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptResolved, ...psArgs],
-    {
-      cwd: TRADING_ROOT,
-      env,
-      windowsHide: true,
-      shell: false,
-    }
-  );
+  const spec = signalSpawnSpec(SIGNAL_RUNNER, scriptResolved, market, tier, psArgs, env);
+  const child = spawn(spec.cmd, spec.args, {
+    cwd: TRADING_ROOT,
+    env,
+    windowsHide: true,
+    shell: false,
+  });
 
   child.stdout.on('data', (d) => appendJobLogs(job, d, 'out'));
   child.stderr.on('data', (d) => appendJobLogs(job, d, 'err'));
@@ -2678,6 +2676,17 @@ function launchSignalScript(job, scriptResolved, psArgs, env) {
   });
 }
 
+/** SERVE_WEB=1: la API sirve el build Angular (Android: un solo proceso/puerto, sin ng serve). */
+const WEB_DIST =
+  process.env.WEB_DIST || path.join(__dirname, '..', 'dist', 'flash-signals-angular', 'browser');
+const SERVE_WEB = process.env.SERVE_WEB === '1' && fs.existsSync(path.join(WEB_DIST, 'index.html'));
+if (SERVE_WEB) {
+  app.use(express.static(WEB_DIST, { index: 'index.html' }));
+  app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(path.join(WEB_DIST, 'index.html'));
+  });
+}
+
 void Promise.all([
   historyStore.init(),
   wikiStore.init(),
@@ -2688,6 +2697,8 @@ void Promise.all([
       console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
       console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
       console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
+      console.log(`Runner señales: ${SIGNAL_RUNNER}`);
+      if (SERVE_WEB) console.log(`Web (build Angular): ${WEB_DIST}`);
       console.log(`Historial (hive box): ${historyStore.DB_PATH}`);
       console.log(`Wiki meta: ${wikiStore.DB_PATH}`);
       console.log(`MACD-quant historial: ${macdQuantStore.DB_PATH}`);

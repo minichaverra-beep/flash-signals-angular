@@ -70,3 +70,6 @@ docs/Artifacts/**/*.swp
 docs/Artifacts/**/*.bak
 
 mt5-bridge/__pycache__/
+
+# Paquete Android (pack-for-android.ps1)
+android/out/

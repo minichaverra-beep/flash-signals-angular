@@ -161,6 +161,26 @@ docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.api -t flas
 
 En `docker-compose.arm.yml` se fija `platform: linux/arm64` para los servicios.
 
+## Android (Termux + Ubuntu proot)
+
+Corre API + UI + pipeline Python en el teléfono, sin servidor de pago. Las señales usan
+`Cursor Trading/scripts/analyze/analyze.sh` (equivalente bash de los `.ps1`). MT5 no está disponible (solo Windows).
+
+1. **PC** (con la API detenida): `.\android\pack-for-android.ps1` → genera `android\out\flash-android.tar.gz` y `termux-install.sh`.
+2. Copia ambos por USB a `Download/` del teléfono.
+3. Instala **Termux** desde F-Droid o GitHub (no Play Store) y ejecuta:
+   `bash /sdcard/Download/termux-install.sh` (requiere internet la primera vez: apt, pip, npm).
+4. Arranca con `~/flash-start.sh` y abre `http://localhost:3847`.
+
+Actualizar: repite 1–3; se conservan `data/` (historial) y `live/`. `--fresh` reinstala desde cero.
+Opciones: `SKIP_NEURAL=1` (sin torch), `WITH_OCR=1` (onnxruntime + rapidocr).
+En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de procesos secundarios* y quita Termux de la optimización de batería.
+
+| Variable | Uso |
+|----------|-----|
+| `SIGNAL_RUNNER` | `powershell` (default Windows) · `bash` (Android/Linux) · `none` (default resto: 503 en `/run`) |
+| `SERVE_WEB=1` | La API sirve `dist/` en el mismo puerto (sin `ng serve`) |
+
 ## Contexto para agentes (Cursor / Claude)
 
 | Recurso | Ubicación |
