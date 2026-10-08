@@ -356,7 +356,7 @@ Teléfono listo. En la app pulsa "3 · Instalar / actualizar" y luego "4 · Inic
             <tr><td>ML (<code>.joblib</code>) y Neural</td><td>Sí</td><td>Versiones fijadas desde el PC; Neural más lento</td></tr>
             <tr><td>MACD-quant, historial, wiki</td><td>Sí</td><td>SQLite local (better-sqlite3 o sql.js)</td></tr>
             <tr><td>Exportar Excel / PDF</td><td>Solo en Chrome</td><td>El WebView no descarga <code>blob:</code>; abre <code>localhost:3847</code> en Chrome</td></tr>
-            <tr><td>Envío a MetaTrader 5</td><td>No</td><td><code>MetaTrader5</code> solo existe en Windows; opera MT5 desde el PC</td></tr>
+            <tr><td>Envío a MetaTrader 5</td><td>Sí, con MetaApi</td><td><code>MetaTrader5</code> solo existe en Windows: guía <em>MT5 desde Android sin PC (MetaApi)</em>, o túnel SSH al PC</td></tr>
           </tbody>
         </table>
       </div>
@@ -382,7 +382,7 @@ Teléfono listo. En la app pulsa "3 · Instalar / actualizar" y luego "4 · Inic
             <tr><td><em>El servidor no respondió en 150 s</em></td><td>Instalación sin terminar o fallida</td><td>Revisa el último error en Termux y repite el botón 3</td></tr>
             <tr><td>La app vuelve a los botones / <code>signal 9</code></td><td>Android mató el servidor</td><td><code>setup-phone-adb.ps1</code> (ajustes de Android 15) y botón 4</td></tr>
             <tr><td>Error al cargar <code>.joblib</code></td><td>scikit-learn/numpy distintos a los del PC</td><td>Recompila el APK con el Python con el que entrenaste</td></tr>
-            <tr><td><code>Puente MT5 no disponible</code></td><td>MT5 no existe en Android</td><td>Esperado; las órdenes se envían desde el PC</td></tr>
+            <tr><td><code>Puente MT5 no disponible</code></td><td>Puente MT5 sin configurar en el teléfono</td><td><code>~/flash-metaapi.sh</code> (guía <em>MT5 desde Android sin PC</em>) y reiniciar</td></tr>
           </tbody>
         </table>
       </div>

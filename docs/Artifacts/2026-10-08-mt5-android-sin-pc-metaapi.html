@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MT5 desde Android sin PC (MetaApi) · Flash Signals</title>
+  <meta name="description" content="Cómo enviar señales a MetaTrader 5 desde la app Android de Flash Signals sin PC: puente mt5-bridge con backend MetaApi (metaapi_mt5.py) corriendo en el teléfono, configuración con flash-metaapi.sh, prueba en demo, limitaciones, alternativa con túnel SSH al PC y solución de problemas." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --red: #cd1818;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: 1040px; margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 24px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+      display: flex; align-items: center; gap: 10px;
+    }
+    h2 .n {
+      display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; flex-shrink: 0;
+      border-radius: 50%; font-size: 0.9rem; color: #120c0c; background: var(--fire);
+    }
+    h3 { font-size: 0.95rem; margin: 16px 0 8px; color: #7ec8c9; }
+    p { margin-bottom: 10px; }
+    a { color: var(--fire); }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 72ch; }
+    .toc {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px;
+    }
+    .toc a {
+      font-size: 0.8rem; color: var(--muted); text-decoration: none;
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--stroke); background: var(--bg-elev);
+    }
+    .toc a:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+    section.card {
+      background: color-mix(in srgb, var(--bg-card) 85%, #1a1010);
+      border: 1px solid var(--stroke); border-radius: 16px;
+      padding: 22px 24px; margin-bottom: 16px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+    ul, ol { margin: 0 0 12px 1.3rem; }
+    li { margin-bottom: 6px; }
+    code {
+      font-family: var(--mono); font-size: 0.85em;
+      color: color-mix(in srgb, var(--gold) 60%, white);
+      background: rgba(0, 0, 0, 0.3); padding: 1px 6px; border-radius: 5px;
+    }
+    .code {
+      position: relative; margin: 10px 0 14px;
+      background: #0e0808; border: 1px solid var(--stroke); border-radius: var(--radius);
+    }
+    .code-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; border-bottom: 1px solid var(--stroke);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .code pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; color: #f3e6d0;
+    }
+    .copy {
+      font: inherit; font-size: 0.7rem; cursor: pointer;
+      color: var(--gold); background: transparent;
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      border-radius: 6px; padding: 2px 8px;
+    }
+    .copy:hover { background: rgba(255, 215, 0, 0.1); }
+    .note {
+      border-radius: var(--radius); padding: 12px 14px; margin: 12px 0;
+      border: 1px solid var(--stroke); background: var(--info-dim); font-size: 0.92rem;
+    }
+    .note.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .note.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+    .note.err { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+    .note strong:first-child { display: block; margin-bottom: 4px; }
+    .flow {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0 4px;
+    }
+    .flow div {
+      position: relative; padding: 12px; border-radius: var(--radius);
+      border: 1px solid var(--stroke); background: var(--bg-elev); font-size: 0.85rem;
+    }
+    .flow strong { display: block; color: var(--gold); font-size: 0.9rem; }
+    .flow small { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 8px 0 12px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--stroke); vertical-align: top; }
+    th { color: var(--gold); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .table-wrap { overflow-x: auto; }
+    .check { list-style: none; margin-left: 0; }
+    .check li { padding-left: 1.7rem; position: relative; }
+    .check li::before {
+      content: ""; position: absolute; left: 0; top: 0.3rem; width: 1rem; height: 1rem;
+      border: 2px solid var(--ok); border-radius: 4px;
+    }
+    footer { margin-top: 24px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="chips">
+        <span class="chip fire">MetaTrader 5</span>
+        <span class="chip teal">Android · Termux</span>
+        <span class="chip ok">Sin PC</span>
+        <span class="chip warn">MetaApi (pago)</span>
+      </div>
+      <h1>Enviar señales a MT5 desde Android sin PC</h1>
+      <p class="hero-sub">
+        La librería <code>MetaTrader5</code> de Python solo existe en Windows. Para operar desde el teléfono sin PC, el puente
+        <code>mt5-bridge</code> corre <strong>dentro del teléfono</strong> y habla con tu cuenta MT5 a través de
+        <strong>MetaApi</strong> (servicio en la nube). La API, la app y la pantalla Configuración no cambian.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Contenido">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#requisitos">Requisitos</a>
+      <a href="#metaapi">1 · Cuenta MetaApi</a>
+      <a href="#apk">2 · Actualizar APK</a>
+      <a href="#configurar">3 · Configurar</a>
+      <a href="#probar">4 · Probar en demo</a>
+      <a href="#diferencias">Diferencias</a>
+      <a href="#seguridad">Seguridad</a>
+      <a href="#alternativa">Alternativa con PC</a>
+      <a href="#problemas">Problemas</a>
+      <a href="#checklist">Checklist</a>
+    </nav>
+
+    <section class="card" id="como-funciona">
+      <h2>Cómo funciona</h2>
+      <div class="flow">
+        <div><strong>Flash Signals (UI)</strong><small>Run / Duplicar / Recalcular<br />Configuración sin cambios</small></div>
+        <div><strong>API Node</strong><small>127.0.0.1:3847<br />bridgeUrl = 127.0.0.1:8765</small></div>
+        <div><strong>mt5-bridge</strong><small><code>MT5_BACKEND=metaapi</code><br />riesgo, límites, margen</small></div>
+        <div><strong>metaapi_mt5.py</strong><small>Imita la librería MetaTrader5<br />sobre la REST de MetaApi</small></div>
+        <div><strong>MetaApi → broker</strong><small>Terminal MT5 en la nube<br />con tu cuenta</small></div>
+      </div>
+      <ul>
+        <li><code>bridge.py</code> conserva toda su lógica: lotes por % de riesgo, límites diarios de operaciones y drawdown, margen, mercado vs. LIMIT, rango SL/TP y bloqueo de cuentas REAL.</li>
+        <li>Solo cambia la pieza que exigía Windows: con <code>MT5_BACKEND=metaapi</code> importa <code>metaapi_mt5.py</code> en lugar de <code>MetaTrader5</code>.</li>
+        <li>El puente sigue escuchando solo en <code>127.0.0.1</code>; la salida a internet es HTTPS hacia MetaApi.</li>
+        <li><code>android/start.sh</code> lo arranca automáticamente si existe <code>/opt/flash/metaapi.env</code> (log en <code>/opt/flash/mt5-bridge.log</code>).</li>
+      </ul>
+    </section>
+
+    <section class="card" id="requisitos">
+      <h2>Requisitos</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Qué</th><th>Detalle</th></tr></thead>
+          <tbody>
+            <tr><td>App Android</td><td>Flash Signals instalada con Termux (guía <em>Instalar Flash Signals en Android con el APK</em>)</td></tr>
+            <tr><td>Cuenta MT5</td><td>Login, contraseña <strong>de trading</strong> (no la de inversor) y servidor del broker</td></tr>
+            <tr><td>MetaApi</td><td>Cuenta en <a href="https://app.metaapi.cloud" target="_blank" rel="noopener">app.metaapi.cloud</a>; prueba gratuita y luego de pago por cuenta</td></tr>
+            <tr><td>Internet</td><td>Wi-Fi o datos móviles en el teléfono</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="metaapi">
+      <h2><span class="n">1</span>Preparar MetaApi</h2>
+      <ol>
+        <li>Crea una cuenta en <a href="https://app.metaapi.cloud" target="_blank" rel="noopener">app.metaapi.cloud</a>.</li>
+        <li><strong>Add account</strong>: plataforma <strong>MT5</strong>, login, contraseña de trading y servidor exacto del broker (p. ej. <code>Exness-MT5Trial</code>). Empieza con la cuenta <strong>demo</strong>.</li>
+        <li>Espera a que el estado sea <strong>Deployed / Connected</strong>.</li>
+        <li>Anota el <strong>id de la cuenta</strong> (UUID) y su <strong>región</strong> (p. ej. <code>new-york</code>, <code>london</code>, <code>singapore</code>).</li>
+        <li>En <strong>API access</strong>, genera y copia el <strong>token</strong>.</li>
+      </ol>
+      <div class="note warn">
+        <strong>Contraseña de trading, no de inversor</strong>
+        Con la de inversor MetaApi solo lee la cuenta y el puente responde: <em>MetaApi indica que la cuenta no puede operar</em>.
+      </div>
+    </section>
+
+    <section class="card" id="apk">
+      <h2><span class="n">2</span>Actualizar el APK</h2>
+      <p>El soporte MetaApi va en el paquete: recompila e instala encima.</p>
+      <div class="code">
+        <div class="code-head">PowerShell · PC · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <pre>cd "D:\Danilo\Trading\flash-signals-angular"
+.\android\build-apk.ps1
+.\android\setup-phone-adb.ps1 -Device IP:PUERTO   # o instala out\FlashSignals.apk a mano</pre>
+      </div>
+      <p>En la app: <strong>Detener servidor</strong> → <strong>3 · Instalar / actualizar</strong>. El instalador crea <code>~/flash-metaapi.sh</code> en Termux.</p>
+      <div class="note">
+        <strong>¿Instalaste el proyecto a mano en Termux?</strong>
+        Basta con tener la versión nueva de <code>mt5-bridge/</code> y arrancar el puente con las variables de la sección 3
+        (<code>MT5_BACKEND=metaapi python mt5-bridge/bridge.py</code>) junto a <code>npm run api</code>.
+      </div>
+    </section>
+
+    <section class="card" id="configurar">
+      <h2><span class="n">3</span>Configurar en el teléfono</h2>
+      <p>En Termux ejecuta el asistente (pide los datos y los guarda en <code>/opt/flash/metaapi.env</code> con permisos 600):</p>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>~/flash-metaapi.sh</pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pregunta</th><th>Variable</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td>Token</td><td><code>METAAPI_TOKEN</code></td><td>Token de <em>API access</em> (no se muestra al escribir)</td></tr>
+            <tr><td>Id de la cuenta</td><td><code>METAAPI_ACCOUNT_ID</code></td><td>UUID de la cuenta en MetaApi</td></tr>
+            <tr><td>Región</td><td><code>METAAPI_REGION</code></td><td>La de la cuenta; vacío = <code>new-york</code></td></tr>
+            <tr><td>Token del puente</td><td><code>MT5_BRIDGE_TOKEN</code></td><td>El mismo que pongas en Configuración (o vacío)</td></tr>
+            <tr><td>¿Cuenta REAL?</td><td><code>MT5_ALLOW_REAL</code></td><td>Escribe <code>REAL</code> solo si de verdad quieres operar en real</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Después reinicia: <strong>Detener servidor</strong> → <strong>4 · Iniciar y abrir</strong>. En <strong>Configuración</strong>:</p>
+      <ul>
+        <li>URL del puente: <code>http://127.0.0.1:8765</code> (la de siempre).</li>
+        <li>Token del puente: el mismo del asistente.</li>
+        <li>Símbolos del broker: nombres exactos (p. ej. <code>XAUUSDm</code>, <code>BTCUSDm</code>, <code>US30m</code>).</li>
+      </ul>
+    </section>
+
+    <section class="card" id="probar">
+      <h2><span class="n">4</span>Probar en demo</h2>
+      <ol>
+        <li>Configuración → <strong>Probar conexión</strong>: debe salir <em>Conectado</em> con la cuenta DEMO, balance y equity.</li>
+        <li>Señales → en una señal pulsa <strong>▶ Run</strong>: la vista previa calcula lotes, modo (mercado / LIMIT) y precio.</li>
+        <li>Confirma el envío y comprueba la orden en la app MT5 del móvil o en el panel de MetaApi.</li>
+        <li>Pulsa <strong>↻ Recalcular</strong> (o espera al cierre) para leer estado, PnL y SL/TP reales.</li>
+      </ol>
+      <div class="code">
+        <div class="code-head">Termux · ver el log del puente<button class="copy" type="button">Copiar</button></div>
+        <pre>proot-distro login ubuntu -- tail -n 40 /opt/flash/mt5-bridge.log</pre>
+      </div>
+      <div class="code">
+        <div class="code-head">Salida esperada al arrancar</div>
+        <pre>[mt5-bridge] Conectado a MT5: {'login': 12345678, 'server': 'Exness-MT5Trial', 'demo': True, ...}
+[mt5-bridge] Escuchando en 127.0.0.1:8765 (solo loopback, backend=metaapi, magic=260901, allowReal=False)</pre>
+      </div>
+    </section>
+
+    <section class="card" id="diferencias">
+      <h2>Diferencias frente al terminal de Windows</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Aspecto</th><th>Windows (terminal)</th><th>Android (MetaApi)</th></tr></thead>
+          <tbody>
+            <tr><td>Comprobación previa</td><td><code>order_check</code> real de MT5</td><td>Solo símbolo y volumen; el broker decide al enviar</td></tr>
+            <tr><td>Riesgo por lote</td><td><code>order_calc_profit</code> de MT5</td><td>Ticks × valor del tick de MetaApi (mismo método, puede variar céntimos)</td></tr>
+            <tr><td>Margen</td><td><code>order_calc_margin</code></td><td><code>calculate-margin</code> de MetaApi</td></tr>
+            <tr><td>Horas</td><td>Hora del servidor corregida a UTC</td><td>UTC directo (<code>MT5_SERVER_UTC_OFFSET_SEC=0</code>)</td></tr>
+            <tr><td>Velas</td><td><code>copy_rates_*</code> local</td><td>Market data de MetaApi en bloques de 1000</td></tr>
+            <tr><td>Latencia</td><td>Milisegundos</td><td>Cientos de ms a segundos por llamada</td></tr>
+            <tr><td>Buscar símbolos</td><td>Nombre y descripción</td><td>Solo nombre</td></tr>
+            <tr><td>«Algo Trading»</td><td>Se activa solo en el terminal</td><td>No aplica: lo decide <code>tradeAllowed</code> de la cuenta</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="seguridad">
+      <h2>Seguridad</h2>
+      <ul>
+        <li>El puente escucha solo en <code>127.0.0.1</code>: ninguna otra app ni equipo de la red puede enviar órdenes.</li>
+        <li><code>metaapi.env</code> (token incluido) queda con permisos <code>600</code> dentro de Ubuntu y no viaja en el paquete; se conserva al actualizar (se pierde con <code>--fresh</code>).</li>
+        <li>Las cuentas REAL siguen bloqueadas salvo <code>MT5_ALLOW_REAL=1</code>.</li>
+        <li>Los límites diarios de Configuración (operaciones y drawdown) se aplican igual que en el PC.</li>
+      </ul>
+      <div class="note warn">
+        <strong>Confianza en un tercero</strong>
+        MetaApi guarda tu contraseña de trading para conectar la cuenta. Si te preocupa, usa la alternativa con PC/VPS o una cuenta con poco capital.
+      </div>
+    </section>
+
+    <section class="card" id="alternativa">
+      <h2>Alternativa: túnel SSH a tu PC o VPS con Windows</h2>
+      <p>Si prefieres no usar MetaApi, el teléfono puede usar el puente del PC (o de un VPS Windows siempre encendido) por un túnel SSH cifrado:</p>
+      <div class="code">
+        <div class="code-head">Termux (una vez)<button class="copy" type="button">Copiar</button></div>
+        <pre>~/flash-mt5-tunnel.sh --setup   # crea la clave y pide IP + usuario del PC
+~/flash-mt5-tunnel.sh --check   # 127.0.0.1:8765 OK = túnel y puente activos</pre>
+      </div>
+      <div class="code">
+        <div class="code-head">PowerShell como administrador · PC<button class="copy" type="button">Copiar</button></div>
+        <pre>.\android\setup-pc-ssh.ps1 -PublicKey "ssh-ed25519 AAAA… flash-android"</pre>
+      </div>
+      <ul>
+        <li>Instala OpenSSH Server, abre el puerto 22 solo en redes privadas y limita la clave al reenvío de <code>127.0.0.1:8765/8766</code> (sin consola).</li>
+        <li>El PC debe estar encendido con MT5 y el puente abiertos. Fuera de casa: Tailscale.</li>
+        <li><strong>No configures las dos opciones a la vez</strong>: ambas usan el puerto 8765 del teléfono.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="problemas">
+      <h2>Solución de problemas</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Síntoma</th><th>Causa</th><th>Solución</th></tr></thead>
+          <tbody>
+            <tr><td><code>Puente MT5 no disponible en http://127.0.0.1:8765</code></td><td>Sin <code>metaapi.env</code> o el puente se cayó</td><td><code>~/flash-metaapi.sh</code> y reiniciar; revisar <code>mt5-bridge.log</code></td></tr>
+            <tr><td><code>Faltan METAAPI_TOKEN y/o METAAPI_ACCOUNT_ID</code></td><td>Datos vacíos</td><td>Repite <code>~/flash-metaapi.sh</code></td></tr>
+            <tr><td><code>MetaApi respondió 401</code></td><td>Token inválido o caducado</td><td>Genera otro en <em>API access</em></td></tr>
+            <tr><td><code>MetaApi respondió 404</code></td><td>Id o región incorrectos, o cuenta no desplegada</td><td>Comprueba id y región; estado <em>Deployed</em></td></tr>
+            <tr><td><em>MetaApi indica que la cuenta no puede operar</em></td><td>Contraseña de inversor</td><td>Vuelve a añadir la cuenta con la contraseña de trading</td></tr>
+            <tr><td><code>Cuenta REAL bloqueada</code></td><td>Protección por defecto</td><td>Solo si quieres: responde <code>REAL</code> en el asistente</td></tr>
+            <tr><td><code>Símbolo 'X' no existe en el broker</code></td><td>Nombre distinto en el broker</td><td>Configuración → símbolos exactos (sufijos <code>m</code>, <code>.cash</code>…)</td></tr>
+            <tr><td><code>Token inválido</code> (401 del puente)</td><td>Token distinto entre asistente y Configuración</td><td>Usa el mismo en ambos</td></tr>
+            <tr><td><code>MetaApi sin respuesta: timed out</code></td><td>Sin internet o MetaApi lento</td><td>Reintenta; <code>METAAPI_TIMEOUT_SEC</code> (por defecto 60)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="checklist">
+      <h2>Checklist final</h2>
+      <ul class="check">
+        <li>Cuenta MT5 demo añadida en MetaApi con contraseña de trading y estado <em>Deployed</em>.</li>
+        <li>APK actualizado e instalado (botón 3).</li>
+        <li><code>~/flash-metaapi.sh</code> ejecutado con token, id y región.</li>
+        <li><code>mt5-bridge.log</code> muestra <code>backend=metaapi</code>.</li>
+        <li>Configuración → Probar conexión: <em>Conectado</em> · DEMO.</li>
+        <li>Primera orden demo enviada con Run y verificada con Recalcular.</li>
+      </ul>
+    </section>
+
+    <footer>Flash Signals · fire &amp; shadow · Danilo Chaverra · MT5 desde Android sin PC con MetaApi · 2026-10-08</footer>
+  </main>
+
+  <script>
+    document.querySelectorAll('.copy').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const pre = btn.closest('.code').querySelector('pre');
+        try {
+          await navigator.clipboard.writeText(pre.innerText);
+          btn.textContent = 'Copiado';
+        } catch {
+          btn.textContent = 'Selecciona y copia';
+        }
+        setTimeout(() => (btn.textContent = 'Copiar'), 1600);
+      });
+    });
+  </script>
+</body>
+</html>
