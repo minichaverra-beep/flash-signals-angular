@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Instalar en Android · Termux + Ubuntu · Flash Signals</title>
-  <meta name="description" content="Cómo instalar Flash Signals y Cursor Trading en Android (Motorola Edge 40 Neo, Android 15) con Termux + Ubuntu proot: empaquetar en el PC, copiar por USB, instalar, arrancar, actualizar y solución de problemas." />
+  <title>Instalar en Android con APK · Flash Signals</title>
+  <meta name="description" content="Cómo instalar Flash Signals y Cursor Trading en Android (Motorola Edge 40 Neo, Android 15) con el APK Flash Signals + Termux: compilar el APK, instalarlo, configurar con 4 botones, uso diario, actualizar y solución de problemas." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -163,28 +163,26 @@
     <header class="hero">
       <div class="chips">
         <span class="chip fire">Android 15</span>
-        <span class="chip teal">Termux · Ubuntu proot</span>
+        <span class="chip teal">APK + Termux</span>
         <span class="chip ok">Sin servidor de pago</span>
         <span class="chip warn">Guía práctica</span>
       </div>
-      <h1>Instalar Flash Signals en Android</h1>
+      <h1>Instalar Flash Signals en Android con el APK</h1>
       <p class="hero-sub">
-        Cómo correr la app (API Express + UI Angular) y el stack <strong>Cursor Trading</strong> (Python, ML, Neural)
-        en un <strong>Motorola Edge 40 Neo</strong> con Android 15: se empaqueta todo en el PC, se copia por USB y se
-        instala con un solo script en <strong>Termux</strong>. Todo corre en el teléfono, en <code>http://localhost:3847</code>.
+        Cómo correr Flash Signals (API + UI) y el stack <strong>Cursor Trading</strong> (Python, ML, Neural) en un
+        <strong>Motorola Edge 40 Neo</strong> con Android 15: compilas <code>FlashSignals.apk</code> en el PC, lo instalas
+        y la app hace el resto con <strong>4 botones</strong>. Todo corre en el teléfono, sin comandos salvo un pegado único en Termux.
       </p>
     </header>
 
     <nav class="toc" aria-label="Contenido">
       <a href="#como-funciona">Cómo funciona</a>
-      <a href="#apk">Opción APK</a>
       <a href="#requisitos">Requisitos</a>
-      <a href="#empaquetar">1 · Empaquetar</a>
-      <a href="#copiar">2 · Copiar</a>
-      <a href="#termux">3 · Termux</a>
-      <a href="#instalar">4 · Instalar</a>
-      <a href="#arrancar">5 · Arrancar</a>
-      <a href="#android15">6 · Android 15</a>
+      <a href="#compilar">1 · Compilar APK</a>
+      <a href="#instalar-apk">2 · Instalar APK</a>
+      <a href="#botones">3 · Los 4 botones</a>
+      <a href="#android15">4 · Android 15</a>
+      <a href="#uso">Uso diario</a>
       <a href="#actualizar">Actualizar</a>
       <a href="#limites">Limitaciones</a>
       <a href="#problemas">Problemas</a>
@@ -194,55 +192,27 @@
     <section class="card" id="como-funciona">
       <h2>Cómo funciona</h2>
       <div class="flow">
-        <div><strong>Chrome (Android)</strong><small>http://localhost:3847<br />UI Angular ya compilada</small></div>
-        <div><strong>API Express</strong><small>Node 22 · <code>SERVE_WEB=1</code><br />Sirve la UI y <code>/api</code></small></div>
-        <div><strong>analyze.sh</strong><small><code>SIGNAL_RUNNER=bash</code><br />Reemplaza los <code>.ps1</code></small></div>
-        <div><strong>Python venv</strong><small>pandas · sklearn · torch<br />Modelos <code>.joblib</code> / <code>.pt</code></small></div>
+        <div><strong>App Flash Signals</strong><small>APK con el paquete (~95 MB)<br />Botones + UI en WebView</small></div>
+        <div><strong>Termux</strong><small>Recibe órdenes de la app<br />(RUN_COMMAND)</small></div>
+        <div><strong>Ubuntu proot</strong><small>Node 22 · Python venv<br />API en 127.0.0.1:3847</small></div>
+        <div><strong>Cursor Trading</strong><small><code>analyze.sh</code> · ML · Neural<br />Modelos del PC</small></div>
       </div>
       <ul>
-        <li><strong>Termux</strong> es la terminal Linux de Android. Dentro corre un <strong>Ubuntu ARM64</strong> (proot, sin root) donde se instalan Node y Python.</li>
-        <li>Un solo proceso: la API sirve la interfaz compilada en el mismo puerto. <strong>No hace falta Angular CLI</strong> ni <code>ng serve</code> en el teléfono.</li>
-        <li>Las señales se ejecutan con <code>Cursor Trading/scripts/analyze/analyze.sh</code>, que acepta los mismos flags que los <code>.ps1</code> (<code>-ML</code>, <code>-Neural</code>, <code>-Bullish</code>, <code>-Entry</code>…).</li>
-        <li>Las versiones de Python (scikit-learn, numpy, joblib…) se <strong>copian del PC</strong> para que los modelos entrenados carguen igual.</li>
+        <li>El APK lleva dentro <code>flash-android.tar.gz</code> (código, UI compilada, modelos <code>.joblib</code>/<code>.pt</code>, <code>.parquet</code>) y el instalador.</li>
+        <li>La app copia ese paquete a <code>Download/FlashSignals/</code>, le pide a <strong>Termux</strong> que lo instale en un Ubuntu ARM64 (sin root) y luego arranca el servidor en segundo plano.</li>
+        <li>Cuando <code>/api/health</code> responde, la app muestra la interfaz dentro de sí misma.</li>
+        <li>Las versiones de Python (scikit-learn, numpy, joblib…) se copian del PC para que los modelos carguen igual.</li>
       </ul>
       <div class="note">
-        <strong>¿Necesita internet?</strong>
-        Sí, la primera instalación descarga Ubuntu, Node y las librerías Python (gratis, ~2–3 GB). Después, los análisis
-        usan internet solo para los datos de mercado (yfinance / Binance), igual que en el PC. No hay servidores de pago.
-      </div>
-    </section>
-
-    <section class="card" id="apk">
-      <h2>Opción recomendada · APK Flash Signals</h2>
-      <p>
-        El APK <code>FlashSignals.apk</code> trae el paquete completo dentro y hace los pasos 2, 4 y 5 por ti con botones:
-        copia el paquete a <code>Download/FlashSignals/</code>, le pide a Termux que lo instale, arranca el servidor en
-        segundo plano y muestra la interfaz dentro de la app. Termux sigue siendo necesario (se instala una vez y no hay que usarlo).
-      </p>
-      <div class="code">
-        <div class="code-head">PowerShell en el PC · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
-        <pre>.\android\build-apk.ps1              # empaqueta + compila → android\out\FlashSignals.apk
-.\android\build-apk.ps1 -SkipBuild   # sin recompilar Angular
-.\android\build-apk.ps1 -SkipPack    # reutiliza el paquete de android\out</pre>
-      </div>
-      <ol>
-        <li>Copia <code>FlashSignals.apk</code> al teléfono e instálalo (permite <em>instalar apps desconocidas</em>).</li>
-        <li>En la app: <strong>1 · Instalar Termux</strong> (abre F-Droid). Abre Termux una vez y vuelve.</li>
-        <li><strong>2 · Permitir que Flash Signals use Termux</strong>: copia un comando y abre Termux; mantén pulsado → <em>Pegar</em> → Enter. Solo una vez.</li>
-        <li><strong>3 · Instalar / actualizar</strong>: acepta el permiso <em>Ejecutar comandos en Termux</em> y el de almacenamiento. Se abre Termux con el progreso (20–40 min).</li>
-        <li><strong>4 · Iniciar y abrir</strong>: arranca el servidor y muestra la UI. Las siguientes veces basta con abrir la app.</li>
-      </ol>
-      <div class="note warn">
-        <strong>Limitaciones del APK</strong>
-        Las exportaciones Excel/PDF generadas en el navegador (<code>blob:</code>) no se descargan dentro de la app: ábrelas en
-        Chrome en <code>http://localhost:3847</code>. Actualizar = compilar un APK nuevo, instalarlo encima y pulsar el paso 3.
+        <strong>¿Por qué hace falta Termux?</strong>
+        Android no deja que una app normal ejecute Node, Python ni bash. Termux sí; la app Flash Signals solo le da órdenes.
+        Lo instalas una vez y no necesitas usarlo. Docker no es opción: Android sin root bloquea lo que Docker necesita.
       </div>
       <div class="note">
-        <strong>Antivirus con inspección TLS (AVG)</strong>
-        <code>build-apk.ps1</code> le indica a Gradle que use el almacén de certificados de Windows
-        (<code>-Djavax.net.ssl.trustStoreType=Windows-ROOT</code>); sin eso falla con <code>PKIX path building failed</code>.
+        <strong>¿Necesita internet?</strong>
+        Sí, la primera instalación descarga Ubuntu, Node y librerías Python (gratis, ~2–3 GB). Después, solo los datos de mercado
+        (yfinance / Binance) usan internet, igual que en el PC.
       </div>
-      <p>Los pasos manuales de abajo siguen sirviendo si prefieres no usar el APK.</p>
     </section>
 
     <section class="card" id="requisitos">
@@ -251,135 +221,93 @@
         <table>
           <thead><tr><th>Dónde</th><th>Qué</th></tr></thead>
           <tbody>
-            <tr><td>PC Windows</td><td>Los repos <code>flash-signals-angular</code> y <code>Cursor Trading</code> en la rama <code>feature/android-mobile</code>, Node + npm, Python del stack</td></tr>
-            <tr><td>Teléfono</td><td>Android 7+ ARM64 (Edge 40 Neo: Dimensity 7030, 8–12 GB RAM). ~4 GB libres</td></tr>
-            <tr><td>Conexión</td><td>Cable USB (o cualquier forma de copiar ~95 MB) y Wi-Fi para la primera instalación</td></tr>
+            <tr><td>PC Windows</td><td>Repos en la rama <code>feature/android-mobile</code>, Node + npm, Python del stack, JDK 17 y Android SDK (<code>ANDROID_HOME</code>)</td></tr>
+            <tr><td>Teléfono</td><td>Android 10+ ARM64 (Edge 40 Neo: Dimensity 7030, 8–12 GB RAM) y ~4 GB libres</td></tr>
+            <tr><td>Conexión</td><td>Cualquier forma de pasar el APK (USB, Drive, Telegram) y Wi-Fi para la primera instalación</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="card" id="empaquetar">
-      <h2><span class="n">1</span>Empaquetar en el PC</h2>
-      <p>
-        Detén la API si está corriendo (para que el historial <code>.sqlite</code> quede consistente) y ejecuta el
-        empaquetador. Compila Angular, copia ambos repos sin <code>.git</code> ni <code>node_modules</code>
-        (incluye <code>models/</code>, <code>data/*.parquet</code> y el modelo neural <code>.pt</code>) y fija las versiones Python.
-      </p>
+    <section class="card" id="compilar">
+      <h2><span class="n">1</span>Compilar el APK en el PC</h2>
+      <p>Detén la API si está corriendo (para que el historial <code>.sqlite</code> quede consistente) y ejecuta:</p>
       <div class="code">
         <div class="code-head">PowerShell · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
         <pre>cd "D:\Danilo\Trading\flash-signals-angular"
-.\android\pack-for-android.ps1
-
-# Ya compilaste Angular y no cambiaste la UI:
-.\android\pack-for-android.ps1 -SkipBuild</pre>
+.\android\build-apk.ps1              # empaqueta + compila Angular + APK
+.\android\build-apk.ps1 -SkipBuild   # sin recompilar Angular
+.\android\build-apk.ps1 -SkipPack    # reutiliza el paquete ya generado</pre>
       </div>
-      <p>Genera dos archivos:</p>
       <div class="code">
         <div class="code-head">Salida esperada</div>
-        <pre>Listo (94.3 MB):
-  D:\Danilo\Trading\flash-signals-angular\android\out\flash-android.tar.gz
-  D:\Danilo\Trading\flash-signals-angular\android\out\termux-install.sh</pre>
+        <pre>BUILD SUCCESSFUL in 35s
+Listo (94.7 MB): D:\Danilo\Trading\flash-signals-angular\android\out\FlashSignals.apk</pre>
+      </div>
+      <div class="note">
+        <strong>Antivirus con inspección TLS (AVG)</strong>
+        El script le indica a Gradle que use el almacén de certificados de Windows
+        (<code>-Djavax.net.ssl.trustStoreType=Windows-ROOT</code>). Sin eso falla con <code>PKIX path building failed</code>.
       </div>
     </section>
 
-    <section class="card" id="copiar">
-      <h2><span class="n">2</span>Copiar al teléfono</h2>
+    <section class="card" id="instalar-apk">
+      <h2><span class="n">2</span>Instalar el APK en el teléfono</h2>
       <ol>
-        <li>Conecta el Motorola por USB y en la notificación elige <strong>Transferencia de archivos</strong>.</li>
-        <li>En el Explorador de Windows abre <em>motorola edge 40 neo → Almacenamiento interno → Download</em>.</li>
-        <li>Copia <code>flash-android.tar.gz</code> y <code>termux-install.sh</code> ahí.</li>
+        <li>Pasa <code>android\out\FlashSignals.apk</code> al teléfono (USB → <em>Download</em>, Drive o Telegram).</li>
+        <li>Ábrelo desde <em>Archivos</em> y permite <em>Instalar apps desconocidas</em> para esa app cuando Android lo pida.</li>
+        <li>Si Play Protect avisa de una app desconocida: <em>Más detalles → Instalar de todas formas</em> (está firmada con tu clave de depuración).</li>
       </ol>
-      <div class="note ok">
-        <strong>Alternativa sin cable</strong>
-        Google Drive, Telegram “Mensajes guardados” o similar: lo importante es que ambos archivos terminen en
-        <code>Download/</code> con esos nombres exactos.
-      </div>
     </section>
 
-    <section class="card" id="termux">
-      <h2><span class="n">3</span>Instalar Termux</h2>
-      <ol>
-        <li>Descarga Termux desde <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">F-Droid</a> o desde <a href="https://github.com/termux/termux-app/releases" target="_blank" rel="noopener">GitHub Releases</a> (archivo <code>…arm64-v8a.apk</code>).</li>
-        <li>Si Android lo pide, permite <em>Instalar apps desconocidas</em> para el navegador o el gestor de archivos.</li>
-        <li>Opcional: instala también <strong>Termux:Widget</strong> desde la <strong>misma fuente</strong> para tener un ícono de arranque.</li>
-      </ol>
+    <section class="card" id="botones">
+      <h2><span class="n">3</span>Configurar con los 4 botones (solo la primera vez)</h2>
+
+      <h3>1 · Instalar Termux (F-Droid)</h3>
+      <p>
+        Abre <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">F-Droid</a>; también sirve
+        <a href="https://github.com/termux/termux-app/releases" target="_blank" rel="noopener">GitHub Releases</a>
+        (<code>…arm64-v8a.apk</code>). Instálalo, <strong>ábrelo una vez</strong> (prepara su entorno) y vuelve a Flash Signals.
+        El botón cambia a <em>Termux instalado ✓</em>.
+      </p>
       <div class="note err">
-        <strong>No uses la versión de Play Store</strong>
-        Está desactualizada y sus repositorios de paquetes fallan. Termux y sus complementos (Widget) deben venir de la
-        misma fuente (todo F-Droid o todo GitHub), si no Android rechaza la combinación.
+        <strong>No uses Termux de Play Store</strong>
+        Está desactualizado y sus repositorios fallan.
       </div>
-    </section>
 
-    <section class="card" id="instalar">
-      <h2><span class="n">4</span>Ejecutar el instalador</h2>
-      <p>Abre Termux y ejecuta:</p>
+      <h3>2 · Permitir que Flash Signals use Termux</h3>
+      <p>La app copia este comando y abre Termux. Mantén pulsado en la pantalla → <em>Pegar</em> → Enter:</p>
       <div class="code">
-        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
-        <pre>bash /sdcard/Download/termux-install.sh</pre>
+        <div class="code-head">Termux · una sola vez<button class="copy" type="button">Copiar</button></div>
+        <pre>mkdir -p ~/.termux && echo 'allow-external-apps = true' >> ~/.termux/termux.properties && termux-reload-settings</pre>
       </div>
-      <p>Qué hace (20–40 min la primera vez, según Wi-Fi):</p>
+      <p>Es un candado de seguridad de Termux: sin él ninguna otra app puede pedirle que ejecute comandos.</p>
+
+      <h3>3 · Instalar / actualizar Flash Signals</h3>
       <ol>
-        <li>Pide el permiso de <strong>almacenamiento</strong> (acepta el diálogo de Android).</li>
-        <li>Instala <code>proot-distro</code> y un <strong>Ubuntu ARM64</strong>.</li>
-        <li>Extrae el paquete en <code>/opt/flash</code> dentro de Ubuntu.</li>
-        <li>Instala Python 3 + venv con las versiones del PC, <strong>torch</strong> (Neural), Node 22 y las dependencias npm del server.</li>
-        <li>Verifica que los modelos <code>models/*.joblib</code> cargan.</li>
-        <li>Crea <code>~/flash-start.sh</code> y el atajo de widget <em>Flash Signals</em>.</li>
+        <li>Acepta el permiso <strong>«Ejecutar comandos en el entorno de Termux»</strong>.</li>
+        <li>La app copia el paquete a <code>Download/FlashSignals/</code> (verás <em>Copiando… MB</em>).</li>
+        <li>Se abre Termux con el progreso. Acepta el permiso de <strong>almacenamiento</strong> de Termux.</li>
+        <li>Espera <em>Instalación completa</em> (20–40 min la primera vez: Ubuntu, Python, torch, Node, modelos verificados).</li>
+        <li>Pulsa Enter para cerrar y vuelve a Flash Signals.</li>
       </ol>
-      <h3>Opciones</h3>
-      <div class="code">
-        <div class="code-head">Termux · variantes<button class="copy" type="button">Copiar</button></div>
-        <pre># Sin torch (ahorra ~600 MB; -Neural no estará disponible)
-SKIP_NEURAL=1 bash /sdcard/Download/termux-install.sh
-
-# Con OCR (onnxruntime + rapidocr, para extraer ops de capturas)
-WITH_OCR=1 bash /sdcard/Download/termux-install.sh
-
-# Reinstalar desde cero (borra historial y live/ del teléfono)
-bash /sdcard/Download/termux-install.sh --fresh</pre>
-      </div>
       <div class="note warn">
         <strong>Mantén la pantalla encendida durante la instalación</strong>
-        Si Android suspende Termux a mitad de la descarga, vuelve a ejecutar el mismo comando: es seguro repetirlo.
+        Si Android suspende Termux a mitad, vuelve a pulsar el botón 3: es seguro repetirlo.
       </div>
-    </section>
 
-    <section class="card" id="arrancar">
-      <h2><span class="n">5</span>Arrancar y usar</h2>
-      <div class="code">
-        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
-        <pre>~/flash-start.sh</pre>
-      </div>
-      <ul>
-        <li>Activa el <em>wake lock</em> de Termux y a los ~8 s abre Chrome en <code>http://localhost:3847</code>.</li>
-        <li>Con Termux:Widget: añade el widget a la pantalla de inicio y toca <strong>Flash Signals</strong>.</li>
-        <li>Para detener: vuelve a Termux y pulsa <kbd>Ctrl</kbd>+<kbd>C</kbd> (en el teclado extra de Termux: <code>CTRL</code> y luego <code>c</code>).</li>
-        <li>Consejo: en Chrome, menú ⋮ → <em>Añadir a pantalla de inicio</em> para abrir la UI como app.</li>
-      </ul>
-      <h3>Comprobar que todo responde</h3>
-      <div class="code">
-        <div class="code-head">Segunda sesión de Termux (desliza desde la izquierda → New session)<button class="copy" type="button">Copiar</button></div>
-        <pre>curl -s http://localhost:3847/api/health
-# Debe incluir: "signalRunner":"bash","signalsRunnable":true</pre>
-      </div>
-      <h3>Correr un análisis desde la terminal (sin UI)</h3>
-      <div class="code">
-        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
-        <pre>proot-distro login ubuntu
-cd "/opt/flash/Cursor Trading"
-PYTHON=/opt/flash/venv/bin/python MPLBACKEND=Agg \
-  bash scripts/analyze/analyze.sh btc light -ML -Neural</pre>
-      </div>
+      <h3>4 · Iniciar y abrir</h3>
+      <p>
+        Arranca el servidor en segundo plano (verás <em>Arrancando servidor… N s</em>, unos 10–30 s) y muestra la interfaz
+        dentro de la app. Termux deja una notificación mientras el servidor corre.
+      </p>
     </section>
 
     <section class="card" id="android15">
-      <h2><span class="n">6</span>Ajustes de Android 15 (evitar que mate el servidor)</h2>
-      <p>Android cierra procesos en segundo plano agresivamente. Haz esto una vez:</p>
+      <h2><span class="n">4</span>Ajustes de Android 15 (evitar que mate el servidor)</h2>
       <ol>
         <li><strong>Batería:</strong> Ajustes → Apps → Termux → Batería → <em>Sin restricciones</em>.</li>
         <li><strong>Procesos secundarios:</strong> activa Opciones de desarrollador (Ajustes → Acerca del teléfono → toca 7 veces <em>Número de compilación</em>) y luego Sistema → Opciones de desarrollador → <em>Desactivar restricciones de procesos secundarios</em>.</li>
-        <li>Deja la notificación de Termux visible (el wake lock la mantiene).</li>
       </ol>
       <h3>Alternativa por ADB (si no aparece la opción)</h3>
       <div class="code">
@@ -388,23 +316,33 @@ PYTHON=/opt/flash/venv/bin/python MPLBACKEND=Agg \
 adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
 adb shell settings put global settings_enable_monitor_phantom_procs false</pre>
       </div>
-      <div class="note">
-        <strong>Señal típica de este problema</strong>
-        Termux muestra <code>[Process completed (signal 9)]</code> tras unos minutos en segundo plano.
-      </div>
+    </section>
+
+    <section class="card" id="uso">
+      <h2>Uso diario</h2>
+      <ul>
+        <li><strong>Abrir:</strong> toca el ícono Flash Signals. Si el servidor no corre, la app lo arranca sola y muestra la UI.</li>
+        <li><strong>Volver a los botones:</strong> botón atrás del teléfono (cuando la UI no tiene más historial).</li>
+        <li><strong>Detener:</strong> botón <em>Detener servidor</em> (libera batería y el wake lock de Termux).</li>
+        <li><strong>En Chrome:</strong> con el servidor corriendo también puedes abrir <code>http://localhost:3847</code>.</li>
+      </ul>
     </section>
 
     <section class="card" id="actualizar">
       <h2>Actualizar tras cambios en el PC</h2>
       <ol>
-        <li>En el PC: <code>.\android\pack-for-android.ps1</code> (con la API detenida).</li>
-        <li>Copia de nuevo <code>flash-android.tar.gz</code> (y <code>termux-install.sh</code>) a <code>Download/</code>, reemplazando los anteriores.</li>
-        <li>En Termux: <code>bash /sdcard/Download/termux-install.sh</code>.</li>
+        <li>En el PC: <code>.\android\build-apk.ps1</code> (con la API detenida).</li>
+        <li>Instala el APK nuevo <strong>encima</strong> del anterior (no lo desinstales).</li>
+        <li>En la app: <strong>Detener servidor</strong> → <strong>3 · Instalar / actualizar</strong> → <strong>4 · Iniciar y abrir</strong>.</li>
       </ol>
       <div class="note ok">
         <strong>Qué se conserva</strong>
         El historial del teléfono (<code>flash-signals-angular/data</code>: SQLite, capturas) y <code>Cursor Trading/live</code>.
-        Se actualizan código, UI, modelos y <code>.parquet</code>. Reentrena en el PC y vuelve a empaquetar: en el teléfono es lento.
+        Se actualizan código, UI, modelos y <code>.parquet</code>. Reentrena en el PC: en el teléfono es lento.
+      </div>
+      <div class="note warn">
+        <strong>Compila siempre en el mismo PC</strong>
+        El APK se firma con la clave de depuración de este PC; uno firmado en otro PC no se instala encima (habría que desinstalar y perder los permisos concedidos).
       </div>
     </section>
 
@@ -416,17 +354,17 @@ adb shell settings put global settings_enable_monitor_phantom_procs false</pre>
           <tbody>
             <tr><td>Señales Context / Light / High / History</td><td>Sí</td><td>Vía <code>analyze.sh</code></td></tr>
             <tr><td>ML (<code>.joblib</code>)</td><td>Sí</td><td>Versiones fijadas desde el PC</td></tr>
-            <tr><td>Neural (<code>-Neural</code>)</td><td>Sí, si torch se instaló</td><td>Más lento que en el PC; <code>SKIP_NEURAL=1</code> lo omite</td></tr>
+            <tr><td>Neural (<code>-Neural</code>)</td><td>Sí, si torch se instaló</td><td>Más lento que en el PC</td></tr>
             <tr><td>MACD-quant, historial, wiki</td><td>Sí</td><td>SQLite local (better-sqlite3 o sql.js)</td></tr>
+            <tr><td>Exportar Excel / PDF</td><td>Solo en Chrome</td><td>El WebView no descarga archivos <code>blob:</code>; abre <code>localhost:3847</code> en Chrome</td></tr>
             <tr><td>Envío a MetaTrader 5</td><td>No</td><td>La librería <code>MetaTrader5</code> solo existe en Windows; opera MT5 desde el PC</td></tr>
-            <tr><td>Reentrenar modelos</td><td>Posible, lento</td><td>Entrena en el PC y reempaqueta</td></tr>
+            <tr><td>Reentrenar modelos</td><td>Posible, lento</td><td>Entrena en el PC y recompila el APK</td></tr>
           </tbody>
         </table>
       </div>
       <div class="note warn">
         <strong>Solo localhost</strong>
-        La API escucha en <code>127.0.0.1</code>. No la expongas a la red (<code>BIND_HOST=0.0.0.0</code>) salvo en una
-        Wi-Fi de confianza: cualquiera en esa red podría usarla.
+        La API escucha en <code>127.0.0.1</code>: nadie más en tu Wi-Fi puede usarla.
       </div>
     </section>
 
@@ -434,17 +372,19 @@ adb shell settings put global settings_enable_monitor_phantom_procs false</pre>
       <h2>Solución de problemas</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Mensaje</th><th>Causa</th><th>Solución</th></tr></thead>
+          <thead><tr><th>Síntoma</th><th>Causa</th><th>Solución</th></tr></thead>
           <tbody>
-            <tr><td><code>no encuentro flash-android.tar.gz en Download/</code></td><td>Archivo con otro nombre (p. ej. <code>(1)</code>) o sin permiso de almacenamiento</td><td>Renómbralo; ejecuta <code>termux-setup-storage</code> y acepta</td></tr>
-            <tr><td><code>Repository under maintenance</code> / errores de <code>pkg</code></td><td>Mirror de Termux caído</td><td><code>termux-change-repo</code> → elige otro mirror y reintenta</td></tr>
-            <tr><td><code>[Process completed (signal 9)]</code></td><td>Android mató el proceso</td><td>Ver <a href="#android15">Ajustes de Android 15</a></td></tr>
-            <tr><td><code>[warn] torch no se instaló</code></td><td>Descarga fallida o sin espacio</td><td>Libera espacio y en Ubuntu: <code>/opt/flash/venv/bin/pip install torch torchvision</code></td></tr>
-            <tr><td>Error al cargar <code>.joblib</code> (<code>InconsistentVersionWarning</code>, <code>ModuleNotFoundError</code>)</td><td>Versión de scikit-learn/numpy distinta a la del PC</td><td>Reempaqueta desde el PC con el mismo Python con el que entrenaste</td></tr>
-            <tr><td><code>better-sqlite3 no disponible … usando sql.js</code></td><td>Sin binario nativo ARM64</td><td>Nada: es el fallback previsto y funciona igual</td></tr>
-            <tr><td><code>EADDRINUSE :3847</code></td><td>Otra instancia corriendo</td><td>Cierra la otra sesión de Termux o usa <code>PORT=3850 ~/flash-start.sh</code> y abre ese puerto</td></tr>
+            <tr><td>Termux muestra error sobre <code>allow-external-apps</code> / no pasa nada al pulsar 3 o 4</td><td>Falta el paso 2 o Termux no se abrió nunca</td><td>Abre Termux una vez y repite el botón 2</td></tr>
+            <tr><td><em>Sin el permiso «Ejecutar comandos en Termux»…</em></td><td>Permiso denegado</td><td>Ajustes → Apps → Flash Signals → Permisos → Termux → Permitir</td></tr>
+            <tr><td><code>ERROR: Termux no tiene permiso de almacenamiento</code></td><td>Diálogo de almacenamiento rechazado</td><td>Ajustes → Apps → Termux → Permisos → Archivos → Permitir; repite el botón 3</td></tr>
+            <tr><td><code>Repository under maintenance</code> / errores de <code>pkg</code></td><td>Mirror de Termux caído</td><td>En Termux: <code>termux-change-repo</code>, elige otro mirror y repite el botón 3</td></tr>
+            <tr><td><em>El servidor no respondió en 150 s</em></td><td>Instalación sin terminar o fallida</td><td>Abre Termux, revisa el último error y repite el botón 3</td></tr>
+            <tr><td>La app vuelve a los botones / <code>[Process completed (signal 9)]</code></td><td>Android mató el servidor</td><td>Ver <a href="#android15">Ajustes de Android 15</a> y pulsa 4</td></tr>
+            <tr><td><code>[warn] torch no se instaló</code></td><td>Descarga fallida o sin espacio</td><td>Libera espacio y repite el botón 3</td></tr>
+            <tr><td>Error al cargar <code>.joblib</code> (<code>InconsistentVersionWarning</code>)</td><td>scikit-learn/numpy distintos a los del PC</td><td>Recompila el APK con el mismo Python con el que entrenaste</td></tr>
+            <tr><td><em>Este APK no trae el paquete</em></td><td>APK compilado sin el paquete</td><td>Usa <code>build-apk.ps1</code> sin <code>-SkipPack</code></td></tr>
             <tr><td><code>Puente MT5 no disponible</code></td><td>MT5 no existe en Android</td><td>Esperado; las órdenes se envían desde el PC</td></tr>
-            <tr><td><code>bad interpreter</code> / <code>$'\r': command not found</code></td><td>Script con finales de línea de Windows</td><td>Usa el <code>termux-install.sh</code> generado en <code>android\out</code> (ya convertido a LF)</td></tr>
+            <tr><td><code>PKIX path building failed</code> al compilar</td><td>Antivirus con inspección TLS</td><td>Compila con <code>build-apk.ps1</code> (ya aplica el ajuste), no con <code>gradlew</code> directo</td></tr>
           </tbody>
         </table>
       </div>
@@ -453,18 +393,18 @@ adb shell settings put global settings_enable_monitor_phantom_procs false</pre>
     <section class="card" id="checklist">
       <h2>Checklist final</h2>
       <ul class="check">
-        <li>Paquete generado en el PC con la API detenida.</li>
-        <li><code>flash-android.tar.gz</code> y <code>termux-install.sh</code> en <code>Download/</code> del teléfono.</li>
-        <li>Termux (y Termux:Widget) instalados desde F-Droid o GitHub, misma fuente.</li>
-        <li>Instalador terminado con “Instalación completa” y modelos <code>OK</code>.</li>
+        <li><code>FlashSignals.apk</code> compilado en el PC con la API detenida.</li>
+        <li>APK instalado en el teléfono.</li>
+        <li>Botón 1: Termux de F-Droid instalado y abierto una vez.</li>
+        <li>Botón 2: comando <code>allow-external-apps</code> pegado en Termux.</li>
+        <li>Botón 3: permisos aceptados e «Instalación completa» en Termux.</li>
         <li>Termux con batería <em>Sin restricciones</em> y restricciones de procesos secundarios desactivadas.</li>
-        <li><code>~/flash-start.sh</code> abre <code>http://localhost:3847</code> en Chrome.</li>
-        <li><code>/api/health</code> muestra <code>"signalRunner":"bash"</code>.</li>
-        <li>Primer análisis BTC Light completado desde la UI.</li>
+        <li>Botón 4: la UI aparece dentro de la app.</li>
+        <li>Primer análisis BTC Light completado.</li>
       </ul>
     </section>
 
-    <footer>Flash Signals · fire &amp; shadow · Danilo Chaverra · Instalación en Android (Termux + Ubuntu proot) · 2026-10-08</footer>
+    <footer>Flash Signals · fire &amp; shadow · Danilo Chaverra · Instalación en Android con APK + Termux · 2026-10-08</footer>
   </main>
 
   <script>
