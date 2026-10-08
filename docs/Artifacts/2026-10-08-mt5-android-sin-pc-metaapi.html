@@ -179,12 +179,12 @@
       <a href="#como-funciona">Cómo funciona</a>
       <a href="#requisitos">Requisitos</a>
       <a href="#metaapi">1 · Cuenta MetaApi</a>
-      <a href="#apk">2 · Actualizar APK</a>
+      <a href="#apk">2 · Pasar al teléfono</a>
       <a href="#configurar">3 · Configurar</a>
       <a href="#probar">4 · Probar en demo</a>
       <a href="#diferencias">Diferencias</a>
       <a href="#seguridad">Seguridad</a>
-      <a href="#alternativa">Alternativa con PC</a>
+      <a href="#alternativa">Túnel SSH al PC</a>
       <a href="#problemas">Problemas</a>
       <a href="#checklist">Checklist</a>
     </nav>
@@ -228,24 +228,90 @@
         <li><strong>Add account</strong>: plataforma <strong>MT5</strong>, login, contraseña de trading y servidor exacto del broker (p. ej. <code>Exness-MT5Trial</code>). Empieza con la cuenta <strong>demo</strong>.</li>
         <li>Espera a que el estado sea <strong>Deployed / Connected</strong>.</li>
         <li>Anota el <strong>id de la cuenta</strong> (UUID) y su <strong>región</strong> (p. ej. <code>new-york</code>, <code>london</code>, <code>singapore</code>).</li>
-        <li>En <strong>API access</strong>, genera y copia el <strong>token</strong>.</li>
+        <li>En <strong>API access → Generate token</strong>, genera y copia el <strong>token</strong> con los permisos mínimos de la tabla.</li>
       </ol>
       <div class="note warn">
         <strong>Contraseña de trading, no de inversor</strong>
         Con la de inversor MetaApi solo lee la cuenta y el puente responde: <em>MetaApi indica que la cuenta no puede operar</em>.
       </div>
+
+      <h3>Cuenta Exness MT5</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dato</th><th>Dónde / valor</th></tr></thead>
+          <tbody>
+            <tr><td>Login, servidor</td><td>Área personal Exness → Mis cuentas → ⋯ → Información de la cuenta (o app MT5 → Ajustes)</td></tr>
+            <tr><td>Servidor exacto</td><td><code>Exness-MT5Trial</code>, <code>Exness-MT5Trial8</code>, <code>Exness-MT5Real8</code>… (el número importa)</td></tr>
+            <tr><td>Contraseña</td><td>La <strong>de trading</strong>; se puede cambiar en el Área personal</td></tr>
+            <tr><td>Símbolos Standard</td><td>Sufijo <code>m</code>: <code>XAUUSDm</code>, <code>BTCUSDm</code>, <code>US30m</code></td></tr>
+            <tr><td>Símbolos Standard Cent</td><td>Sufijo <code>c</code>: <code>XAUUSDc</code></td></tr>
+            <tr><td>Símbolos Pro / Raw / Zero</td><td>Sin sufijo: <code>XAUUSD</code>, <code>BTCUSD</code>, <code>US30</code></td></tr>
+            <tr><td>Cuenta real</td><td>Responde <code>REAL</code> en <code>~/flash-metaapi.sh</code>; si no, «Cuenta REAL bloqueada»</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Permisos mínimos del token</h3>
+      <p><code>metaapi_mt5.py</code> solo usa la REST (cuenta, posiciones, historial, símbolos, precios, velas y envío de órdenes). Deja marcado únicamente lo necesario:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Opción</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td><strong>MetaApi REST API</strong></td><td>✅ Marcada (la única)</td></tr>
+            <tr><td>Trading account management API</td><td>❌ La cuenta se añade y despliega desde la web</td></tr>
+            <tr><td>MetaApi RPC over websocket API</td><td>❌</td></tr>
+            <tr><td>MetaApi real-time streaming over websocket API</td><td>❌</td></tr>
+            <tr><td>MetaStats · Risk management · CopyFactory · MT manager · Billing</td><td>❌</td></tr>
+            <tr><td><strong>Role</strong></td><td>Acceso completo / escritura. Con <em>Read-only access to resources</em> «Probar conexión» funciona pero las órdenes fallan con <code>403</code></td></tr>
+            <tr><td>Add all methods from this application</td><td>✅ Marcada</td></tr>
+            <tr><td><strong>Entity / Id</strong></td><td>En lugar de <em>All entities</em> / <code>*</code>: entidad <em>account</em> + el <strong>id de tu cuenta</strong>. Si el token se filtra, solo sirve para esa cuenta</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <strong>Máximo de operaciones por día (p. ej. 6)</strong>
+        No se configura en el token (MetaApi no tiene esa opción). Va en <strong>Configuración → «Máx. operaciones por día» = 6</strong>, junto con
+        <strong>«Drawdown diario máx. %»</strong>. El puente cuenta operaciones abiertas hoy + órdenes pendientes y rechaza la 7.ª con
+        <em>Límite diario alcanzado</em>. «Recalcular» de una señal ya enviada no cuenta.
+        Uso gratuito: con 1 cuenta y pocas operaciones suele bastar, pero revisa las condiciones vigentes en el panel <em>Billing</em> de MetaApi.
+      </div>
     </section>
 
     <section class="card" id="apk">
-      <h2><span class="n">2</span>Actualizar el APK</h2>
-      <p>El soporte MetaApi va en el paquete: recompila e instala encima.</p>
+      <h2><span class="n">2</span>Pasar los archivos nuevos al teléfono</h2>
+      <p>
+        No copies nada a mano en <code>/data/data/com.termux/files/…</code> (Android no lo permite sin root). El instalador lo hace:
+        se genera el paquete en el PC, se deja en <strong>Download</strong> del teléfono y se reinstala encima.
+      </p>
       <div class="code">
-        <div class="code-head">PowerShell · PC · carpeta flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <div class="code-head">PowerShell · PC · con la API detenida<button class="copy" type="button">Copiar</button></div>
         <pre>cd "D:\Danilo\Trading\flash-signals-angular"
-.\android\build-apk.ps1
-.\android\setup-phone-adb.ps1 -Device IP:PUERTO   # o instala out\FlashSignals.apk a mano</pre>
+.\android\pack-for-android.ps1   # out\flash-android.tar.gz + out\termux-install.sh
+.\android\build-apk.ps1          # out\FlashSignals.apk (el botón Detener también para el puente)</pre>
       </div>
-      <p>En la app: <strong>Detener servidor</strong> → <strong>3 · Instalar / actualizar</strong>. El instalador crea <code>~/flash-metaapi.sh</code> en Termux.</p>
+      <p>Pásalos al teléfono por cable (copiar los dos primeros a <strong>Download</strong> e instalar el APK encima) o por ADB:</p>
+      <div class="code">
+        <div class="code-head">PowerShell · PC · ADB<button class="copy" type="button">Copiar</button></div>
+        <pre>$adb = "$env:ANDROID_HOME\platform-tools\adb.exe"
+&amp; $adb push android\out\flash-android.tar.gz /sdcard/Download/
+&amp; $adb push android\out\termux-install.sh /sdcard/Download/
+&amp; $adb install -r android\out\FlashSignals.apk</pre>
+      </div>
+      <p>En el teléfono: app → <strong>Detener servidor</strong> → <strong>3 · Instalar / actualizar</strong>, o en Termux:</p>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>bash /sdcard/Download/termux-install.sh</pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dónde queda</th><th>Qué</th></tr></thead>
+          <tbody>
+            <tr><td><code>/opt/flash/…</code> (Ubuntu proot)</td><td><code>mt5-bridge/metaapi_mt5.py</code>, <code>bridge.py</code> y el nuevo <code>start.sh</code></td></tr>
+            <tr><td><code>~</code> de Termux</td><td><code>flash-start.sh</code>, <code>flash-server.sh</code>, <code>flash-metaapi.sh</code>, <code>flash-mt5-tunnel.sh</code></td></tr>
+            <tr><td>Se conserva</td><td>Historial (<code>flash-signals-angular/data</code>), <code>Cursor Trading/live</code> y <code>/opt/flash/metaapi.env</code> (salvo <code>--fresh</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
       <div class="note">
         <strong>¿Instalaste el proyecto a mano en Termux?</strong>
         Basta con tener la versión nueva de <code>mt5-bridge/</code> y arrancar el puente con las variables de la sección 3
@@ -277,6 +343,7 @@
         <li>URL del puente: <code>http://127.0.0.1:8765</code> (la de siempre).</li>
         <li>Token del puente: el mismo del asistente.</li>
         <li>Símbolos del broker: nombres exactos (p. ej. <code>XAUUSDm</code>, <code>BTCUSDm</code>, <code>US30m</code>).</li>
+        <li>Máx. operaciones por día (p. ej. <code>6</code>) y Drawdown diario máx. %.</li>
       </ul>
     </section>
 
@@ -334,21 +401,94 @@
 
     <section class="card" id="alternativa">
       <h2>Alternativa: túnel SSH a tu PC o VPS con Windows</h2>
-      <p>Si prefieres no usar MetaApi, el teléfono puede usar el puente del PC (o de un VPS Windows siempre encendido) por un túnel SSH cifrado:</p>
-      <div class="code">
-        <div class="code-head">Termux (una vez)<button class="copy" type="button">Copiar</button></div>
-        <pre>~/flash-mt5-tunnel.sh --setup   # crea la clave y pide IP + usuario del PC
-~/flash-mt5-tunnel.sh --check   # 127.0.0.1:8765 OK = túnel y puente activos</pre>
+      <p>
+        Si ya tienes el puente corriendo en el PC (<code>127.0.0.1:8765</code>, con MT5 abierto), el teléfono lo puede usar por un túnel SSH cifrado.
+        El puerto no se abre a la red: el túnel lleva <code>127.0.0.1:8765</code> del teléfono a <code>127.0.0.1:8765</code> del PC.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Dato</th><th>Cómo obtenerlo</th></tr></thead>
+          <tbody>
+            <tr><td>Puente activo en el PC</td><td><code>Invoke-RestMethod http://127.0.0.1:8765/health</code> → respuesta o <code>401</code> (pide token) = activo</td></tr>
+            <tr><td>IP del PC</td><td><code>ipconfig</code> → IPv4 (p. ej. <code>192.168.x.x</code>). El teléfono debe estar en el Wi-Fi de esa misma red</td></tr>
+            <tr><td>Usuario de Windows</td><td><code>$env:USERNAME</code> (p. ej. <code>Nombre.Apellido</code>)</td></tr>
+            <tr><td>Red de Windows</td><td>Debe ser <strong>Privada</strong>; en «Pública» el firewall bloquea el puerto 22</td></tr>
+          </tbody>
+        </table>
       </div>
+
+      <h3>1 · Teléfono: crear la clave</h3>
+      <p>Si aún no reinstalaste con el paquete nuevo, copia <code>android\flash-mt5-tunnel.sh</code> a Download del teléfono y:</p>
+      <div class="code">
+        <div class="code-head">Termux (solo si falta ~/flash-mt5-tunnel.sh)<button class="copy" type="button">Copiar</button></div>
+        <pre>cp /sdcard/Download/flash-mt5-tunnel.sh ~ &amp;&amp; chmod +x ~/flash-mt5-tunnel.sh</pre>
+      </div>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>~/flash-mt5-tunnel.sh --setup
+# IP o nombre del PC:  192.168.x.x
+# Usuario de Windows:  Nombre.Apellido
+# Puerto SSH [22]:     Enter</pre>
+      </div>
+      <p>Al final imprime la línea <code>.\android\setup-pc-ssh.ps1 -PublicKey "ssh-ed25519 AAAA… flash-android"</code>: cópiala completa.</p>
+
+      <h3>2 · PC: autorizar el teléfono</h3>
       <div class="code">
         <div class="code-head">PowerShell como administrador · PC<button class="copy" type="button">Copiar</button></div>
-        <pre>.\android\setup-pc-ssh.ps1 -PublicKey "ssh-ed25519 AAAA… flash-android"</pre>
+        <pre>cd "D:\Danilo\Trading\flash-signals-angular"
+.\android\setup-pc-ssh.ps1 -PublicKey "ssh-ed25519 AAAA… flash-android"</pre>
       </div>
       <ul>
-        <li>Instala OpenSSH Server, abre el puerto 22 solo en redes privadas y limita la clave al reenvío de <code>127.0.0.1:8765/8766</code> (sin consola).</li>
-        <li>El PC debe estar encendido con MT5 y el puente abiertos. Fuera de casa: Tailscale.</li>
-        <li><strong>No configures las dos opciones a la vez</strong>: ambas usan el puerto 8765 del teléfono.</li>
+        <li>Instala y arranca OpenSSH Server (automático al iniciar Windows).</li>
+        <li>Abre el puerto 22 solo en redes privadas / dominio.</li>
+        <li>La clave queda restringida a reenviar <code>127.0.0.1:8765/8766</code>: sin consola, sin shell, sin otros puertos.</li>
       </ul>
+
+      <h3>3 · Teléfono: arrancar y comprobar</h3>
+      <div class="code">
+        <div class="code-head">Termux<button class="copy" type="button">Copiar</button></div>
+        <pre>nohup bash ~/flash-mt5-tunnel.sh &gt;~/flash-mt5-tunnel.log 2&gt;&amp;1 &amp;
+~/flash-mt5-tunnel.sh --check</pre>
+      </div>
+      <div class="code">
+        <div class="code-head">Salida esperada</div>
+        <pre>  127.0.0.1:8765  OK (HTTP 401)   # 401 = el puente pide token: túnel correcto</pre>
+      </div>
+      <p>
+        Con el paquete nuevo instalado, <code>flash-server.sh</code> / <code>flash-start.sh</code> arrancan el túnel solos cada vez que
+        inicias la app (si existe <code>~/.flash-mt5.env</code>), y <strong>Detener servidor</strong> lo para. El túnel reconecta cada 10 s si se corta.
+      </p>
+
+      <h3>4 · App: Configuración</h3>
+      <ul>
+        <li>URL del puente: <code>http://127.0.0.1:8765</code>.</li>
+        <li>Token del puente: <strong>el mismo que usa el puente del PC</strong> (si no, <code>401 Token inválido</code>).</li>
+        <li><strong>Probar conexión</strong> → <em>Conectado</em> con la cuenta del MT5 abierto en el PC.</li>
+      </ul>
+
+      <div class="note warn">
+        <strong>No configures las dos opciones a la vez</strong>
+        MetaApi y el túnel usan el puerto 8765 del teléfono. Para pasar a túnel, borra la configuración MetaApi:
+        <code>proot-distro login ubuntu -- rm /opt/flash/metaapi.env</code> y reinicia la app.
+        Para volver a MetaApi: <code>rm ~/.flash-mt5.env</code> y <code>~/flash-metaapi.sh</code>.
+      </div>
+      <div class="note">
+        <strong>Requisitos del túnel</strong>
+        El PC debe estar encendido con MT5 y el puente abiertos. Fuera de casa (datos móviles): instala Tailscale en PC y teléfono y usa la IP
+        <code>100.x.x.x</code> del PC en <code>--setup</code>.
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Síntoma (túnel)</th><th>Solución</th></tr></thead>
+          <tbody>
+            <tr><td><code>sin respuesta</code> en <code>--check</code></td><td>Mira <code>~/flash-mt5-tunnel.log</code>; comprueba que el puente del PC responde y que ambos están en la misma red</td></tr>
+            <tr><td><code>Connection timed out</code> / <code>refused</code></td><td>IP incorrecta, red de Windows «Pública» o <code>sshd</code> parado (<code>Get-Service sshd</code>)</td></tr>
+            <tr><td><code>Permission denied (publickey)</code></td><td>Repite el paso 2 con la clave exacta y el usuario correcto</td></tr>
+            <tr><td><code>OK (HTTP 401)</code> pero la app dice token inválido</td><td>Pon en Configuración el mismo token del puente del PC</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card" id="problemas">
@@ -360,6 +500,9 @@
             <tr><td><code>Puente MT5 no disponible en http://127.0.0.1:8765</code></td><td>Sin <code>metaapi.env</code> o el puente se cayó</td><td><code>~/flash-metaapi.sh</code> y reiniciar; revisar <code>mt5-bridge.log</code></td></tr>
             <tr><td><code>Faltan METAAPI_TOKEN y/o METAAPI_ACCOUNT_ID</code></td><td>Datos vacíos</td><td>Repite <code>~/flash-metaapi.sh</code></td></tr>
             <tr><td><code>MetaApi respondió 401</code></td><td>Token inválido o caducado</td><td>Genera otro en <em>API access</em></td></tr>
+            <tr><td><code>MetaApi respondió 403</code></td><td>Token <em>Read-only</em>, sin <em>MetaApi REST API</em> o restringido a otra cuenta</td><td>Genera el token con la tabla de permisos mínimos (sección 1)</td></tr>
+            <tr><td><code>Límite diario alcanzado</code></td><td>Se llegó al máx. de operaciones o drawdown del día</td><td>Esperado; se reinicia al día siguiente o ajusta Configuración</td></tr>
+            <tr><td><code>no encuentro flash-android.tar.gz en Download/</code></td><td>Paquete no copiado o sin permiso de almacenamiento</td><td>Cópialo a <code>Download</code>; acepta el permiso de Termux</td></tr>
             <tr><td><code>MetaApi respondió 404</code></td><td>Id o región incorrectos, o cuenta no desplegada</td><td>Comprueba id y región; estado <em>Deployed</em></td></tr>
             <tr><td><em>MetaApi indica que la cuenta no puede operar</em></td><td>Contraseña de inversor</td><td>Vuelve a añadir la cuenta con la contraseña de trading</td></tr>
             <tr><td><code>Cuenta REAL bloqueada</code></td><td>Protección por defecto</td><td>Solo si quieres: responde <code>REAL</code> en el asistente</td></tr>
@@ -375,7 +518,9 @@
       <h2>Checklist final</h2>
       <ul class="check">
         <li>Cuenta MT5 demo añadida en MetaApi con contraseña de trading y estado <em>Deployed</em>.</li>
-        <li>APK actualizado e instalado (botón 3).</li>
+        <li>Token solo con <em>MetaApi REST API</em>, rol con escritura y restringido al id de la cuenta.</li>
+        <li><code>pack-for-android.ps1</code> + <code>build-apk.ps1</code>; paquete en Download, APK instalado y botón 3 ejecutado.</li>
+        <li>Configuración: Máx. operaciones por día (p. ej. 6) y drawdown diario.</li>
         <li><code>~/flash-metaapi.sh</code> ejecutado con token, id y región.</li>
         <li><code>mt5-bridge.log</code> muestra <code>backend=metaapi</code>.</li>
         <li>Configuración → Probar conexión: <em>Conectado</em> · DEMO.</li>
