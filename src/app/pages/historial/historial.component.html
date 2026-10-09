@@ -30,10 +30,20 @@
         (click)="setMarket(m.id)"
       >{{ m.label }}</button>
     </fieldset>
-    <div class="toolbar-actions">
+    <div class="toolbar-actions" *ngIf="isAdmin()">
       <span class="lock-badge" title="Borrar filas requiere contraseña">🔒 Bloqueo activo</span>
-      <!-- Ocultos: «+ Cambio de cálculo» (openCalcMarkerDialog), «Actualizar Probabilidad» (recalcAllProbabilidad),
-           «Actualizar» (load) y «Limpiar historial» (clearAll) -->
+      <button type="button" class="ghost" (click)="openCalcMarkerDialog()" [disabled]="loading">
+        + Cambio de cálculo
+      </button>
+      <button
+        type="button"
+        class="ghost"
+        (click)="recalcAllProbabilidad()"
+        [disabled]="loading || recalcBusy || !total"
+        title="Recalcula Probabilidad v3: bias + Premium/Discount + acuerdo"
+      >
+        {{ recalcBusy ? 'Recalculando…' : 'Actualizar Probabilidad' }}
+      </button>
     </div>
   </div>
 
