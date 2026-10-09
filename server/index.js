@@ -8,13 +8,22 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
+
+/** .env opcional en la raíz del proyecto (no pisa variables ya definidas en el proceso). */
+const ENV_FILE = path.join(__dirname, '..', '.env');
+if (typeof process.loadEnvFile === 'function' && fs.existsSync(ENV_FILE)) {
+  process.loadEnvFile(ENV_FILE);
+}
 const historyStore = require('./db/history-store');
 const wikiStore = require('./db/wiki-store');
 const macdQuantStore = require('./db/macd-quant-store');
+const accountSettingsStore = require('./db/account-settings-store');
+const { registerAccountSettingsRoutes } = require('./account-settings-routes');
 const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
 const mt5Sent = require('./mt5-sent');
+const { countTradesToday, dailyLimitStatus } = require('./mt5-daily-limit');
 const { positionParams } = require('./position-params');
 const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
@@ -23,6 +32,7 @@ const trendBias = require('./trend-bias');
 const vixSource = require('./vix-source');
 const { resolveVolatilityAdjustment } = require('./volatility');
 const { registerVolatilityRoutes } = require('./volatility-routes');
+const { createAdminAuth } = require('./auth');
 const {
   resolveSignalRunner,
   signalScriptPath,
@@ -293,6 +303,16 @@ async function runnableHistory() {
 /** Envíos en curso (perfil:clave): evita doble ejecución por clics/peticiones simultáneas. */
 const mt5InFlight = new Set();
 
+/** Operaciones de hoy del perfil frente a su límite diario (ver mt5-daily-limit). */
+async function tradeLimitStatus(profileId = mt5Settings.getActive()) {
+  const now = new Date();
+  const tz = historyStore.historyTz();
+  const since = new Date(now.getTime() - 36 * 3_600_000).toISOString();
+  const taken = await historyStore.listTakenSince(since).catch(() => []);
+  const count = countTradesToday({ sent: mt5Sent.entriesFor(profileId), taken, now, tz });
+  return dailyLimitStatus(mt5Settings.get(profileId), count, { now, tz });
+}
+
 function volumeNoteSuffix(result) {
   return result?.volumeNote ? ` · ⚠ ${result.volumeNote}` : '';
 }
@@ -386,6 +406,11 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+/** Login solo para administración: lectura y análisis siguen públicos. */
+const adminAuth = createAdminAuth();
+const { requireAdmin } = adminAuth;
+adminAuth.registerRoutes(app);
 
 function livePath(...parts) {
   return path.join(TRADING_ROOT, 'live', ...parts);
@@ -1473,7 +1498,7 @@ app.patch('/api/history/calc-markers/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/history/calc-markers/:id', async (req, res) => {
+app.delete('/api/history/calc-markers/:id', requireAdmin, async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {
     return res.status(400).json({ error: 'id inválido' });
@@ -1534,7 +1559,7 @@ app.get('/api/history/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/history/:id', async (req, res) => {
+app.delete('/api/history/:id', requireAdmin, async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {
     return res.status(400).json({ error: 'id inválido' });
@@ -1854,7 +1879,7 @@ app.get('/api/history/:id/result-image', async (req, res) => {
   }
 });
 
-app.delete('/api/history/:id/result-image', async (req, res) => {
+app.delete('/api/history/:id/result-image', requireAdmin, async (req, res) => {
   const id = parseHistoryId(req.params.id);
   if (id == null) {
     return res.status(400).json({ error: 'id inválido' });
@@ -1875,7 +1900,7 @@ app.delete('/api/history/:id/result-image', async (req, res) => {
   }
 });
 
-app.delete('/api/history', async (req, res) => {
+app.delete('/api/history', requireAdmin, async (req, res) => {
   if (!requireHistoryUnlock(req, res)) return;
   try {
     const result = await historyStore.clearAll();
@@ -1935,7 +1960,7 @@ app.get('/api/artifacts/meta', async (req, res) => {
   }
 });
 
-app.patch('/api/artifacts/meta', async (req, res) => {
+app.patch('/api/artifacts/meta', requireAdmin, async (req, res) => {
   try {
     const body = req.body || {};
     const result = await artifacts.patchArtifactMeta(body);
@@ -1968,7 +1993,7 @@ app.get('/api/wiki/categories', async (_req, res) => {
   }
 });
 
-app.post('/api/wiki/categories', async (req, res) => {
+app.post('/api/wiki/categories', requireAdmin, async (req, res) => {
   try {
     const body = req.body || {};
     const result = await wikiStore.createCategory({
@@ -1986,7 +2011,7 @@ app.post('/api/wiki/categories', async (req, res) => {
   }
 });
 
-app.patch('/api/wiki/categories/:id', async (req, res) => {
+app.patch('/api/wiki/categories/:id', requireAdmin, async (req, res) => {
   try {
     const id = parseHistoryId(req.params.id);
     if (!id) {
@@ -2012,7 +2037,7 @@ app.patch('/api/wiki/categories/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/wiki/categories/:id', async (req, res) => {
+app.delete('/api/wiki/categories/:id', requireAdmin, async (req, res) => {
   try {
     const id = parseHistoryId(req.params.id);
     if (!id) {
@@ -2080,6 +2105,7 @@ app.get('/api/artifacts/raw', (req, res) => {
 });
 
 registerVolatilityRoutes(app);
+registerAccountSettingsRoutes(app, accountSettingsStore);
 
 /** ?profile=principal|secundaria (por defecto el activo). */
 app.get('/api/mt5/health', async (req, res) => {
@@ -2200,6 +2226,12 @@ app.post('/api/mt5/push', async (req, res) => {
     const rejection = await runWindowRejection(body.historyId);
     if (rejection) return res.status(409).json({ status: 'skipped', message: rejection });
   }
+  const profileId = mt5Settings.getActive();
+  const dailyLimit = await tradeLimitStatus(profileId);
+  if (dailyLimit.reached) {
+    const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
+    return res.status(429).json({ status: 'skipped', message: dailyLimit.message, profile, dailyLimit });
+  }
   const outcome = await pushSignalToMt5({ key, market, summary, overrides, anyVerdict });
   if (!overrides.dry_run && currentJob.summary === summary) {
     currentJob.mt5 = outcome;
@@ -2219,7 +2251,17 @@ app.get('/api/mt5/sent', async (_req, res) => {
     profile: { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] },
     sent: mt5Sent.historyMap(profileId),
     runnable: await runnableHistory().catch(() => null),
+    dailyLimit: await tradeLimitStatus(profileId),
   });
+});
+
+/** Operaciones de hoy / límite diario del perfil activo (o ?profile=). */
+app.get('/api/mt5/daily-limit', async (req, res) => {
+  const profile = typeof req.query.profile === 'string' && req.query.profile ? req.query.profile : mt5Settings.getActive();
+  if (!mt5Settings.PROFILES.includes(profile)) {
+    return res.status(400).json({ error: `profile debe ser ${mt5Settings.PROFILES.join(' | ')}` });
+  }
+  res.json({ profile, ...(await tradeLimitStatus(profile)) });
 });
 
 /**
@@ -2479,6 +2521,10 @@ app.post('/api/mt5/manual', async (req, res) => {
   if (!order) return res.status(400).json({ status: 'error', message: error, profile });
 
   const dryRun = body.dryRun === true;
+  const dailyLimit = await tradeLimitStatus(profileId);
+  if (dailyLimit.reached) {
+    return res.status(429).json({ status: 'skipped', message: dailyLimit.message, order, profile, dailyLimit });
+  }
   try {
     const result = await mt5.pushOrder(order, { clientId: 'manual', dry_run: dryRun }, settings);
     const how = { market: 'mercado', pending: 'LIMIT', stop: 'STOP' }[result.mode] || result.mode;
@@ -2691,6 +2737,7 @@ void Promise.all([
   historyStore.init(),
   wikiStore.init(),
   macdQuantStore.init(),
+  accountSettingsStore.init({ legacy: mt5Settings.get() }),
 ])
   .then(() => {
     app.listen(PORT, BIND_HOST, () => {

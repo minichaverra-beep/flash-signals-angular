@@ -49,6 +49,8 @@ describe('API /api/history/:id con candado', () => {
   let base;
   let id;
   let pastId;
+  /** Borrados requieren sesión admin (Bearer). */
+  let admin;
 
   async function call(method, url, body, headers = {}) {
     const res = await fetch(`${base}${url}`, {
@@ -96,10 +98,15 @@ describe('API /api/history/:id con candado', () => {
         HISTORY_DATA_DIR: tempDir,
         CURSOR_TRADING_ROOT: tempDir,
         HISTORY_UNLOCK_PASSWORD: PASSWORD,
+        ADMIN_PASSWORD: 'test-admin',
+        ADMIN_PASSWORD_HASH: '',
+        ADMIN_TOKEN_SECRET: 'k'.repeat(48),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     await waitForListening(child);
+    const login = await call('POST', '/api/auth/login', { username: 'admin', password: 'test-admin' });
+    admin = { Authorization: `Bearer ${login.body.token}` };
   });
 
   after(async () => {
@@ -127,10 +134,10 @@ describe('API /api/history/:id con candado', () => {
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
         mime: 'image/png',
       }),
-      await call('DELETE', `/api/history/${id}/result-image`),
+      await call('DELETE', `/api/history/${id}/result-image`, undefined, admin),
       await call('POST', `/api/history/${id}/auto-capture`, {}),
       await call('POST', `/api/history/${id}/mt5-pnl`, {}),
-      await call('DELETE', `/api/history/${id}`, undefined, { 'X-History-Unlock': PASSWORD }),
+      await call('DELETE', `/api/history/${id}`, undefined, { 'X-History-Unlock': PASSWORD, ...admin }),
     ];
     for (const r of rejected) {
       assert.equal(r.status, 423);
@@ -159,7 +166,7 @@ describe('API /api/history/:id con candado', () => {
       await call('PATCH', `/api/history/${pastId}`, { comment: 'x' }),
       await call('POST', `/api/history/${pastId}/auto-capture`, {}),
       await call('POST', `/api/history/${pastId}/mt5-pnl`, {}),
-      await call('DELETE', `/api/history/${pastId}/result-image`),
+      await call('DELETE', `/api/history/${pastId}/result-image`, undefined, admin),
     ]) {
       assert.equal(r.status, 423);
     }

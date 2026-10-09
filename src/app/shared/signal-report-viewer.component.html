@@ -297,7 +297,7 @@
         <div class="collapsible-body">
           <p class="card-hint muted hide-on-phone">Imagen generada por el pipeline para esta corrida.</p>
           <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
-            <img class="rapida-chart" [src]="chartHref" alt="Gráfico de la señal" />
+            <img class="rapida-chart" appZoomImage [src]="chartHref" alt="Gráfico de la señal" />
           </a>
           <p class="path chart-link">
             <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
@@ -644,7 +644,7 @@
           <summary>Gráfico</summary>
           <div class="collapsible-body">
             <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
-              <img class="rapida-chart" [src]="chartHref" alt="Gráfico de la señal" />
+              <img class="rapida-chart" appZoomImage [src]="chartHref" alt="Gráfico de la señal" />
             </a>
             <p class="path chart-link">
               <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>

@@ -89,8 +89,18 @@ function historyMap(profile) {
   return out;
 }
 
+/** Todos los envíos de un perfil → { [clave sin perfil]: entry }. */
+function entriesFor(profile) {
+  const prefix = keyOf(profile, '');
+  const out = {};
+  for (const [k, v] of Object.entries(state())) {
+    if (k.startsWith(prefix)) out[k.slice(prefix.length)] = v;
+  }
+  return out;
+}
+
 function _resetForTests() {
   cache = null;
 }
 
-module.exports = { has, get, entryOf, record, update, historyMap, _resetForTests };
+module.exports = { has, get, entryOf, record, update, historyMap, entriesFor, _resetForTests };

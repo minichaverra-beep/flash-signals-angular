@@ -1,10 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { Subject, Subscription, of } from 'rxjs';
+import { Subject, Subscription, forkJoin, of } from 'rxjs';
 import { catchError, debounceTime, switchMap } from 'rxjs/operators';
 import {
+  AccountSettings,
+  Mt5DailyLimit,
   Mt5Health,
   Mt5ProfileId,
   Mt5Settings,
@@ -33,6 +35,8 @@ import {
   riskRewardBar,
   thermometer,
 } from './volatility.helpers';
+import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
+import { DeviceService } from '../../services/device.service';
 
 type LotMode = 'risk' | 'fixed';
 type MultKey = 'vixMultLow' | 'vixMultNormal' | 'vixMultHigh' | 'vixMultExtreme';
@@ -52,12 +56,28 @@ const PROFILE_IDS: Mt5ProfileId[] = ['principal', 'secundaria'];
 @Component({
   selector: 'app-configuracion',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, AdminLoginComponent],
   templateUrl: './configuracion.component.html',
   styleUrl: './configuracion.component.scss',
 })
 export class ConfiguracionComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
+  /** APK o pantalla pequeña: sin secciones MT5, solo balance y % de riesgo para el lote recomendado. */
+  readonly mt5Hidden = inject(DeviceService).mt5Hidden;
+
+  /** Balance y % de riesgo guardados en la BD (/api/account-settings). */
+  account: AccountSettings | null = null;
+  /** Input del balance (móvil y escritorio); tras guardar se rellena con la respuesta del servidor. */
+  accountBalance: number | null = null;
+  balanceSaving = false;
+  /** Gestión de riesgo (móvil): % de riesgo (BD + perfil activo) y límite diario (perfil activo). */
+  mobileRiskPct: number | null = null;
+  mobileTradeLimitEnabled = true;
+  mobileMaxTrades: number | null = null;
+  mobileSaving = false;
+
+  /** Operaciones de hoy del perfil activo frente a su límite diario. */
+  dailyLimit: Mt5DailyLimit | null = null;
 
   readonly profileIds = PROFILE_IDS;
   /** Perfiles visibles en la pantalla (la «secundaria» está oculta; sigue existiendo en el backend). */
@@ -118,6 +138,11 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   private readonly calcRequests = new Subject<void>();
   private calcSub: Subscription | null = null;
   private calcSeeded = false;
+
+  /** La calculadora usa el puente MT5: solo se lanza al volver a escritorio. */
+  private readonly mt5VisibleEffect = effect(() => {
+    if (!this.mt5Hidden() && this.state) untracked(() => this.scheduleCalc());
+  });
 
   ngOnInit(): void {
     this.calcSub = this.calcRequests
@@ -183,6 +208,8 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         this.state = s;
         for (const id of PROFILE_IDS) this.drafts[id] = this.toDraft(s.profiles[id]);
         this.editing = this.visibleProfileIds.includes(s.active) ? s.active : this.visibleProfileIds[0];
+        this.syncMobileRisk(s);
+        this.loadDailyLimit();
         this.health = null;
         if (!this.calcSeeded) {
           this.calcSeeded = true;
@@ -193,6 +220,54 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       error: (err: unknown) => {
         this.loading = false;
         this.showMessage(this.errMsg(err, 'No se pudo leer la configuración (¿API arrancada?).'), true);
+      },
+    });
+    this.loadAccount();
+  }
+
+  private loadAccount(): void {
+    this.api.accountSettings().subscribe({
+      next: (a) => this.applyAccount(a),
+      error: (err: unknown) =>
+        this.showMessage(this.errMsg(err, 'No se pudo leer el balance guardado (¿API reiniciada?).'), true),
+    });
+  }
+
+  private applyAccount(a: AccountSettings): void {
+    this.account = a;
+    this.accountBalance = a.balance;
+    if (a.riskPct != null) this.mobileRiskPct = a.riskPct;
+  }
+
+  get balanceValid(): boolean {
+    const b = this.accountBalance;
+    return b != null && Number.isFinite(Number(b)) && b > 0;
+  }
+
+  /** El % de riesgo del perfil activo también alimenta el lote recomendado (BD); no toca el input del balance. */
+  private syncAccountRisk(riskPct: number): void {
+    if (this.account?.riskPct === riskPct) return;
+    this.api.accountSettingsSave({ riskPct }).subscribe({
+      next: (a) => (this.account = a),
+      error: (err: unknown) =>
+        this.showMessage(this.errMsg(err, 'Configuración guardada, pero no se pudo actualizar el % de riesgo del lote recomendado.'), true),
+    });
+  }
+
+  /** Escritorio: guarda solo el balance (el % de riesgo va en «Tamaño de la posición»). */
+  saveBalance(): void {
+    if (this.balanceSaving || !this.balanceValid) return;
+    this.balanceSaving = true;
+    this.api.accountSettingsSave({ balance: Number(this.accountBalance) }).subscribe({
+      next: (a) => {
+        this.balanceSaving = false;
+        this.account = a;
+        this.accountBalance = a.balance;
+        this.showMessage('Balance guardado.', false);
+      },
+      error: (err: unknown) => {
+        this.balanceSaving = false;
+        this.showMessage(this.errMsg(err, 'No se pudo guardar el balance.'), true);
       },
     });
   }
@@ -213,6 +288,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       next: (s) => {
         this.switching = false;
         if (this.state) this.state = { ...this.state, active: s.active };
+        this.loadDailyLimit();
         this.showMessage(`Las operaciones MT5 usarán ahora ${this.label(s.active)}.`, false);
       },
       error: (err: unknown) => {
@@ -250,7 +326,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   }
 
   noLimitsWarning(f: Mt5Settings): string {
-    const missing = [!f.maxTradesPerDay && 'operaciones', !f.maxDailyDrawdownPct && 'drawdown'].filter(Boolean);
+    const missing = [!f.dailyTradeLimitEnabled && 'operaciones', !f.maxDailyDrawdownPct && 'drawdown'].filter(Boolean);
     return `⚠ Sin límite diario de ${missing.join(' ni de ')} configurado.`;
   }
 
@@ -285,6 +361,68 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     this.scheduleCalc();
   }
 
+  private syncMobileRisk(s: Mt5SettingsState): void {
+    const p = s.profiles[s.active];
+    this.mobileRiskPct = this.account?.riskPct ?? p.riskPct;
+    this.mobileTradeLimitEnabled = p.dailyTradeLimitEnabled;
+    this.mobileMaxTrades = p.maxTradesPerDay;
+  }
+
+  private loadDailyLimit(): void {
+    this.api.mt5DailyLimit().subscribe({
+      next: (r) => (this.dailyLimit = r),
+      error: () => (this.dailyLimit = null),
+    });
+  }
+
+  tradeCountText(dl: Mt5DailyLimit): string {
+    if (!dl.enabled) return `Operaciones hoy: ${dl.count} (sin límite)`;
+    return `Operaciones hoy: ${dl.count} / ${dl.limit}${dl.reached ? ' · límite alcanzado' : ''}`;
+  }
+
+  get mobileRiskValid(): boolean {
+    const r = this.mobileRiskPct;
+    const m = this.mobileMaxTrades;
+    const maxOk = !this.mobileTradeLimitEnabled || (m != null && Number.isInteger(m) && m >= 1 && m <= 100);
+    return this.balanceValid && r != null && r > 0 && r <= 5 && maxOk;
+  }
+
+  /**
+   * «Gestión de riesgo (móvil)»: balance y % de riesgo en la BD; % de riesgo y límite diario
+   * también en el perfil activo (envío a MT5 desde el PC).
+   */
+  saveMobileRisk(): void {
+    const st = this.state;
+    if (!st || this.mobileSaving || !this.mobileRiskValid) return;
+    const profile = st.active;
+    const riskPct = Number(this.mobileRiskPct);
+    this.mobileSaving = true;
+    const settings: Mt5SettingsPatch = {
+      riskPct,
+      dailyTradeLimitEnabled: this.mobileTradeLimitEnabled,
+    };
+    if (this.mobileTradeLimitEnabled) settings.maxTradesPerDay = this.mobileMaxTrades!;
+    forkJoin({
+      account: this.api.accountSettingsSave({ balance: Number(this.accountBalance), riskPct }),
+      mt5: this.api.mt5SettingsSave({ profile, settings }),
+    })
+      .subscribe({
+        next: ({ account, mt5: s }) => {
+          this.mobileSaving = false;
+          this.state = s;
+          this.drafts[profile] = this.toDraft(s.profiles[profile]);
+          this.applyAccount(account);
+          this.syncMobileRisk(s);
+          this.loadDailyLimit();
+          this.showMessage('Balance guardado. Riesgo y límite diario actualizados.', false);
+        },
+        error: (err: unknown) => {
+          this.mobileSaving = false;
+          this.showMessage(this.errMsg(err, 'No se pudo guardar el balance.'), true);
+        },
+      });
+  }
+
   save(): void {
     const d = this.draft;
     if (!d || this.saving) return;
@@ -299,7 +437,8 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       deviationPoints: f.deviationPoints,
       allowMultiple: f.allowMultiple,
       reversalsEnabled: f.reversalsEnabled,
-      maxTradesPerDay: f.maxTradesPerDay,
+      dailyTradeLimitEnabled: f.dailyTradeLimitEnabled,
+      ...(f.dailyTradeLimitEnabled ? { maxTradesPerDay: f.maxTradesPerDay } : {}),
       maxDailyDrawdownPct: f.maxDailyDrawdownPct,
       extraSlPips: f.extraSlPips,
       extraTpPips: f.extraTpPips,
@@ -324,6 +463,10 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         this.saving = false;
         this.state = s;
         this.drafts[profile] = this.toDraft(s.profiles[profile]);
+        if (s.active === profile) {
+          this.loadDailyLimit();
+          this.syncAccountRisk(s.profiles[profile].riskPct);
+        }
         const inUse = s.active === profile ? ' Es el perfil activo: se usará en el próximo envío.' : '';
         this.showMessage(`${this.label(profile)} guardada.${inUse}`, false);
       },
@@ -467,6 +610,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   // --- Calculadora de volatilidad ---
 
   scheduleCalc(): void {
+    if (this.mt5Hidden()) return;
     this.calcRequests.next();
   }
 

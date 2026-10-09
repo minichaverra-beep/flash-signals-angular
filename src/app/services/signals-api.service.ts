@@ -302,13 +302,36 @@ export interface Mt5Runnable {
   windowMinutes: number;
 }
 
+/** Operaciones de hoy (envíos MT5 + señales ganada/perdida de hoy) frente al límite diario del perfil. */
+export interface Mt5DailyLimit {
+  enabled: boolean;
+  limit: number | null;
+  count: number;
+  remaining: number | null;
+  reached: boolean;
+  day: string;
+  tz: string;
+  message: string | null;
+}
+
 export interface Mt5SentState {
   profile: { id: 'principal' | 'secundaria'; label: string };
   sent: Record<number, Mt5SentEntry>;
   runnable: Mt5Runnable | null;
+  dailyLimit?: Mt5DailyLimit;
 }
 
 export type Mt5SignalMarket = 'btc' | 'us30' | 'xauusd';
+
+/** Balance y % de riesgo de la cuenta (SQLite, /api/account-settings): lote recomendado en Señales. */
+export interface AccountSettings {
+  balance: number | null;
+  currency: string;
+  riskPct: number | null;
+  updatedAt: string | null;
+}
+
+export type AccountSettingsPatch = Partial<Pick<AccountSettings, 'balance' | 'riskPct' | 'currency'>>;
 
 /** Configuración MT5 (pantalla Configuración). El token nunca vuelve del servidor: solo hasToken. */
 export interface Mt5Settings {
@@ -317,14 +340,18 @@ export interface Mt5Settings {
   symbols: Record<Mt5SignalMarket, string>;
   riskPct: number;
   volume: number | null;
+  /** Balance (USD) introducido a mano para el lote recomendado en móvil/APK; null = sin configurar. */
+  accountBalance: number | null;
   maxDeviationPct: number;
   expiryMinutes: number;
   deviationPoints: number;
   allowMultiple: boolean;
   /** Señales con setup REVERSE (por defecto desactivadas). */
   reversalsEnabled: boolean;
-  /** Límites diarios; 0 = sin límite. */
+  /** Límite de operaciones por día (activo por defecto, 1–100). */
+  dailyTradeLimitEnabled: boolean;
   maxTradesPerDay: number;
+  /** Drawdown diario máx. (%); 0 = sin límite. */
   maxDailyDrawdownPct: number;
   /** Margen extra sobre SL/TP de la señal, en pips. */
   extraSlPips: number;
@@ -515,6 +542,11 @@ export class SignalsApiService {
     return this.http.get<Mt5SentState>(`${this.base}/mt5/sent`);
   }
 
+  mt5DailyLimit(profile?: Mt5ProfileId): Observable<Mt5DailyLimit & { profile: Mt5ProfileId }> {
+    const params: Record<string, string> = profile ? { profile } : {};
+    return this.http.get<Mt5DailyLimit & { profile: Mt5ProfileId }>(`${this.base}/mt5/daily-limit`, { params });
+  }
+
   mt5Recalc(historyId: number): Observable<Mt5RecalcResult> {
     return this.http.post<Mt5RecalcResult>(`${this.base}/mt5/recalc`, { historyId });
   }
@@ -533,6 +565,14 @@ export class SignalsApiService {
 
   mt5SettingsSave(body: Mt5SettingsSaveRequest): Observable<Mt5SettingsState> {
     return this.http.patch<Mt5SettingsState>(`${this.base}/mt5/settings`, body);
+  }
+
+  accountSettings(): Observable<AccountSettings> {
+    return this.http.get<AccountSettings>(`${this.base}/account-settings`);
+  }
+
+  accountSettingsSave(body: AccountSettingsPatch): Observable<AccountSettings> {
+    return this.http.put<AccountSettings>(`${this.base}/account-settings`, body);
   }
 
   mt5Health(profile?: Mt5ProfileId): Observable<Mt5Health> {

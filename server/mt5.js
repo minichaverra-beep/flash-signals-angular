@@ -5,6 +5,7 @@
  */
 const mt5Settings = require('./mt5-settings');
 const { applyVolatilityToStops } = require('./volatility');
+const { effectiveTradeLimit } = require('./mt5-daily-limit');
 
 const TIMEOUT_MS = 15000;
 
@@ -20,7 +21,7 @@ function tradeDefaults(settings) {
     expiry_minutes: settings.expiryMinutes,
     deviation_points: settings.deviationPoints,
     allow_multiple: settings.allowMultiple,
-    max_trades_per_day: settings.maxTradesPerDay || undefined,
+    max_trades_per_day: effectiveTradeLimit(settings) || undefined,
     max_daily_dd_pct: settings.maxDailyDrawdownPct || undefined,
   };
 }

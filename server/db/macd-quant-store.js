@@ -14,6 +14,9 @@ const MARKETS = new Set(['btc', 'us30', 'xauusd', 'ukoil']);
 /** Baseline documentado (soft-filter); no se inventan métricas WR/PF. */
 const DEFAULT_PARAMS = { fast: 12, slow: 26, signal: 9 };
 
+/** Análisis más recientes que se conservan por mercado; el resto se borra (fila + PNG). */
+const KEEP_PER_MARKET = 4;
+
 function getDataDir() {
   return (
     process.env.MACD_QUANT_DATA_DIR ||
@@ -308,7 +311,33 @@ async function insertAnalysis(snap) {
     ]);
   }
 
+  await pruneOld(market);
+
   return { id, pngName };
+}
+
+/**
+ * Borra análisis antiguos dejando los KEEP_PER_MARKET más recientes por mercado.
+ * @param {string|null} [onlyMarket] si se indica, poda solo ese mercado
+ */
+async function pruneOld(onlyMarket = null, keep = KEEP_PER_MARKET) {
+  const e = await getEngine();
+  const markets = onlyMarket ? [onlyMarket] : [...MARKETS];
+  let deleted = 0;
+  for (const market of markets) {
+    const stale = e.all(
+      `SELECT id FROM macd_quant_history
+       WHERE market = ?
+       ORDER BY created_at DESC, id DESC
+       LIMIT -1 OFFSET ?`,
+      [market, keep]
+    );
+    for (const row of stale || []) {
+      const r = await deleteById(row.id);
+      deleted += r.deleted;
+    }
+  }
+  return { deleted };
 }
 
 /**
@@ -428,11 +457,17 @@ async function clearAll() {
 async function init() {
   await getEngine();
   ensureChartsDir();
+  const { deleted } = await pruneOld();
+  if (deleted) {
+    console.log(`[macd-quant] historial podado: ${deleted} análisis antiguos borrados`);
+  }
 }
 
 module.exports = {
   init,
   insertAnalysis,
+  pruneOld,
+  KEEP_PER_MARKET,
   listAnalyses,
   getById,
   getChartFile,

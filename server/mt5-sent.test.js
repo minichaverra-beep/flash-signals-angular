@@ -38,4 +38,11 @@ describe('mt5-sent', () => {
     assert.deepEqual(Object.keys(map), ['7']);
     assert.equal(map[7].order, 1);
   });
+
+  it('entriesFor devuelve todos los envíos del perfil sin el prefijo', () => {
+    sent.record('principal', 'h7', { order: 1 });
+    sent.record('principal', 'rxauusd1700000000', { order: 2 });
+    sent.record('secundaria', 'h8', { order: 3 });
+    assert.deepEqual(Object.keys(sent.entriesFor('principal')).sort(), ['h7', 'rxauusd1700000000']);
+  });
 });

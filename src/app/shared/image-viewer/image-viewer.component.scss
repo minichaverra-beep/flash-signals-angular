@@ -1,0 +1,206 @@
+:host {
+  display: contents;
+}
+
+.iv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgb(0 0 0 / 0.94);
+  overscroll-behavior: contain;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  animation: iv-fade 0.15s ease-out;
+}
+
+/* El escenario ocupa el área segura completa: su centro es el centro de la imagen sin transformar. */
+.iv-stage {
+  position: absolute;
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.iv-img {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  touch-action: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  cursor: zoom-in;
+
+  &.is-animating {
+    transition: transform 0.22s ease-out;
+  }
+}
+
+.iv-stage.is-zoomed .iv-img {
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.iv-error {
+  position: absolute;
+  max-width: var(--phone-max-w);
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgb(205 24 24 / 0.85);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.iv-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: calc(env(safe-area-inset-top, 0px) + 0.5rem) calc(env(safe-area-inset-right, 0px) + 0.5rem) 1.25rem
+    calc(env(safe-area-inset-left, 0px) + 0.5rem);
+  background: linear-gradient(rgb(0 0 0 / 0.7), transparent);
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
+  }
+}
+
+.iv-zoom-btns {
+  display: flex;
+  gap: 0.35rem;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.iv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  background: rgb(20 12 12 / 0.78);
+  color: #fff;
+  font: 600 1rem var(--font, sans-serif);
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+
+  &:hover {
+    border-color: var(--gold, #ffd700);
+  }
+
+  &:active {
+    background: rgb(255 255 255 / 0.22);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--gold, #ffd700);
+    outline-offset: 2px;
+  }
+}
+
+.iv-btn-text {
+  font-size: 0.85rem;
+}
+
+.iv-close {
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
+  padding: 0;
+  font-size: 1.5rem;
+}
+
+.iv-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+  margin: 0;
+  padding: 0 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgb(255 255 255 / 0.78);
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+  animation: iv-hint 3.5s ease forwards;
+}
+
+.iv-hint-mouse {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .iv-hint-touch {
+    display: none;
+  }
+
+  .iv-hint-mouse {
+    display: inline;
+  }
+}
+
+/* En táctil sobran +/−: el pinch y el doble tap ya lo cubren y dejan sitio al botón cerrar. */
+@media (pointer: coarse) {
+  .iv-zoom-btns {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iv-overlay,
+  .iv-hint {
+    animation: none;
+  }
+
+  .iv-img.is-animating {
+    transition: none;
+  }
+}
+
+@keyframes iv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes iv-hint {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

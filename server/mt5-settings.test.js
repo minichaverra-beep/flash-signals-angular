@@ -41,6 +41,40 @@ describe('mt5-settings', () => {
     assert.equal(s.expiryMinutes, 0);
   });
 
+  it('balance de la cuenta: null por defecto, > 0 al guardar y "" lo borra', () => {
+    assert.equal(settings.get().accountBalance, null);
+    settings.update({ accountBalance: 5000 });
+    settings._resetForTests();
+    assert.equal(settings.get().accountBalance, 5000);
+    assert.throws(() => settings.update({ accountBalance: 0 }), (err) => err.status === 400);
+    assert.throws(() => settings.update({ accountBalance: -10 }), (err) => err.status === 400);
+    settings.update({ accountBalance: '' });
+    assert.equal(settings.get().accountBalance, null);
+  });
+
+  it('límite diario de operaciones: activo por defecto con 6, toggle y rango 1–100', () => {
+    assert.equal(settings.get().dailyTradeLimitEnabled, true);
+    assert.equal(settings.get().maxTradesPerDay, 6);
+    settings.update({ dailyTradeLimitEnabled: false, maxTradesPerDay: 4 });
+    settings._resetForTests();
+    assert.equal(settings.get().dailyTradeLimitEnabled, false);
+    assert.equal(settings.get().maxTradesPerDay, 4);
+    assert.throws(() => settings.update({ maxTradesPerDay: 0 }), (err) => err.status === 400);
+    assert.throws(() => settings.update({ maxTradesPerDay: 2.5 }), (err) => err.status === 400);
+    assert.throws(() => settings.update({ dailyTradeLimitEnabled: 'si' }), (err) => err.status === 400);
+  });
+
+  it('límite diario: un 0 antiguo (sin límite) en el archivo pasa al valor por defecto', () => {
+    fs.writeFileSync(
+      process.env.MT5_SETTINGS_PATH,
+      JSON.stringify({ active: 'principal', profiles: { principal: { maxTradesPerDay: 0 }, secundaria: { maxTradesPerDay: 15 } } })
+    );
+    settings._resetForTests();
+    assert.equal(settings.get('principal').maxTradesPerDay, 6);
+    assert.equal(settings.get('principal').dailyTradeLimitEnabled, true);
+    assert.equal(settings.get('secundaria').maxTradesPerDay, 15);
+  });
+
   it('rechaza valores fuera de rango sin guardar nada', () => {
     assert.throws(
       () => settings.update({ riskPct: 9, symbols: { btc: 'BTC USD' }, bridgeUrl: 'http://10.0.0.5:8765' }),

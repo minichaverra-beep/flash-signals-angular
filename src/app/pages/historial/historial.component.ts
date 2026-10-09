@@ -14,6 +14,7 @@ import {
   Mt5OrderResult,
   Mt5PushOutcome,
   Mt5Runnable,
+  Mt5DailyLimit,
   Mt5PositionLeg,
   Mt5PositionParams,
   Mt5SentEntry,
@@ -51,9 +52,14 @@ import {
 } from './historial-export';
 import { isAutoLocked, isEffectivelyLocked, isPastDay } from './historial-lock';
 import { ShotCaption, shotCaption } from './historial-shot-caption';
+import { ImageViewerService } from '../../shared/image-viewer/image-viewer.service';
 import { canShowParams } from './historial-params-visibility';
+import { LotSuggestion, recommendedLot } from './historial-lot-size';
 import { SignalJobService, jobKind } from '../../services/signal-job.service';
 import { SignalRunFormComponent } from '../../shared/signal-run-form.component';
+import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
+import { AuthService } from '../../services/auth.service';
+import { DeviceService } from '../../services/device.service';
 import { Subscription } from 'rxjs';
 
 export type ExportFormat = 'excel' | 'pdf';
@@ -84,9 +90,10 @@ const AUTO_CAPTURE_KEY = 'historial.autoCapture';
 
 function readAutoCapture(): boolean {
   try {
-    return localStorage.getItem(AUTO_CAPTURE_KEY) === '1';
+    // Sin preferencia guardada (APK/teléfono: otro origen, otro localStorage) → activada.
+    return localStorage.getItem(AUTO_CAPTURE_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -127,6 +134,7 @@ const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 /** Color por defecto de chips Dirección / Confluencias (coincide con seed SQLite). */
 const DEFAULT_TAG_COLOR = '#4b5563';
+const DETAIL_HISTORY_FLAG = '__fsHistorialDetail';
 
 /** Campos del candado que devuelve el API tras cualquier cambio de la fila. */
 function lockFields(u: HistoryListItem): Partial<HistoryListItem> {
@@ -142,13 +150,26 @@ function lockFields(u: HistoryListItem): Partial<HistoryListItem> {
 @Component({
   selector: 'app-historial',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, SignalReportViewerComponent, SignalRunFormComponent],
+  imports: [CommonModule, RouterLink, RouterLinkActive, SignalReportViewerComponent, SignalRunFormComponent, AdminLoginComponent],
   templateUrl: './historial.component.html',
   styleUrl: './historial.component.scss',
 })
 export class HistorialComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
   private readonly jobs = inject(SignalJobService);
+  private readonly imageViewer = inject(ImageViewerService);
+  /** Botones de borrar solo visibles con sesión admin. */
+  readonly isAdmin = inject(AuthService).isAdmin;
+  /** APK o pantalla pequeña: sin acciones MT5 (Run, Parámetros, Duplicar, Recalcular). */
+  readonly mt5Hidden = inject(DeviceService).mt5Hidden;
+  /** «Ver detalle» (ojo) a pantalla completa, sin scroll del body y cerrable con Atrás. */
+  readonly isMobileOrApk = inject(DeviceService).isMobileOrApk;
+  private detailHistoryPushed = false;
+  private readonly onDetailPopState = (): void => {
+    if (!this.detailHistoryPushed || history.state?.[DETAIL_HISTORY_FLAG]) return;
+    this.detailHistoryPushed = false;
+    this.closeDetail();
+  };
   private finishedSub?: Subscription;
   /** Tras terminar una corrida: bajar a la tabla cuando llegue la lista recargada. */
   private scrollToListAfterLoad = false;
@@ -215,7 +236,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
   drawerOpen = false;
   /** Panel detalle a pantalla amplia (vs drawer estrecho). */
   detailExpanded = true;
-  lightboxUrl: string | null = null;
 
   /** Dataset completo del filtro actual (todas las páginas) para métricas. */
   metricsItems: HistoryListItem[] = [];
@@ -233,6 +253,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   mt5ProfileLabel = '';
   /** Solo la última señal es ejecutable, y solo dentro de su ventana (30 min). */
   mt5Runnable: Mt5Runnable | null = null;
+  /** Operaciones de hoy frente al límite diario del perfil activo. */
+  dailyLimit: Mt5DailyLimit | null = null;
   /** Reloj para deshabilitar Run al vencer la ventana sin recargar. */
   nowMs = Date.now();
   private clockTimer?: ReturnType<typeof setInterval>;
@@ -288,6 +310,9 @@ export class HistorialComponent implements OnInit, OnDestroy {
    * no se bloquea nada y decide el servidor.
    */
   reversalsEnabled: boolean | null = null;
+  /** Balance y % de riesgo de la cuenta (BD, Configuración) para el lote recomendado en móvil. */
+  accountBalance: number | null = null;
+  riskPct: number | null = null;
   readonly reversalsBlockedTip = 'Activa las reversiones en Configuración';
   /** Expuesto al template (evita literales duplicados / $any). */
   readonly defaultTagColor = DEFAULT_TAG_COLOR;
@@ -316,6 +341,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.removeDocClickClose = () =>
       document.removeEventListener('click', onDocClick, true);
     this.clockTimer = setInterval(() => (this.nowMs = Date.now()), 15_000);
+    window.addEventListener('popstate', this.onDetailPopState);
   }
 
   @HostListener('document:keydown.escape')
@@ -336,10 +362,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
       this.cancelUnlock();
       return;
     }
-    if (this.lightboxUrl) {
-      this.closeLightbox();
-      return;
-    }
     if (this.drawerOpen) {
       this.closeDetail();
       return;
@@ -354,6 +376,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.stopParamsRefresh();
     this.removeDocClickClose?.();
     this.finishedSub?.unsubscribe();
+    window.removeEventListener('popstate', this.onDetailPopState);
+    document.body.style.removeProperty('overflow');
   }
 
   @HostListener('document:paste', ['$event'])
@@ -420,6 +444,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
         this.mt5Sent = r.sent ?? {};
         this.mt5ProfileLabel = r.profile?.label ?? '';
         this.mt5Runnable = r.runnable ?? null;
+        this.dailyLimit = r.dailyLimit ?? null;
         this.nowMs = Date.now();
       },
       error: (err: unknown) => console.warn('[historial] envíos MT5 opcionales:', err),
@@ -440,9 +465,20 @@ export class HistorialComponent implements OnInit, OnDestroy {
     return !!r && this.nowMs <= Date.parse(r.expiresAt);
   }
 
+  /** Límite diario de operaciones alcanzado: Run no envía más órdenes hoy. */
+  dailyLimitReached(): boolean {
+    return !!this.dailyLimit?.reached;
+  }
+
+  dailyLimitText(): string {
+    const d = this.dailyLimit;
+    return d?.enabled ? `Operaciones hoy: ${d.count} / ${d.limit}` : '';
+  }
+
   runTip(): string {
     const r = this.mt5Runnable;
     if (!r) return '';
+    if (this.dailyLimitReached()) return `${this.dailyLimit!.message}. Vuelve mañana o sube el límite en Configuración.`;
     if (!this.runWindowOpen()) return `Pasaron más de ${r.windowMinutes} min desde la señal: ya no se puede ejecutar.`;
     const left = Math.max(1, Math.ceil((Date.parse(r.expiresAt) - this.nowMs) / 60_000));
     return `Envía a MT5 la entrada óptima con SL y TP · quedan ${left} min`;
@@ -474,6 +510,16 @@ export class HistorialComponent implements OnInit, OnDestroy {
   private static readonly PARAMS_REFRESH_MS = 15_000;
 
   /** «⚙ Parámetros» solo mientras alguna pata siga viva, sin resultado ganada/perdida y fila no bloqueada. */
+  lotSuggestion(item: HistoryListItem): LotSuggestion | null {
+    return recommendedLot({
+      market: item.market,
+      entry: item.plannedEntry,
+      sl: item.plannedSl,
+      balance: this.accountBalance,
+      riskPct: this.riskPct,
+    });
+  }
+
   canShowParams(item: HistoryListItem, s: Mt5SentEntry | null | undefined): boolean {
     return canShowParams(item.resultado, s, this.isLocked(item));
   }
@@ -618,7 +664,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   openRun(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
-    if (this.sentInfo(item) || !this.canRunOperation(item) || !this.runWindowOpen()) return;
+    if (this.sentInfo(item) || !this.canRunOperation(item) || !this.runWindowOpen() || this.dailyLimitReached()) return;
     this.runItem = item;
     this.runPreview = null;
     this.runError = '';
@@ -832,10 +878,26 @@ export class HistorialComponent implements OnInit, OnDestroy {
   private loadReversalsSetting(): void {
     this.api.mt5Settings().subscribe({
       next: (s) => {
-        this.reversalsEnabled = !!s.profiles?.[s.active]?.reversalsEnabled;
+        const p = s.profiles?.[s.active];
+        this.reversalsEnabled = !!p?.reversalsEnabled;
+        this.riskPct ??= p?.riskPct ?? null;
       },
       error: () => {
         this.reversalsEnabled = null;
+      },
+    });
+    this.loadAccountSettings();
+  }
+
+  /** Balance y % de riesgo guardados en la BD (Configuración) para el lote recomendado. */
+  private loadAccountSettings(): void {
+    this.api.accountSettings().subscribe({
+      next: (a) => {
+        this.accountBalance = a.balance;
+        if (a.riskPct != null) this.riskPct = a.riskPct;
+      },
+      error: () => {
+        this.accountBalance = null;
       },
     });
   }
@@ -1332,10 +1394,14 @@ export class HistorialComponent implements OnInit, OnDestroy {
     const next: HistoryResultado | null =
       raw === 'ganada' || raw === 'perdida' || raw === 'no_tomada' ? raw : null;
     if ((item.resultado || null) === next) return;
-    const auto = this.autoCapture && (next === 'ganada' || next === 'perdida') ? next : null;
-    const onSaved = auto
-      ? () => this.runMt5Pnl(item.id, auto, () => this.runAutoCapture(item, auto))
-      : undefined;
+    const closed = next === 'ganada' || next === 'perdida' ? next : null;
+    const auto = this.autoCapture ? closed : null;
+    let onSaved: (() => void) | undefined;
+    if (auto) {
+      onSaved = () => this.runMt5Pnl(item.id, auto, () => this.runAutoCapture(item, auto));
+    } else if (closed && !item.hasResultImage) {
+      onSaved = () => this.showRunToast(`#${item.id}: Auto captura desactivada · actívala arriba o usa Adjuntar`);
+    }
     this.patchItem(item, { resultado: next }, onSaved);
   }
 
@@ -1572,23 +1638,29 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   openLightbox(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
-    const url = this.resultImageUrl(item);
-    if (url) this.lightboxUrl = url;
+    this.imageViewer.open(this.resultImageUrl(item), 'Captura del resultado');
   }
 
   openDetailImageLightbox(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
-    const url = this.detailImageUrl(item);
-    if (url) this.lightboxUrl = url;
-  }
-
-  closeLightbox(): void {
-    this.lightboxUrl = null;
+    this.imageViewer.open(this.detailImageUrl(item), 'Captura detalle');
   }
 
   openDetail(item: HistoryListItem): void {
     this.drawerOpen = true;
     this.detailExpanded = true;
+    if (this.isMobileOrApk()) {
+      document.body.style.overflow = 'hidden';
+      if (!this.detailHistoryPushed) {
+        try {
+          const state = history.state && typeof history.state === 'object' ? history.state : {};
+          history.pushState({ ...state, [DETAIL_HISTORY_FLAG]: true }, '');
+          this.detailHistoryPushed = true;
+        } catch {
+          this.detailHistoryPushed = false;
+        }
+      }
+    }
     this.detail = null;
     this.detailLoading = true;
     this.detailMode = 'rapida';
@@ -1602,7 +1674,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
       error: (err: unknown) => {
         this.detailLoading = false;
         this.error = this.errMsg(err, 'No se pudo abrir el detalle');
-        this.drawerOpen = false;
+        this.closeDetail();
       },
     });
   }
@@ -1622,6 +1694,11 @@ export class HistorialComponent implements OnInit, OnDestroy {
     this.detail = null;
     this.detailExpanded = true;
     this.dropActive = false;
+    document.body.style.removeProperty('overflow');
+    if (this.detailHistoryPushed) {
+      this.detailHistoryPushed = false;
+      history.back();
+    }
   }
 
   deleteOne(item: HistoryListItem, ev?: Event): void {

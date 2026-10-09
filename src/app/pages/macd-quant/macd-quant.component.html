@@ -5,7 +5,6 @@
       <div>
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>MACD-quant</h1>
-        <p class="sub hide-on-phone">Soft-filter E1 · timeframe <strong>H4</strong> · nunca trigger solo</p>
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
@@ -17,18 +16,10 @@
   </header>
 
   <section class="intro" aria-labelledby="macd-title">
-    <p class="kicker hide-on-phone">Filtro de confluencia · Module quant · H4</p>
-    <h2 id="macd-title">Mini-indicador MACD · régimen H4 · E1 M5</h2>
-    <p class="lead hide-on-phone">
-      Oscilador en <strong>H4</strong> (semana de mercado) cableado como
-      <strong>soft-filter</strong> en High/Advanced (máx. +1.0 pts). La entrada E1
-      sigue siendo H1/CTR + zona + 2M5 — el MACD <em>nunca</em> dispara ENTRAR por sí solo.
+    <h2 id="macd-title">MACD · Macro H4</h2>
+    <p class="lead">
+      Gráfico macro en H4 (última semana) para ver la tendencia general del mercado.
     </p>
-    <div class="chips" aria-label="Estado">
-      <span class="chip teal">confluence_filter · H4</span>
-      <span class="chip warn hide-on-phone">WR / PF · PENDING</span>
-      <span class="chip fire">nunca trigger solo</span>
-    </div>
   </section>
 
   <section class="block chart-block" aria-labelledby="chart-title">
@@ -37,7 +28,7 @@
         @if (viewingHistory && selectedDetail) {
           Análisis guardado #{{ selectedDetail.id }} · H4
         } @else {
-          Mini-chart live · H4
+          Gráfico H4
         }
       </h2>
       <div class="head-actions">
@@ -66,19 +57,13 @@
         </button>
       </div>
     </div>
-    <p class="block-lead hide-on-phone">
-      @if (viewingHistory && selectedDetail) {
-        Preservado el
+    @if (viewingHistory && selectedDetail) {
+      <p class="block-lead hide-on-phone">
+        Guardado el
         <strong>{{ selectedDetail.createdAt | date: 'yyyy-MM-dd HH:mm' }}</strong>
-        · ventana {{ selectedDetail.days ?? 7 }}d · MACD
-        {{ formatParams(selectedDetail) }} · soft-filter (nunca trigger solo).
-      } @else {
-        Escaneo de la <strong>semana</strong> en H4 (~42 barras). PNG en
-        <code>CURSOR_TRADING_ROOT/live/*_h4_macd_quant.png</code> vía
-        <code>/api/signals/macd-chart</code>. Soft-filter: nunca trigger solo.
-        Cada «Nuevo análisis» se guarda en el historial local.
-      }
-    </p>
+        · ventana {{ selectedDetail.days ?? 7 }}d · MACD {{ formatParams(selectedDetail) }}
+      </p>
+    }
     @if (analyzeMessage) {
       <p class="analyze-status" [class.err]="job?.status === 'error'" role="status">
         {{ analyzeMessage }}
@@ -91,6 +76,7 @@
       <a class="chart-link" [href]="chartUrl()" target="_blank" rel="noopener">
         <img
           class="macd-chart"
+          appZoomImage
           [src]="chartUrl()"
           [alt]="'MACD-quant ' + market + ' H4'"
           (error)="onChartError()"
@@ -120,10 +106,6 @@
       <h2 id="hist-title">Historial preservado · {{ marketLabel() }}</h2>
       <!-- Oculto: botón «Actualizar» (loadHistory) -->
     </div>
-    <p class="block-lead hide-on-phone">
-      Análisis guardados en SQLite local (copia durable del PNG). Soft-filter E1 —
-      WR/PF siguen <span class="pending">PENDING</span>; no se inventan métricas.
-    </p>
     @if (historyError) {
       <p class="analyze-status err" role="alert">{{ historyError }}</p>
     }
@@ -161,55 +143,6 @@
         }
       </ul>
     }
-  </section>
-
-  <section class="block dual-info hide-on-phone" aria-labelledby="uso-title">
-    <article class="card">
-      <h2 id="uso-title">Cómo regenerar el PNG</h2>
-      <p>
-        Desde la raíz de Cursor Trading (mismo entorno Python del pipeline), o con el botón
-        <strong>Nuevo análisis</strong> arriba:
-      </p>
-      <pre class="cmd">{{ plotCmd }}</pre>
-      <p class="note">
-        Salida: <code>live/btc_h4_macd_quant.png</code> (o us30 / xau). Fuente: M5→H4
-        (no hay parquet H4 nativo). Entradas E1 no cambian (siguen en M5).
-      </p>
-    </article>
-    <article class="card">
-      <h2>Rol en confluencia</h2>
-      <ul class="rules">
-        <li><strong>Sí:</strong> soft points H4 + flag <code>macd_soft_filter_ok</code> (máx. +1.0).</li>
-        <li><strong>Sí:</strong> features candidatas ML (tras backtest OOS).</li>
-        <li><strong>No:</strong> trigger / ENTRAR solo por cruce MACD H4.</li>
-        <li><strong>No:</strong> inventar WR/PF — backtest sigue <span class="pending">PENDING</span>.</li>
-      </ul>
-      <p class="note">
-        Tabla avanzada: fila «MACD-quant (filtro)». Cableado en
-        <code>compute_confluencia_setup</code> + <code>attach_macd_quant_to_data</code> (H4).
-      </p>
-    </article>
-  </section>
-
-  <section class="block links hide-on-phone" aria-labelledby="docs-title">
-    <h2 id="docs-title">Documentación</h2>
-    <div class="link-grid">
-      <a class="link-card" [href]="artifactRawUrl" target="_blank" rel="noopener">
-        <h3>Artifact HTML</h3>
-        <p>Brief quant con inventario real + mini-chart embebido.</p>
-        <span class="path">docs/Artifacts/{{ artifactPath }}</span>
-      </a>
-      <a class="link-card" routerLink="/wiki" [queryParams]="{}" fragment="">
-        <h3>Wiki / Artefactos</h3>
-        <p>Ábrelo en la Wiki (escanea <code>docs/Artifacts</code>) y busca «MACD» o la fecha 2026-09-24.</p>
-        <span class="path">{{ wikiHint }}</span>
-      </a>
-      <div class="link-card static">
-        <h3>Brief Markdown</h3>
-        <p>Contrato soft-filter H4 §6 · hipótesis · checklist.</p>
-        <span class="path">{{ mdPath }}</span>
-      </div>
-    </div>
   </section>
 
   <footer class="foot hide-on-phone">

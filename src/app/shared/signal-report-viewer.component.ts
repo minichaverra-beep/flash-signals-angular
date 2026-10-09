@@ -38,6 +38,7 @@ import {
   statusMark,
   type InstagramFormat,
 } from './score-image-export';
+import { ZoomImageDirective } from './image-viewer/zoom-image.directive';
 
 const INSTAGRAM_FORMAT_OPTIONS = (Object.keys(INSTAGRAM_SIZES) as InstagramFormat[]).map((id) => ({
   id,
@@ -49,7 +50,7 @@ export type ReportViewMode = 'trader' | 'inversor' | 'rapida';
 @Component({
   selector: 'app-signal-report-viewer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ZoomImageDirective],
   templateUrl: './signal-report-viewer.component.html',
   styleUrl: './signal-report-viewer.component.scss',
 })

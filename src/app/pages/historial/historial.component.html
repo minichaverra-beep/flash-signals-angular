@@ -6,6 +6,7 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Señales de trading</h1>
         <p class="sub hide-on-phone">Creado por: Danilo Chaverra</p>
+        <app-admin-login class="hero-admin" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
@@ -260,7 +261,7 @@
                   </div>
                   <div class="calc-change-actions" *ngIf="editingMarkerId !== row.marker.id">
                     <button type="button" class="ghost sm" (click)="startEditMarker(row.marker, $event)">Editar comentario</button>
-                    <button type="button" class="ghost sm danger-text" (click)="deleteCalcMarker(row.marker, $event)">Borrar barra</button>
+                    <button type="button" class="ghost sm danger-text" *ngIf="isAdmin()" (click)="deleteCalcMarker(row.marker, $event)">Borrar barra</button>
                   </div>
                 </div>
               </td>
@@ -273,7 +274,7 @@
                 <button type="button" class="ghost sm icon-btn" title="Ver detalle" aria-label="Ver detalle" (click)="openDetail(item)">
                   <ng-container *ngTemplateOutlet="eyeIcon"></ng-container>
                 </button>
-                <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
+                <button type="button" class="ghost sm danger-text" *ngIf="isAdmin()" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
               </div>
             </td>
             <td class="ticket-cell">
@@ -294,20 +295,63 @@
               >{{ biasText(itemBias(item)) }}</span>
             </td>
             <td class="run-cell" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-              <!-- Oculto: bloque «✓ Enviada #… / estado · USD / + duplicada / ⚙ Parámetros · ⧉ Duplicar · ↻ Recalcular» -->
-              <ng-container *ngIf="sentInfo(item); else runBtn"></ng-container>
+              <ng-container *ngIf="sentInfo(item) as s; else runBtn">
+                <div class="run-sent-wrap">
+                  <span class="run-sent has-tip" [attr.data-tooltip]="sentTip(s)">
+                    ✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small>
+                  </span>
+                  <span class="run-state muted tiny" *ngIf="sentStateLabel(s) as st">
+                    {{ st }}<ng-container *ngIf="s.profit != null"> · {{ s.profit | number:'1.2-2' }} USD</ng-container>
+                  </span>
+                  <span class="run-state muted tiny" *ngIf="s.duplicate as d">
+                    + duplicada<ng-container *ngIf="d.order"> #{{ d.order }}</ng-container><ng-container *ngIf="sentStateLabel(d) as dst"> · {{ dst }}</ng-container><ng-container *ngIf="d.profit != null"> · {{ d.profit | number:'1.2-2' }} USD</ng-container>
+                  </span>
+                  <ng-container *ngIf="mt5Hidden()">
+                    <ng-container *ngTemplateOutlet="lotBox; context: { $implicit: item }"></ng-container>
+                  </ng-container>
+                  <div class="run-sent-actions" *ngIf="!mt5Hidden()">
+                    <button
+                      type="button"
+                      class="params-btn sm has-tip"
+                      data-tooltip="Objetivo, SL actual en dinero y pips, R:R y flotante (se actualiza solo y con Recalcular)"
+                      *ngIf="canShowParams(item, s)"
+                      (click)="openParams(item, $event)"
+                    >⚙ Parámetros</button>
+                    <button
+                      type="button"
+                      class="dup-btn sm has-tip"
+                      *ngIf="canDuplicate(s)"
+                      [attr.data-tooltip]="duplicateTip(s)"
+                      [disabled]="mt5DuplicateBusy.has(item.id) || isLocked(item)"
+                      (click)="duplicateOperation(item, $event)"
+                    >{{ mt5DuplicateBusy.has(item.id) ? 'Duplicando…' : '⧉ Duplicar' }}</button>
+                    <button
+                      type="button"
+                      class="recalc-btn sm has-tip"
+                      data-tooltip="Lee la orden en MT5 y reajusta Entrada/SL/TP en el historial (y Resultado/$PnL si ya cerró)"
+                      [disabled]="mt5RecalcBusy.has(item.id) || isLocked(item)"
+                      (click)="recalcOperation(item, $event)"
+                    >{{ mt5RecalcBusy.has(item.id) ? 'Recalculando…' : '↻ Recalcular' }}</button>
+                  </div>
+                </div>
+              </ng-container>
               <ng-template #runBtn>
-                <span *ngIf="canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip()">
+                <span *ngIf="!mt5Hidden() && canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip()">
                   <button
                     type="button"
                     class="run-btn sm"
                     [attr.data-tone]="runTone(item)"
-                    [disabled]="!runWindowOpen() || runItem?.id === item.id"
+                    [disabled]="!runWindowOpen() || dailyLimitReached() || runItem?.id === item.id"
                     (click)="openRun(item, $event)"
                   >▶ Run</button>
                 </span>
               </ng-template>
-              <ng-template #noRun><span class="muted tiny">—</span></ng-template>
+              <ng-template #noRun>
+                <ng-container *ngIf="mt5Hidden(); else noRunDash">
+                  <ng-container *ngTemplateOutlet="lotBox; context: { $implicit: item }"></ng-container>
+                </ng-container>
+                <ng-template #noRunDash><span class="muted tiny">—</span></ng-template>
+              </ng-template>
             </td>
             <td class="prob-cell">
               <div
@@ -560,7 +604,7 @@
           <pre *ngIf="row.marker.comment" class="calc-change-pre">{{ row.marker.comment }}</pre>
           <div class="calc-change-actions">
             <button type="button" class="ghost sm" (click)="startEditMarker(row.marker, $event)">Editar</button>
-            <button type="button" class="ghost sm danger-text" (click)="deleteCalcMarker(row.marker, $event)">Borrar</button>
+            <button type="button" class="ghost sm danger-text" *ngIf="isAdmin()" (click)="deleteCalcMarker(row.marker, $event)">Borrar</button>
           </div>
           <div class="calc-change-edit" *ngIf="editingMarkerId === row.marker.id">
             <label class="annotate-label" [attr.for]="'calc-marker-edit-m-' + row.marker.id">Comentario del cambio</label>
@@ -813,6 +857,7 @@
         </div>
         <div class="card-actions">
           <span class="run-sent" *ngIf="sentInfo(item) as s">✓ Enviada<small *ngIf="s.order"> #{{ s.order }}</small><small *ngIf="s.duplicate?.order"> + #{{ s.duplicate?.order }}</small></span>
+          <ng-container *ngIf="!mt5Hidden()">
           <button
             type="button"
             class="params-btn sm"
@@ -839,15 +884,19 @@
             class="run-btn sm"
             [attr.data-tone]="runTone(item)"
             *ngIf="!sentInfo(item) && canRunOperation(item)"
-            [disabled]="!runWindowOpen() || runItem?.id === item.id"
+            [disabled]="!runWindowOpen() || dailyLimitReached() || runItem?.id === item.id"
             [attr.title]="runTip()"
             (click)="openRun(item, $event)"
           >▶ Run</button>
+          </ng-container>
+          <ng-container *ngIf="mt5Hidden()">
+            <ng-container *ngTemplateOutlet="lotBox; context: { $implicit: item }"></ng-container>
+          </ng-container>
           <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: item }"></ng-container>
           <button type="button" class="ghost sm icon-btn" title="Ver detalle" aria-label="Ver detalle" (click)="openDetail(item)">
             <ng-container *ngTemplateOutlet="eyeIcon"></ng-container>
           </button>
-          <button type="button" class="ghost sm danger-text" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
+          <button type="button" class="ghost sm danger-text" *ngIf="isAdmin()" [disabled]="isLocked(item)" (click)="deleteOne(item, $event)">Borrar</button>
         </div>
       </article>
       </ng-container>
@@ -1055,6 +1104,7 @@
   <aside
     class="drawer"
     [class.expanded]="detailExpanded"
+    [class.mobile]="isMobileOrApk()"
     *ngIf="drawerOpen"
     aria-label="Detalle de historial"
   >
@@ -1070,6 +1120,7 @@
           <ng-container *ngTemplateOutlet="lockBtn; context: { $implicit: d }"></ng-container>
         </ng-container>
         <button
+          *ngIf="!isMobileOrApk()"
           type="button"
           class="ghost"
           (click)="toggleDetailExpand()"
@@ -1216,7 +1267,7 @@
               (click)="openLightbox(d)"
             >Ampliar</button>
             <button
-              *ngIf="d.hasResultImage"
+              *ngIf="d.hasResultImage && isAdmin()"
               type="button"
               class="ghost sm danger-text"
               [disabled]="isImageBlocked(d)"
@@ -1266,18 +1317,6 @@
       </p>
     </ng-container>
   </aside>
-
-  <!-- Lightbox captura -->
-  <div class="lightbox" *ngIf="lightboxUrl">
-    <button
-      type="button"
-      class="lightbox-scrim"
-      aria-label="Cerrar captura ampliada"
-      (click)="closeLightbox()"
-    ></button>
-    <button type="button" class="ghost lightbox-close" (click)="closeLightbox()">Cerrar</button>
-    <img [src]="lightboxUrl" alt="Captura del resultado" />
-  </div>
 
   <!-- Nueva barra de cambio de cálculo -->
   <button
@@ -1584,6 +1623,25 @@
 <ng-template #ticketCell let-item>
   #{{ item.id }}
   <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>
+</ng-template>
+
+<!-- APK / pantalla pequeña: lote recomendado en lugar de las acciones MT5. -->
+<ng-template #lotBox let-item>
+  <div class="lot-box" role="note" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+    <ng-container *ngIf="accountBalance; else lotNoBalance">
+      <ng-container *ngIf="lotSuggestion(item) as lot; else lotNoData">
+        <span class="lot-main">Lote recomendado: <strong>{{ lot.lots | number:'1.2-2' }}</strong></span>
+        <small class="lot-risk">Riesgo ${{ lot.riskUsd | number:'1.0-2' }} ({{ riskPct }}%)</small>
+        <small class="lot-warn" *ngIf="lot.belowMin">Lote mínimo: riesgo real ${{ lot.realRiskUsd | number:'1.0-2' }}</small>
+      </ng-container>
+      <ng-template #lotNoData><span class="lot-main">Lote recomendado: —</span></ng-template>
+    </ng-container>
+    <ng-template #lotNoBalance>
+      <span class="lot-main">Configura el balance en <a routerLink="/configuracion">Configuración</a></span>
+    </ng-template>
+    <small class="lot-count" *ngIf="dailyLimitText() && !dailyLimitReached()">{{ dailyLimitText() }}</small>
+    <small class="lot-warn" *ngIf="dailyLimitReached()" role="alert">⚠ {{ dailyLimit?.message }}: no abras más operaciones hoy</small>
+  </div>
 </ng-template>
 
 <!-- Candado por fila (tabla, tarjeta móvil y panel detalle): manual o por día anterior. -->

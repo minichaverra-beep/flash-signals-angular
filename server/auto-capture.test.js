@@ -365,6 +365,18 @@ describe('runAutoCapture', () => {
     assert.equal(spawnFn.calls.length, 2);
   });
 
+  it('timeout → mata el script y devuelve un error claro (no «salida inválida»)', async () => {
+    const workDir = mkWorkDir();
+    const spawnFn = fakeSpawn((child) => {
+      child.kill = () => child.emit('close', null);
+    });
+    const r = await runAutoCapture({ input, tradingRoot: workDir, spawnFn, workDir, timeoutMs: 20 });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'timeout');
+    assert.match(r.error, /tardó más de 0 s/);
+    assert.equal(spawnFn.calls.length, 1);
+  });
+
   it('exige workDir explícito', async () => {
     await assert.rejects(runAutoCapture({ input, tradingRoot: '.' }), /workDir/);
   });

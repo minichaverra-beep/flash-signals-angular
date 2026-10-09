@@ -292,6 +292,21 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.equal(list.total, 2);
   });
 
+  it('listTakenSince: solo ganada/perdida creadas desde la fecha', async () => {
+    const won = await store.insertSnapshot(sampleSnap());
+    const lost = await store.insertSnapshot(sampleSnap());
+    const skipped = await store.insertSnapshot(sampleSnap());
+    await store.insertSnapshot(sampleSnap());
+    await store.updateAnnotation(won.id, { resultado: 'ganada' });
+    await store.updateAnnotation(lost.id, { resultado: 'perdida' });
+    await store.updateAnnotation(skipped.id, { resultado: 'no_tomada' });
+    const since = new Date(Date.now() - 3600_000).toISOString();
+    const taken = await store.listTakenSince(since);
+    assert.deepEqual(taken.map((r) => r.id).sort((a, b) => a - b), [won.id, lost.id]);
+    assert.equal(typeof taken[0].createdAt, 'string');
+    assert.deepEqual(await store.listTakenSince(new Date(Date.now() + 3600_000).toISOString()), []);
+  });
+
   it('updateAnnotation guarda comment y resultado (ganada/perdida/no_tomada)', async () => {
     const { id } = await store.insertSnapshot(sampleSnap());
     const a = await store.updateAnnotation(id, {

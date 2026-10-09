@@ -78,6 +78,15 @@
   font-size: 0.75rem;
 }
 
+.field small.err-text {
+  color: #ff8a80;
+}
+
+.mobile-risk-panel .grid > button {
+  align-self: end;
+  min-height: 2.5rem;
+}
+
 .check {
   display: flex !important;
   align-items: center;
@@ -185,6 +194,16 @@
   font-weight: 700;
 }
 
+.trade-count {
+  margin: 0.35rem 0 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-count.reached {
+  color: color-mix(in srgb, var(--fire) 80%, white);
+}
+
 .unlock-backdrop {
   position: fixed;
   inset: 0;
@@ -205,10 +224,13 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(460px, calc(100vw - 2rem));
-  max-width: none;
-  max-height: calc(100vh - 2rem);
+  width: min(460px, var(--phone-max-w));
+  max-width: var(--phone-max-w);
+  max-height: var(--phone-max-h);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   margin: 0;
   color: inherit;
   padding: 1.25rem 1.35rem 1.35rem;
@@ -226,9 +248,14 @@
 
 .unlock-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.unlock-actions > * {
+  min-width: 0;
 }
 
 .unlock-actions button {
@@ -300,6 +327,35 @@
 .switch:focus-visible + .has-tip::after {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Teléfono: el ::after invisible (max-content + left:0) ensanchaba la página; solo existe activo y como banda inferior. */
+@media (max-width: 768px) {
+  .has-tip:not(:hover):not(:focus-visible)::after {
+    display: none;
+  }
+
+  .switch:focus-visible + .has-tip::after {
+    display: block;
+  }
+
+  .has-tip::after {
+    position: fixed;
+    top: auto;
+    left: calc(var(--phone-gutter) + env(safe-area-inset-left, 0px));
+    right: calc(var(--phone-gutter) + env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 150;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  .has-tip:hover::after,
+  .has-tip:focus-visible::after,
+  .switch:focus-visible + .has-tip::after {
+    transform: none;
+  }
 }
 
 .sr-only {
@@ -503,7 +559,9 @@ code {
   bottom: 1.25rem;
   z-index: 50;
   transform: translateX(-50%);
-  max-width: min(640px, calc(100vw - 2rem));
+  width: max-content;
+  max-width: min(640px, var(--phone-max-w));
+  overflow-wrap: anywhere;
   margin: 0;
   padding: 0.65rem 1rem;
   border-radius: 10px;
@@ -658,8 +716,51 @@ code {
   font-size: 0.9rem;
 }
 
+.mobile-vix-panel {
+  .vix-box {
+    padding: 0.75rem;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+
+  .vix-points {
+    font-size: 2.1rem;
+  }
+
+  .thermo-zone {
+    font-size: 0.6rem;
+    text-overflow: clip;
+  }
+}
+
+.vix-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.35rem 0.6rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    opacity: 0.75;
+  }
+
+  li.current {
+    opacity: 1;
+  }
+}
+
 .level-table-wrap {
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .level-table {

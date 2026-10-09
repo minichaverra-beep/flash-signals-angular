@@ -6,6 +6,7 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Wiki</h1>
         <p class="sub hide-on-phone">Artefactos Cursor AI en <code>docs/Artifacts</code> · meta local SQLite</p>
+        <app-admin-login class="hero-admin" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
@@ -30,6 +31,7 @@
       <button
         type="button"
         class="ghost"
+        *ngIf="isAdmin()"
         (click)="showCatManager = !showCatManager"
         [class.active-toggle]="showCatManager"
       >
@@ -43,7 +45,7 @@
 
   <p class="msg err" *ngIf="error">{{ error }}</p>
 
-  <div class="cat-manager panel" *ngIf="showCatManager">
+  <div class="cat-manager panel" *ngIf="showCatManager && isAdmin()">
     <h2>Categorías</h2>
     <p class="muted tiny hide-on-phone">Se guardan en <code>data/wiki-meta.sqlite</code> (solo esta máquina).</p>
     <form class="cat-create" (ngSubmit)="createCategory(false)">
@@ -120,13 +122,14 @@
           class="ghost icon-btn"
           title="Nueva categoría"
           aria-label="Nueva categoría"
+          *ngIf="isAdmin()"
           (click)="openQuickCreate({ assignAfter: false }, $event)"
         >
           +
         </button>
       </div>
 
-      <div class="quick-create" *ngIf="quickCreateOpen && !catPickerOpen" (click)="$event.stopPropagation()">
+      <div class="quick-create" *ngIf="quickCreateOpen && !catPickerOpen && isAdmin()" (click)="$event.stopPropagation()">
         <label class="sr-only" for="quickCatSide">Nueva categoría</label>
         <input
           id="quickCatSide"
@@ -193,7 +196,7 @@
                   <span class="muted tiny hide-on-phone">{{ item.path }} · {{ formatSize(item.size) }}</span>
                 </span>
               </button>
-              <div class="artifact-more" (click)="$event.stopPropagation()">
+              <div class="artifact-more" *ngIf="isAdmin()" (click)="$event.stopPropagation()">
                 <button
                   type="button"
                   class="ghost icon-btn more-btn"
@@ -254,6 +257,7 @@
               <button
                 type="button"
                 class="ghost tiny-btn"
+                *ngIf="isAdmin()"
                 (click)="startEditTitle()"
                 title="Editar nombre de display"
               >
@@ -297,6 +301,7 @@
             <div class="bias-actions">
               <label class="cat-label" for="artifact-bias">Dirección</label>
               <select
+                *ngIf="isAdmin()"
                 id="artifact-bias"
                 class="bias-select"
                 [ngModel]="artifactBias(selected) || 'auto'"
@@ -326,7 +331,7 @@
                   {{ categoryName(selected.categoryId) }}
                 </span>
               </div>
-              <div class="cat-action-btns">
+              <div class="cat-action-btns" *ngIf="isAdmin()">
                 <button
                   type="button"
                   class="ghost accent"
@@ -473,6 +478,7 @@
           <div class="preview-body">
             <article
               class="preview md-body"
+              appZoomImagesIn
               *ngIf="renderedHtml"
               [innerHTML]="renderedHtml"
             ></article>
@@ -487,7 +493,7 @@
             ></iframe>
 
             <div class="img-wrap" *ngIf="imageUrl">
-              <img [src]="imageUrl" [alt]="displayTitle(selected) || 'imagen'" />
+              <img appZoomImage [src]="imageUrl" [alt]="displayTitle(selected) || 'imagen'" />
             </div>
 
             <div class="pdf-wrap" *ngIf="pdfUrl">

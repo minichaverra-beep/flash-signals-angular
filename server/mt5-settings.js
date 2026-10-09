@@ -34,6 +34,8 @@ function defaults() {
     },
     riskPct: envNumber('MT5_RISK_PCT') ?? 0.5,
     volume: envNumber('MT5_VOLUME'),
+    /** Balance (USD) introducido a mano para el lote recomendado en el móvil; null = sin configurar. */
+    accountBalance: null,
     maxDeviationPct: envNumber('MT5_MAX_DEVIATION_PCT') ?? 1,
     /** 0 = la orden LIMIT no caduca (GTC). */
     expiryMinutes: envNumber('MT5_EXPIRY_MINUTES') ?? 0,
@@ -41,8 +43,10 @@ function defaults() {
     allowMultiple: false,
     /** Señales con setup REVERSE: desactivadas salvo que se activen (~25 % de probabilidad). */
     reversalsEnabled: false,
-    /** Límites diarios (día local); 0 = sin límite. */
-    maxTradesPerDay: 0,
+    /** Límite de operaciones por día (día local, HISTORY_TZ); activo por defecto. */
+    dailyTradeLimitEnabled: true,
+    maxTradesPerDay: 6,
+    /** Drawdown diario máx. (%); 0 = sin límite. */
     maxDailyDrawdownPct: 0,
     /** Margen extra sobre el SL/TP de la señal, en pips (0 = niveles exactos de la señal). */
     extraSlPips: 30,
@@ -81,7 +85,7 @@ const NUMBER_FIELDS = {
   deviationPoints: { min: 1, max: 1000, integer: true },
   extraSlPips: { min: 0, max: 10000 },
   extraTpPips: { min: 0, max: 10000 },
-  maxTradesPerDay: { min: 0, max: 100, integer: true },
+  maxTradesPerDay: { min: 1, max: 100, integer: true },
   maxDailyDrawdownPct: { min: 0, max: 100 },
   vixLowMax: { min: 0, max: 200, minExclusive: true },
   vixNormalMax: { min: 0, max: 200, minExclusive: true },
@@ -144,6 +148,10 @@ const FIELD_VALIDATORS = {
     if (raw === null || raw === '') return null;
     return numberIn(errors, 'volume', raw, { min: 0, max: 100, minExclusive: true });
   },
+  accountBalance(errors, raw) {
+    if (raw === null || raw === '') return null;
+    return numberIn(errors, 'accountBalance', raw, { min: 0, max: 1e9, minExclusive: true });
+  },
   allowMultiple(errors, raw) {
     if (typeof raw === 'boolean') return raw;
     errors.push('allowMultiple: true/false');
@@ -152,6 +160,11 @@ const FIELD_VALIDATORS = {
   reversalsEnabled(errors, raw) {
     if (typeof raw === 'boolean') return raw;
     errors.push('reversalsEnabled: true/false');
+    return undefined;
+  },
+  dailyTradeLimitEnabled(errors, raw) {
+    if (typeof raw === 'boolean') return raw;
+    errors.push('dailyTradeLimitEnabled: true/false');
     return undefined;
   },
   volatilityAdjustEnabled(errors, raw) {

@@ -6,6 +6,7 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Configuración</h1>
         <p class="sub hide-on-phone">Variables para ejecutar señales en MetaTrader 5</p>
+        <app-admin-login class="hero-admin" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
@@ -19,6 +20,121 @@
   <p class="muted" *ngIf="loading"><span class="spinner" aria-hidden="true"></span> Cargando configuración…</p>
 
   <ng-container *ngIf="state as st">
+    <section class="panel mobile-risk-panel" *ngIf="mt5Hidden()">
+      <h2>Gestión de riesgo (móvil)</h2>
+      <p class="muted tiny">Con estos datos Señales muestra el lote recomendado de cada operación.</p>
+      <form class="grid" (ngSubmit)="saveMobileRisk()">
+        <div class="field">
+          <label for="cfg-balance">Balance de la cuenta (USD)</label>
+          <input
+            id="cfg-balance"
+            name="accountBalance"
+            type="number"
+            inputmode="decimal"
+            min="0.01"
+            step="0.01"
+            placeholder="ej. 1000"
+            [(ngModel)]="accountBalance"
+          />
+          <small class="err-text" *ngIf="accountBalance != null && accountBalance <= 0">Debe ser mayor que 0.</small>
+        </div>
+        <div class="field">
+          <label for="cfg-risk-mobile">% riesgo por operación</label>
+          <input
+            id="cfg-risk-mobile"
+            name="mobileRiskPct"
+            type="number"
+            inputmode="decimal"
+            min="0.1"
+            max="5"
+            step="0.1"
+            [(ngModel)]="mobileRiskPct"
+          />
+          <small class="muted">Entre 0,1 % y 5 %. Es el mismo % que usa el envío a MT5 en el PC.</small>
+        </div>
+        <div class="switch-row">
+          <button
+            type="button"
+            class="switch"
+            role="switch"
+            [class.on]="mobileTradeLimitEnabled"
+            [attr.aria-checked]="mobileTradeLimitEnabled"
+            aria-labelledby="cfg-trade-limit-mobile-label"
+            (click)="mobileTradeLimitEnabled = !mobileTradeLimitEnabled"
+          >
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+          <span id="cfg-trade-limit-mobile-label">Límite de operaciones por día</span>
+          <small class="switch-state" [class.on]="mobileTradeLimitEnabled" aria-hidden="true">
+            {{ mobileTradeLimitEnabled ? 'Activado' : 'Desactivado' }}
+          </small>
+        </div>
+        <div class="field">
+          <label for="cfg-max-trades-mobile">Máx. operaciones por día</label>
+          <input
+            id="cfg-max-trades-mobile"
+            name="mobileMaxTrades"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="100"
+            step="1"
+            [disabled]="!mobileTradeLimitEnabled"
+            [(ngModel)]="mobileMaxTrades"
+          />
+          <small class="muted">Cuentan las señales de hoy marcadas como ganada/perdida (y las enviadas a MT5 desde el PC).</small>
+        </div>
+        <p class="trade-count" *ngIf="dailyLimit as dl" [class.reached]="dl.reached" aria-live="polite">
+          {{ tradeCountText(dl) }}
+        </p>
+        <button type="submit" class="primary" [disabled]="mobileSaving || !mobileRiskValid">
+          {{ mobileSaving ? 'Guardando…' : 'Guardar' }}
+        </button>
+      </form>
+    </section>
+
+    <section class="panel vol-panel mobile-vix-panel" *ngIf="mt5Hidden()">
+      <h2>Volatilidad (VIX)</h2>
+      <div class="vix-box">
+        <div class="actions">
+          <button type="button" class="ghost" (click)="calcVix()" [disabled]="vixLoading">
+            <span class="spinner" *ngIf="vixLoading" aria-hidden="true"></span>
+            Calcular VIX actual
+          </button>
+        </div>
+        <p class="msg err" *ngIf="vixError">{{ vixError }}</p>
+
+        <div class="vix-result" *ngIf="vix as v" aria-live="polite">
+          <div class="vix-main">
+            <span class="vix-points">{{ num(v.points) }}</span>
+            <span class="vix-unit">puntos</span>
+            <span class="level-chip" *ngIf="vixLevel as lv" [attr.data-level]="lv">Volatilidad {{ levelLabels[lv] | lowercase }}</span>
+          </div>
+          <div class="thermo" *ngIf="vixThermo as t" aria-hidden="true">
+            <span class="thermo-zone" *ngFor="let z of t.zones" [attr.data-level]="z.level" [style.width.%]="z.widthPct">
+              {{ levelLabels[z.level] }}
+            </span>
+            <span class="thermo-marker" [style.left.%]="t.markerPct"></span>
+          </div>
+          <ul class="vix-legend">
+            <li *ngFor="let row of levelRows" [class.current]="vixLevel === row.level">
+              <span class="level-chip" [attr.data-level]="row.level">{{ levelLabels[row.level] }}</span>
+              <small class="muted">{{ levelRange(row.level) }} · SL/TP ×{{ num(draft?.form?.[row.mult] ?? 1) }}</small>
+            </li>
+          </ul>
+          <p class="vix-effect" *ngIf="vixLevel">
+            Con este nivel el SL/TP se multiplican por <strong>×{{ num(vixMultiplier) }}</strong>.
+          </p>
+          <p class="muted tiny">
+            Fuente: <strong>{{ v.sourceLabel }}</strong> · {{ v.asOf | date: 'dd/MM/yyyy HH:mm' }}
+            <ng-container *ngIf="vixAge">({{ vixAge }})</ng-container>
+            <ng-container *ngIf="v.stale"> · mercado cerrado: es el último cierre</ng-container>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <ng-container *ngIf="!mt5Hidden()">
     <section class="panel active-panel">
       <h2>Configuración para operar en MT5</h2>
       <p class="muted tiny hide-on-phone">Las operaciones que confirmes desde Señales se envían con el perfil seleccionado aquí.</p>
@@ -40,6 +156,30 @@
           </span>
         </button>
       </div>
+    </section>
+
+    <section class="panel">
+      <h2>Balance de la cuenta</h2>
+      <p class="muted tiny hide-on-phone">Se usa para el lote recomendado de cada operación en Señales (móvil).</p>
+      <form class="grid" (ngSubmit)="saveBalance()">
+        <div class="field">
+          <label for="cfg-balance-desktop">Balance de la cuenta (USD)</label>
+          <input
+            id="cfg-balance-desktop"
+            name="accountBalanceDesktop"
+            type="number"
+            inputmode="decimal"
+            min="0.01"
+            step="0.01"
+            placeholder="ej. 1000"
+            [(ngModel)]="accountBalance"
+          />
+          <small class="err-text" *ngIf="accountBalance != null && accountBalance <= 0">Debe ser mayor que 0.</small>
+        </div>
+        <button type="submit" class="primary" [disabled]="balanceSaving || !balanceValid">
+          {{ balanceSaving ? 'Guardando…' : 'Guardar balance' }}
+        </button>
+      </form>
     </section>
 
     <div class="profile-tabs" role="tablist" aria-label="Perfil a editar" *ngIf="visibleProfileIds.length > 1">
@@ -544,15 +684,47 @@
             <li>Las señales con setup <strong>REVERSE</strong> se enviarán a MT5 (también desde Run operation).</li>
             <li>Configura los límites diarios de operaciones y de drawdown para acotar las rachas de pérdidas.</li>
           </ul>
-          <p class="reversal-warning-alert" *ngIf="!d.form.maxTradesPerDay || !d.form.maxDailyDrawdownPct">
+          <p class="reversal-warning-alert" *ngIf="!d.form.dailyTradeLimitEnabled || !d.form.maxDailyDrawdownPct">
             {{ noLimitsWarning(d.form) }}
           </p>
         </div>
+        <div class="switch-row">
+          <button
+            type="button"
+            class="switch"
+            role="switch"
+            [class.on]="d.form.dailyTradeLimitEnabled"
+            [attr.aria-checked]="d.form.dailyTradeLimitEnabled"
+            aria-labelledby="cfg-trade-limit-label"
+            (click)="d.form.dailyTradeLimitEnabled = !d.form.dailyTradeLimitEnabled"
+          >
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+          <span id="cfg-trade-limit-label">Límite de operaciones por día</span>
+          <small class="switch-state" [class.on]="d.form.dailyTradeLimitEnabled" aria-hidden="true">
+            {{ d.form.dailyTradeLimitEnabled ? 'Activado' : 'Desactivado' }}
+          </small>
+        </div>
+        <p class="trade-count" *ngIf="editing === st.active && dailyLimit as dl" [class.reached]="dl.reached" aria-live="polite">
+          {{ tradeCountText(dl) }}
+        </p>
         <div class="grid">
           <div class="field">
-            <label for="cfg-max-trades">Límite de operaciones por día</label>
-            <input id="cfg-max-trades" name="maxTradesPerDay" type="number" min="0" max="100" step="1" [(ngModel)]="d.form.maxTradesPerDay" />
-            <small class="muted hide-on-phone">0 = sin límite. Cuenta las entradas de hoy y las órdenes pendientes abiertas hoy.</small>
+            <label for="cfg-max-trades">Máx. operaciones por día</label>
+            <input
+              id="cfg-max-trades"
+              name="maxTradesPerDay"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              [disabled]="!d.form.dailyTradeLimitEnabled"
+              [(ngModel)]="d.form.maxTradesPerDay"
+            />
+            <small class="muted hide-on-phone">
+              Entre 1 y 100. Cuenta las señales enviadas hoy a MT5 (Run) y las marcadas hoy como ganada/perdida; al
+              llegar al límite no se envían más órdenes hasta mañana. Duplicar no cuenta.
+            </small>
           </div>
           <div class="field">
             <label for="cfg-max-dd">Límite de drawdown de hoy (%)</label>
@@ -578,6 +750,7 @@
         </p>
       </section>
     </form>
+    </ng-container>
   </ng-container>
 
   <!-- Confirmación al activar reversiones -->

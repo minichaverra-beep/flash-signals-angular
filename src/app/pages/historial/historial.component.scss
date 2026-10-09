@@ -772,6 +772,16 @@ button:disabled {
   display: block;
 }
 
+.shot-thumb,
+.result-shot-preview {
+  -webkit-tap-highlight-color: transparent;
+  transition: filter 0.15s ease;
+
+  &:active {
+    filter: brightness(0.82);
+  }
+}
+
 .card-shot {
   display: flex;
   align-items: center;
@@ -1480,8 +1490,7 @@ tr.row-no-tomada:hover > td {
 }
 
 .drawer-backdrop,
-.unlock-backdrop,
-.lightbox-scrim {
+.unlock-backdrop {
   position: fixed;
   inset: 0;
   border: 0;
@@ -1648,58 +1657,6 @@ tr.row-no-tomada:hover > td {
   background: #0a0606;
 }
 
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-  padding: 1.5rem;
-  background: transparent;
-  pointer-events: none;
-}
-
-.lightbox > * {
-  pointer-events: auto;
-}
-
-.lightbox-scrim {
-  z-index: 80;
-  background: color-mix(in srgb, black 78%, transparent);
-  backdrop-filter: blur(4px);
-}
-
-/* `> img` + width/height auto: la imagen conserva su proporción, cabe en el viewport
-   (restando el padding) y queda centrada en cualquier tamaño de pantalla. */
-.lightbox > img {
-  position: relative;
-  z-index: 81;
-  display: block;
-  flex: 0 0 auto;
-  margin: auto;
-  width: auto;
-  height: auto;
-  max-width: min(1100px, 100%);
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
-  background: #0a0606;
-}
-
-.lightbox-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 82;
-}
-
 .unlock-backdrop {
   z-index: 90;
   background: color-mix(in srgb, black 70%, transparent);
@@ -1712,8 +1669,13 @@ tr.row-no-tomada:hover > td {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(420px, calc(100vw - 2rem));
-  max-width: none;
+  width: min(420px, var(--phone-max-w));
+  max-width: var(--phone-max-w);
+  max-height: var(--phone-max-h);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
   margin: 0;
   color: inherit;
   padding: 1.25rem 1.35rem 1.35rem;
@@ -1721,6 +1683,15 @@ tr.row-no-tomada:hover > td {
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
   background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
   box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+}
+
+.unlock-dialog > *,
+.unlock-actions > * {
+  min-width: 0;
+}
+
+.unlock-dialog :is(input, select, textarea) {
+  max-width: 100%;
 }
 
 .unlock-dialog h2 {
@@ -1873,6 +1844,34 @@ tr.row-no-tomada:hover > td {
   cursor: progress;
 }
 
+.lot-box {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 50%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  color: color-mix(in srgb, var(--gold) 80%, white);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.lot-box a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.lot-risk,
+.lot-count {
+  opacity: 0.85;
+}
+
+.lot-warn {
+  color: color-mix(in srgb, var(--accent) 70%, white);
+}
+
 .col-filter {
   position: relative;
   display: inline-block;
@@ -2006,8 +2005,8 @@ tr.row-no-tomada:hover > td {
 }
 
 .params-dialog {
-  width: min(560px, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
+  width: min(560px, var(--phone-max-w));
+  max-height: var(--phone-max-h);
   overflow-y: auto;
 
   .pos { color: var(--ok); }
@@ -2706,6 +2705,30 @@ code {
     height: auto;
   }
 
+  .hist-card {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  /* Tooltips: el ::after invisible (max-content + left:0) ensanchaba la página; en teléfono solo existe
+     mientras está activo y se muestra como banda inferior dentro de la pantalla. */
+  .has-tip:not(:hover):not(:focus-visible)::after {
+    display: none;
+  }
+
+  :is(.has-tip, .hit-rate-row .has-tip, .hit-factor.has-tip, .prob-adv.has-tip)::after {
+    position: fixed;
+    top: auto;
+    left: calc(var(--phone-gutter) + env(safe-area-inset-left, 0px));
+    right: calc(var(--phone-gutter) + env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 150;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
   .unlock-actions {
     flex-wrap: wrap;
   }
@@ -2833,9 +2856,14 @@ code {
     justify-content: center;
   }
 
+  /* Gráficos apaisados (~1.9:1): con 4×3rem + cover se recortaba la caja del resultado. */
   .card-shot .shot-thumb {
-    width: 4rem;
-    height: 3rem;
+    width: 6.5rem;
+    height: 3.45rem;
+  }
+
+  .card-shot .shot-thumb img {
+    object-fit: contain;
   }
 
   .card-shot .shot-caption {
@@ -2860,8 +2888,14 @@ code {
   .tag-menu,
   .tag-menu-confluencias {
     min-width: 0;
-    width: min(20rem, calc(100vw - 3rem));
-    max-width: calc(100vw - 3rem);
+    width: min(20rem, var(--phone-max-w));
+    max-width: var(--phone-max-w);
+  }
+
+  .card-annotate .tag-menu {
+    left: 0;
+    right: 0;
+    width: auto;
   }
 
   /* Acciones de la tarjeta: botones a 2 columnas, insignia «Enviada» en su propia línea. */
@@ -2872,6 +2906,10 @@ code {
   .card-actions .run-sent {
     flex: 1 1 100%;
     justify-content: center;
+  }
+
+  .card-actions .lot-box {
+    flex: 1 1 auto;
   }
 
   .card-actions > button {
@@ -2983,27 +3021,11 @@ code {
     max-height: 60vh;
   }
 
-  .lightbox {
-    padding: 0.5rem;
-  }
-
-  .lightbox > img {
-    max-width: 100%;
-    max-height: 100%;
-  }
-
-  .lightbox-close {
-    top: 0.5rem;
-    right: 0.5rem;
-    min-height: 2.5rem;
-  }
-
   /* Modales (unlock, cambio de cálculo, exportar, Run, Parámetros) */
   .unlock-dialog,
   .params-dialog {
-    width: calc(100vw - 1rem);
-    max-height: calc(100vh - 1rem);
-    max-height: calc(100dvh - 1rem);
+    width: var(--phone-max-w);
+    max-height: var(--phone-max-h);
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 1rem 0.85rem 1.1rem;
@@ -3079,4 +3101,85 @@ code {
     max-width: none;
     font-size: 0.8rem;
   }
+}
+
+/* —— «Ver detalle» (ojo) en teléfono/APK o pantalla baja: toda la altura para el contenido —— */
+@mixin drawer-fullscreen($d) {
+  #{$d},
+  #{$d}.expanded {
+    inset: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 max(0.7rem, env(safe-area-inset-right, 0px)) calc(1.5rem + env(safe-area-inset-bottom, 0px))
+      max(0.7rem, env(safe-area-inset-left, 0px));
+  }
+
+  #{$d} .drawer-head {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.6rem;
+    padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0 0.5rem;
+    background: #1a1010;
+  }
+
+  #{$d} .drawer-head > div:first-child {
+    min-width: 0;
+  }
+
+  #{$d} .drawer-head .eyebrow {
+    margin: 0;
+  }
+
+  #{$d} .drawer-head h2 {
+    margin: 0;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #{$d} .drawer-head-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+
+  #{$d} .drawer-head-actions .ghost {
+    flex: 0 0 auto;
+  }
+
+  #{$d} .mode-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: normal;
+    font-size: 0.8rem;
+  }
+
+  #{$d} ::ng-deep app-signal-report-viewer {
+    .rapida-chart {
+      max-height: 70vh;
+      max-height: 70dvh;
+    }
+
+    pre,
+    .raw-md-pre {
+      max-height: 60vh;
+      max-height: 60dvh;
+    }
+  }
+}
+
+@include drawer-fullscreen('.drawer.mobile');
+
+@media (max-height: 520px) and (pointer: coarse) {
+  @include drawer-fullscreen('.drawer');
 }

@@ -76,6 +76,14 @@ describe('pushDuplicateOrder: exento de los límites diarios', () => {
     assert.equal(calls[0].max_trades_per_day, 3);
     assert.equal(calls[0].max_daily_dd_pct, 4);
   });
+
+  it('con el límite diario desactivado no se envía max_trades_per_day', async () => {
+    const calls = captureBody();
+    const off = { ...settings, dailyTradeLimitEnabled: false };
+    await pushOrder({ symbol: 'BTCUSDm', side: 'LONG', entry: 60000, sl: 59500, tp: 61000 }, { clientId: 'h1' }, off);
+    assert.equal('max_trades_per_day' in calls[0], false);
+    assert.equal(calls[0].max_daily_dd_pct, 4);
+  });
 });
 
 describe('reconcileOrder + combineAnnotations con órdenes expiradas', () => {

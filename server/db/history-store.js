@@ -1138,6 +1138,17 @@ async function getById(id) {
   return detail;
 }
 
+/** Señales con resultado ganada/perdida creadas desde `sinceIso` → [{ id, createdAt, resultado }]. */
+async function listTakenSince(sinceIso) {
+  const e = await getEngine();
+  const rows = e.all(
+    `SELECT id, created_at, resultado FROM signal_history
+     WHERE created_at >= ? AND resultado IN ('ganada', 'perdida')`,
+    [String(sinceIso)]
+  ) || [];
+  return rows.map((r) => ({ id: Number(r.id), createdAt: r.created_at, resultado: r.resultado }));
+}
+
 async function deleteById(id) {
   const e = await getEngine();
   const n = Number(id);
@@ -1759,6 +1770,7 @@ module.exports = {
   insertSnapshot,
   listHistory,
   getById,
+  listTakenSince,
   deleteById,
   updateAnnotation,
   updateMt5Execution,

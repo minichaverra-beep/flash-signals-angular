@@ -10,11 +10,12 @@ import {
   SignalsApiService,
 } from '../../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../../services/signal-job.service';
+import { ZoomImageDirective } from '../../shared/image-viewer/zoom-image.directive';
 
 @Component({
   selector: 'app-macd-quant',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, DatePipe],
+  imports: [RouterLink, RouterLinkActive, DatePipe, ZoomImageDirective],
   templateUrl: './macd-quant.component.html',
   styleUrl: './macd-quant.component.scss',
 })
@@ -47,18 +48,6 @@ export class MacdQuantComponent implements OnInit, OnDestroy {
     { id: 'xauusd', label: 'XAUUSD' },
     { id: 'ukoil', label: 'UKOIL / Petróleo' },
   ];
-
-  readonly artifactPath = '2026-09-24-quant-macd-e1-backtest.html';
-  readonly artifactRawUrl = `/api/artifacts/raw?path=${encodeURIComponent(this.artifactPath)}`;
-  readonly wikiHint = '/wiki';
-
-  readonly mdPath =
-    'D:\\Danilo\\Trading\\Cursor Trading\\docs\\strategy\\TRADING_QUANT_MACD_E1_BACKTEST.md';
-
-  readonly plotCmd = `cd "D:\\Danilo\\Trading\\Cursor Trading"
-python -m scripts.plot_macd_quant --days 7 --force-refresh
-python -m scripts.plot_macd_quant --symbol us30 --days 7 --force-refresh
-python -m scripts.plot_macd_quant --symbol ukoil --days 7 --force-refresh`;
 
   constructor() {
     effect(() => {

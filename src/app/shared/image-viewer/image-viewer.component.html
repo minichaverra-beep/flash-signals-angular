@@ -1,0 +1,37 @@
+@if (viewer.current(); as img) {
+  <div class="iv-overlay" role="dialog" aria-modal="true" [attr.aria-label]="img.alt || 'Imagen ampliada'">
+    <div class="iv-stage" #stage>
+      <img
+        #image
+        class="iv-img"
+        [src]="img.src"
+        [alt]="img.alt"
+        draggable="false"
+        (load)="onImageLoad()"
+        (error)="onImageError()"
+      />
+      @if (loadFailed) {
+        <p class="iv-error" role="alert">No se pudo cargar la imagen.</p>
+      }
+    </div>
+
+    <div class="iv-toolbar">
+      <div class="iv-zoom-btns">
+        <button type="button" class="iv-btn" (click)="zoomOut()" aria-label="Reducir" title="Reducir (-)">−</button>
+        <button type="button" class="iv-btn" (click)="resetZoom()" aria-label="Ajustar a pantalla" title="Ajustar (0)">1x</button>
+        <button type="button" class="iv-btn" (click)="zoomIn()" aria-label="Ampliar" title="Ampliar (+)">+</button>
+      </div>
+      @if (showOpenOriginal) {
+        <a class="iv-btn iv-btn-text" [href]="img.src" target="_blank" rel="noopener">Abrir original</a>
+      }
+      <button #closeBtn type="button" class="iv-btn iv-close" (click)="close()" aria-label="Cerrar imagen" title="Cerrar (Esc)">
+        ✕
+      </button>
+    </div>
+
+    <p class="iv-hint" aria-hidden="true">
+      <span class="iv-hint-touch">Pellizca o toca dos veces para ampliar · Atrás para cerrar</span>
+      <span class="iv-hint-mouse">Rueda para ampliar · arrastra para mover · Esc para cerrar</span>
+    </p>
+  </div>
+}

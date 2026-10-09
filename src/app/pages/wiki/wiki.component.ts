@@ -4,6 +4,7 @@ import {
   HostListener,
   OnDestroy,
   OnInit,
+  effect,
   inject,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -18,6 +19,12 @@ import {
   SignalsApiService,
 } from '../../services/signals-api.service';
 import { biasLabel, biasTone } from '../../shared/signal-report.helpers';
+import { AuthService } from '../../services/auth.service';
+import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
+import {
+  ZoomImageDirective,
+  ZoomImagesInDirective,
+} from '../../shared/image-viewer/zoom-image.directive';
 
 export interface WikiGroup {
   id: number | null;
@@ -29,13 +36,35 @@ export interface WikiGroup {
 @Component({
   selector: 'app-wiki',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    RouterLinkActive,
+    ZoomImageDirective,
+    ZoomImagesInDirective,
+    AdminLoginComponent,
+  ],
   templateUrl: './wiki.component.html',
   styleUrl: './wiki.component.scss',
 })
 export class WikiComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
   private readonly sanitizer = inject(DomSanitizer);
+  /** Gestión (categorías, renombrar, dirección) solo con sesión admin. */
+  readonly isAdmin = inject(AuthService).isAdmin;
+
+  constructor() {
+    effect(() => {
+      if (this.isAdmin()) return;
+      this.showCatManager = false;
+      this.renameCatId = null;
+      this.sidebarMenuPath = null;
+      this.cancelEditTitle();
+      this.closeCatPicker();
+      this.closeQuickCreate();
+    });
+  }
 
   items: ArtifactItem[] = [];
   categories: WikiCategory[] = [];

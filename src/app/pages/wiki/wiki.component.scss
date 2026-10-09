@@ -51,11 +51,13 @@ code {
   box-shadow: 0 8px 28px color-mix(in srgb, black 35%, transparent);
 }
 
-.toolbar.sticky {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 20;
-  backdrop-filter: blur(8px);
+@media (min-width: 1024px) {
+  .toolbar.sticky {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 20;
+    backdrop-filter: blur(8px);
+  }
 }
 
 .search {
@@ -140,6 +142,17 @@ code {
   background: var(--panel-deep);
   border-radius: 10px;
   border: 1px solid transparent;
+}
+
+.cat-list li > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cat-list li > input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cat-swatch {
@@ -266,9 +279,13 @@ code {
 
 .wiki-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) 1fr;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+}
+
+.wiki-layout > * {
+  min-width: 0;
 }
 
 .sidebar {
@@ -417,7 +434,8 @@ code {
   right: 0;
   top: calc(100% + 0.2rem);
   z-index: 30;
-  min-width: 11.5rem;
+  min-width: min(11.5rem, var(--phone-max-w));
+  max-width: var(--phone-max-w);
   display: flex;
   flex-direction: column;
   padding: 0.35rem;
@@ -912,14 +930,17 @@ code {
   }
 }
 
-@media (max-width: 860px) {
-  .wiki-layout {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 1023px) {
   .sidebar {
     position: static;
     max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 860px) {
+  .wiki-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -936,6 +957,10 @@ code {
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
+  }
+
+  .search {
+    flex: 0 0 auto;
   }
 
   .search input,
@@ -966,6 +991,10 @@ code {
 
   .preview-shell.expanded {
     padding: 0.5rem;
+  }
+
+  .preview.md-body {
+    overflow-wrap: anywhere;
   }
 
   .html-frame,

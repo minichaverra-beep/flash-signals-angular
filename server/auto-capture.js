@@ -9,7 +9,11 @@ const { spawn } = require('node:child_process');
 
 const NO_LEVELS_ERROR = 'Sin niveles SL/Entrada/TP para esta señal';
 const AUTO_CAPTURE_MARKETS = new Set(['btc', 'us30', 'xauusd']);
-const TIMEOUT_MS = 120_000;
+/** Android (Ubuntu proot) importa pandas/matplotlib mucho más lento que Windows. */
+const DEFAULT_TIMEOUT_MS = process.platform === 'win32' ? 120_000 : 300_000;
+const TIMEOUT_MS = Number(process.env.AUTO_CAPTURE_TIMEOUT_MS) > 0
+  ? Number(process.env.AUTO_CAPTURE_TIMEOUT_MS)
+  : DEFAULT_TIMEOUT_MS;
 const RESULTADO_LABEL = { ganada: 'Ganada', perdida: 'Perdida' };
 const FILE_BLOCKED_CODE = 'file_blocked';
 const SCRIPT_ATTEMPTS = 2;
@@ -309,7 +313,11 @@ function spawnScript({ py, args, cwd, env, spawnFn, timeoutMs }) {
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const timer = setTimeout(() => child.kill(), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
     const done = (result) => {
       if (settled) return;
       settled = true;
@@ -321,7 +329,9 @@ function spawnScript({ py, args, cwd, env, spawnFn, timeoutMs }) {
     child.stdout?.on('data', (d) => { stdout += d; });
     child.stderr?.on('data', (d) => { stderr += d; });
     child.on('error', (err) => done({ ok: false, spawnError: err, stderr }));
-    child.on('close', () => done({ ok: true, out: parseScriptOutput(stdout), stderr }));
+    child.on('close', () => done(timedOut
+      ? { ok: false, timedOut: true, stderr }
+      : { ok: true, out: parseScriptOutput(stdout), stderr }));
   });
 }
 
@@ -383,6 +393,14 @@ async function runAttempt({ input, tradingRoot, outDir, workDir, py, env, spawnF
   });
   let chartPath = outPath;
   try {
+    if (run.timedOut) {
+      if (run.stderr?.trim()) console.warn('[auto-capture] stderr:', run.stderr.trim().slice(-1500));
+      return {
+        ok: false,
+        error: `La captura tardó más de ${Math.round(timeoutMs / 1000)} s y se canceló (sube AUTO_CAPTURE_TIMEOUT_MS o usa Adjuntar)`,
+        code: 'timeout',
+      };
+    }
     if (!run.ok) {
       console.warn('[auto-capture] spawn:', run.spawnError?.message);
       return { ok: false, error: `No se pudo ejecutar Python (${py}): ${cleanErrorMessage(run.spawnError?.message)}` };
