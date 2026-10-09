@@ -160,7 +160,7 @@ foreach ($k in $checks.Keys) {
 Invoke-Phone shell am start -n com.danilo.flashsignals/.MainActivity | Out-Null
 Write-Host ''
 if ($allOk) {
-  Write-Host 'Teléfono listo. En la app pulsa "3 · Instalar / actualizar" y luego "4 · Iniciar y abrir".' -ForegroundColor Green
+  Write-Host 'Teléfono listo. En la app pulsa el botón dorado ("Instalar Flash Signals"); al terminar arranca sola.' -ForegroundColor Green
 } else {
   Write-Host 'Revisa los puntos marcados con -- (o repite el script).' -ForegroundColor Yellow
 }

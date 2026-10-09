@@ -6,8 +6,9 @@
   1. Compila Angular (dist/) salvo -SkipBuild.
   2. Copia ambos repos sin .git, node_modules ni caches (incluye models/, data/*.parquet y .pt).
   3. Fija versiones Python del PC (scikit-learn/joblib/numpy deben coincidir con los .joblib).
-  4. Genera android\out\flash-android.tar.gz + termux-install.sh.
-  Copia esos dos archivos a la carpeta Download del teléfono.
+  4. Genera android\out\flash-android.tar.gz + termux-install.sh + VERSION (aaaa.MM.dd-HHmm).
+  La app compara VERSION con la instalada y ofrece «Actualizar» solo si es más nueva.
+  Lo habitual es usar release-android.ps1 (empaqueta, compila el APK y lo entrega al teléfono).
   Detén la API (run-api.ps1) antes de empaquetar para que los .sqlite queden consistentes.
 #>
 [CmdletBinding()]
@@ -80,6 +81,9 @@ foreach ($f in 'setup-ubuntu.sh', 'start.sh') {
   Copy-Item (Join-Path $PSScriptRoot $f) (Join-Path $stage $f)
 }
 
+$version = Get-Date -Format 'yyyy.MM.dd-HHmm'
+Write-Lf (Join-Path $stage 'VERSION') @($version)
+
 # bash en Android no tolera CRLF
 Get-ChildItem $stage -Recurse -File -Include *.sh, *.bash | ForEach-Object {
   $text = [IO.File]::ReadAllText($_.FullName) -replace "`r`n", "`n"
@@ -95,12 +99,12 @@ if ($LASTEXITCODE -ne 0) { throw "tar fallo ($LASTEXITCODE)" }
 
 $installer = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'termux-install.sh')) -replace "`r`n", "`n"
 [IO.File]::WriteAllText((Join-Path $OutDir 'termux-install.sh'), $installer, $utf8)
+Write-Lf (Join-Path $OutDir 'VERSION') @($version)
 
 Remove-Item $stage -Recurse -Force
 $mb = [math]::Round((Get-Item $tarPath).Length / 1MB, 1)
 Write-Host ''
-Write-Host "Listo ($mb MB):" -ForegroundColor Green
+Write-Host "Listo v$version ($mb MB):" -ForegroundColor Green
 Write-Host "  $tarPath"
 Write-Host "  $(Join-Path $OutDir 'termux-install.sh')"
-Write-Host 'Copia ambos a Download/ del telefono y en Termux ejecuta:' -ForegroundColor Yellow
-Write-Host '  bash /sdcard/Download/termux-install.sh' -ForegroundColor Yellow
+Write-Host 'Siguiente: .\android\release-android.ps1 -SkipPack (APK + entrega al telefono) o -Serve (actualizar por Wi-Fi).' -ForegroundColor Yellow
