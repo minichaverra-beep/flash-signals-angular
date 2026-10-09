@@ -1,0 +1,50 @@
+@if (auth.isAdmin()) {
+  <span class="admin-session">
+    <span class="admin-pill" [title]="'Sesión de administración: ' + (auth.username() || 'admin')">🔓 Admin</span>
+    <button type="button" class="admin-btn" (click)="logout()">Cerrar sesión</button>
+  </span>
+} @else {
+  <button type="button" class="admin-btn subtle" title="Iniciar sesión de administración" (click)="openDialog()">
+    🔐 Admin
+  </button>
+}
+
+@if (open()) {
+  <button type="button" class="admin-backdrop" aria-label="Cerrar" (click)="close()"></button>
+  <dialog open class="admin-dialog" aria-modal="true" aria-labelledby="admin-login-title">
+    <h2 id="admin-login-title">Acceso de administración</h2>
+    <p class="muted">Solo para gestionar la Wiki y borrar registros. La app se usa sin iniciar sesión.</p>
+    <form (ngSubmit)="submit()" autocomplete="on">
+      <label for="admin-user">Usuario</label>
+      <input
+        #userInput
+        id="admin-user"
+        name="username"
+        type="text"
+        autocomplete="username"
+        autocapitalize="off"
+        spellcheck="false"
+        [(ngModel)]="username"
+        [disabled]="busy()"
+      />
+      <label for="admin-pass">Contraseña</label>
+      <input
+        id="admin-pass"
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        [(ngModel)]="password"
+        [disabled]="busy()"
+      />
+      @if (error()) {
+        <p class="msg err" role="alert">{{ error() }}</p>
+      }
+      <div class="admin-actions">
+        <button type="button" (click)="close()" [disabled]="busy()">Cancelar</button>
+        <button type="submit" class="primary" [disabled]="busy()">
+          {{ busy() ? 'Entrando…' : 'Entrar' }}
+        </button>
+      </div>
+    </form>
+  </dialog>
+}

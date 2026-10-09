@@ -61,6 +61,8 @@ data/auto-capture/
 # Configuración MT5 de la UI (puede incluir token del puente)
 data/mt5-settings.json
 data/mt5-sent.json
+# Secreto HMAC de tokens admin (auto-generado si no hay ADMIN_TOKEN_SECRET)
+data/admin-token-secret
 
 # Temporales en Artifacts (versionar el resto: README y artefactos útiles)
 docs/Artifacts/**/*.tmp

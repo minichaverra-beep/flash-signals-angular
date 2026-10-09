@@ -1,0 +1,184 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.admin-session {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.admin-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 14%, var(--panel-deep));
+  color: var(--gold);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.admin-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-btn:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+.admin-btn.subtle {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.admin-btn.subtle:hover {
+  color: var(--gold);
+  opacity: 1;
+}
+
+.admin-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background: color-mix(in srgb, black 70%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.admin-dialog {
+  position: fixed;
+  z-index: 195;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(380px, var(--phone-max-w));
+  max-width: var(--phone-max-w);
+  max-height: var(--phone-max-h);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--text);
+  padding: 1.25rem 1.35rem 1.35rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
+  text-align: left;
+}
+
+.admin-dialog h2 {
+  margin: 0.15rem 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.admin-dialog .muted {
+  margin: 0 0 0.9rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.admin-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-dialog label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 0.35rem;
+}
+
+.admin-dialog input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  font-size: 16px; /* evita zoom automático en iOS/Android */
+}
+
+.admin-dialog input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+}
+
+.admin-dialog .msg.err {
+  margin: 0.5rem 0 0;
+  color: color-mix(in srgb, var(--err) 70%, white);
+  font-size: 0.85rem;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.admin-actions > * {
+  min-width: 0;
+}
+
+.admin-actions button {
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.55rem 0.95rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-actions button.primary {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 16%, var(--panel-deep));
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.admin-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 560px) {
+  .admin-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .admin-actions button {
+    flex: 1 1 0;
+    min-height: 2.6rem;
+  }
+}
