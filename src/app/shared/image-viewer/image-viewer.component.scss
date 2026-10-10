@@ -134,6 +134,11 @@
   font-size: 0.85rem;
 }
 
+.iv-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .iv-close {
   width: 52px;
   min-width: 52px;

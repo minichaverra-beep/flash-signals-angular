@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { VIX_DEFAULTS, thresholdsError } = require('./volatility');
+const { MODES, normalizeMode } = require('./data-source');
 
 const SIGNAL_MARKETS = ['btc', 'us30', 'xauusd'];
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -27,6 +28,8 @@ function defaults() {
   return {
     bridgeUrl: process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:8765',
     bridgeToken: process.env.MT5_BRIDGE_TOKEN || '',
+    /** Fuente de velas para gráficos/análisis: 'auto' | 'yahoo' | 'mt5' (env FS_DATA_SOURCE manda). */
+    dataSource: 'auto',
     symbols: {
       btc: process.env.MT5_SYMBOL_BTC || 'BTCUSD',
       us30: process.env.MT5_SYMBOL_US30 || 'US30',
@@ -129,6 +132,12 @@ const FIELD_VALIDATORS = {
     const token = String(raw ?? '');
     if (token.length <= 200) return token;
     errors.push('bridgeToken: máximo 200 caracteres');
+    return undefined;
+  },
+  dataSource(errors, raw) {
+    const mode = typeof raw === 'string' ? normalizeMode(raw) : null;
+    if (mode) return mode;
+    errors.push(`dataSource: debe ser ${MODES.join(' | ')}`);
     return undefined;
   },
   symbols(errors, raw) {

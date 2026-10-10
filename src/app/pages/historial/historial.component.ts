@@ -1940,12 +1940,18 @@ export class HistorialComponent implements OnInit, OnDestroy {
     try {
       const bundle = this.buildExportBundle();
       const writers = await import('./historial-export.writers');
-      if (format === 'excel') await writers.exportHistoryExcel(bundle);
-      else await writers.exportHistoryPdf(bundle);
-      this.saveHint = format === 'excel' ? 'Excel descargado' : 'PDF descargado';
+      const result =
+        format === 'excel' ? await writers.exportHistoryExcel(bundle) : await writers.exportHistoryPdf(bundle);
+      if (!result.ok) {
+        this.saveHint = '';
+        this.error = result.message;
+        return;
+      }
+      this.saveHint = result.message;
+      const shown = this.saveHint;
       setTimeout(() => {
-        if (this.saveHint.endsWith('descargado')) this.saveHint = '';
-      }, 2000);
+        if (this.saveHint === shown) this.saveHint = '';
+      }, 3500);
     } catch (err: unknown) {
       console.error('[historial] exportación:', err);
       this.saveHint = '';

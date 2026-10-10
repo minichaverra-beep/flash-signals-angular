@@ -334,9 +334,13 @@ export interface AccountSettings {
 export type AccountSettingsPatch = Partial<Pick<AccountSettings, 'balance' | 'riskPct' | 'currency'>>;
 
 /** Configuración MT5 (pantalla Configuración). El token nunca vuelve del servidor: solo hasToken. */
+export type DataSourceMode = 'auto' | 'yahoo' | 'mt5';
+
 export interface Mt5Settings {
   bridgeUrl: string;
   hasToken: boolean;
+  /** Fuente de velas de gráficos/análisis: Automática (Yahoo en Android), solo Yahoo o MT5. */
+  dataSource: DataSourceMode;
   symbols: Record<Mt5SignalMarket, string>;
   riskPct: number;
   volume: number | null;
@@ -446,6 +450,8 @@ export interface Mt5SettingsState {
   profiles: Record<Mt5ProfileId, Mt5Settings>;
   labels: Record<Mt5ProfileId, string>;
   defaults: Mt5Settings;
+  /** Fuente realmente en uso con el perfil activo (el entorno FS_DATA_SOURCE manda sobre el ajuste). */
+  dataSourceEffective?: { mode: 'yahoo' | 'mt5'; requested: DataSourceMode; reason: string };
 }
 
 export interface Mt5SettingsSaveRequest {

@@ -164,6 +164,7 @@ public class MainActivity extends Activity {
     private Button btnStop;
     private Button btnRecheck;
     private WebView web;
+    private DownloadBridge downloads;
     private ValueCallback<Uri[]> fileCallback;
 
     @Override
@@ -197,6 +198,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         io.shutdownNow();
+        if (downloads != null) downloads.shutdown();
         super.onDestroy();
     }
 
@@ -829,13 +831,12 @@ public class MainActivity extends Activity {
                     }
                 }
             });
+            // Descargas dentro de la app (carpeta Descargas): puente JS para blob:/base64 y listener para
+            // http(s) locales con Content-Disposition: attachment, data: y blob:. Ver DownloadBridge.
+            downloads = new DownloadBridge(this, web);
+            web.addJavascriptInterface(downloads, DownloadBridge.JS_NAME);
             web.setDownloadListener((url, userAgent, disposition, mime, length) -> {
-                if (url.startsWith("blob:") || url.startsWith("data:")) {
-                    Toast.makeText(this, "Descarga no soportada en la app: ábrela en Chrome (localhost:3847)",
-                            Toast.LENGTH_LONG).show();
-                } else {
-                    openExternal(Uri.parse(url));
-                }
+                if (!downloads.handle(url, disposition, mime)) openExternal(Uri.parse(url));
             });
             web.loadUrl(APP_URL);
         }

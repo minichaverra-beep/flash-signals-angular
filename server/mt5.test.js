@@ -209,8 +209,9 @@ describe('brokerFeedEnv', () => {
       bridgeUrl: 'http://127.0.0.1:8765',
       bridgeToken: 'secreto',
       symbols: { us30: 'US30m', xauusd: 'XAUUSDm', btc: 'BTCUSDm' },
-    });
+    }, {});
     assert.deepEqual(env, {
+      FS_DATA_SOURCE: 'mt5',
       FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8765',
       FS_MT5_BRIDGE_TOKEN: 'secreto',
       FS_MT5_SYMBOL_US30: 'US30m',
@@ -220,7 +221,33 @@ describe('brokerFeedEnv', () => {
   });
 
   it('sin token ni símbolo no inventa variables', () => {
-    const env = brokerFeedEnv({ bridgeUrl: 'http://127.0.0.1:8766', symbols: { us30: 'US30' } });
-    assert.deepEqual(env, { FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8766', FS_MT5_SYMBOL_US30: 'US30' });
+    const env = brokerFeedEnv({ bridgeUrl: 'http://127.0.0.1:8766', symbols: { us30: 'US30' } }, {});
+    assert.deepEqual(env, {
+      FS_DATA_SOURCE: 'mt5',
+      FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8766',
+      FS_MT5_SYMBOL_US30: 'US30',
+    });
+  });
+
+  const full = {
+    bridgeUrl: 'http://127.0.0.1:8765',
+    bridgeToken: 'secreto',
+    symbols: { us30: 'US30m', xauusd: 'XAUUSDm', btc: 'BTCUSDm' },
+  };
+
+  it('solo Yahoo (ajuste): no expone FS_MT5_* ni el token', () => {
+    assert.deepEqual(brokerFeedEnv({ ...full, dataSource: 'yahoo' }, {}), { FS_DATA_SOURCE: 'yahoo' });
+  });
+
+  it('auto en Android/Termux: solo Yahoo sin FS_MT5_*', () => {
+    assert.deepEqual(brokerFeedEnv({ ...full, dataSource: 'auto' }, { TERMUX_VERSION: '0.118' }), { FS_DATA_SOURCE: 'yahoo' });
+    assert.deepEqual(brokerFeedEnv(full, { PREFIX: '/data/data/com.termux/files/usr' }), { FS_DATA_SOURCE: 'yahoo' });
+  });
+
+  it('FS_DATA_SOURCE del entorno manda sobre el ajuste guardado', () => {
+    assert.deepEqual(brokerFeedEnv({ ...full, dataSource: 'mt5' }, { FS_DATA_SOURCE: 'yahoo' }), { FS_DATA_SOURCE: 'yahoo' });
+    const env = brokerFeedEnv({ ...full, dataSource: 'yahoo' }, { FS_DATA_SOURCE: 'mt5', TERMUX_VERSION: '1' });
+    assert.equal(env.FS_DATA_SOURCE, 'mt5');
+    assert.equal(env.FS_MT5_BRIDGE_TOKEN, 'secreto');
   });
 });

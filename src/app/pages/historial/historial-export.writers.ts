@@ -16,6 +16,7 @@ import {
   type ExportTable,
   type KpiTone,
 } from './historial-export';
+import { saveBlob, type DownloadResult } from '../../shared/file-download';
 
 const BRAND = {
   fire: 'FF8C00',
@@ -36,15 +37,9 @@ const BRAND = {
 const DISCLAIMER =
   'Flash Signals · Historial local. No es consejo financiero: resultados pasados no garantizan resultados futuros.';
 
-function downloadBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+/** Guarda en Descargas (APK) o con la descarga del navegador; ver shared/file-download.ts. */
+function downloadBlob(blob: Blob, fileName: string): Promise<DownloadResult> {
+  return saveBlob(blob, fileName);
 }
 
 function toneColor(tone: KpiTone): string {
@@ -194,7 +189,7 @@ function writeSheetTitle(ws: Worksheet, title: string, sub: string, span: number
   return 4;
 }
 
-export async function exportHistoryExcel(bundle: ExportBundle): Promise<void> {
+export async function exportHistoryExcel(bundle: ExportBundle): Promise<DownloadResult> {
   const ns = (await import('exceljs')) as unknown as typeof import('exceljs') & { default?: typeof import('exceljs') };
   const ExcelJS = ns.default ?? ns;
   const wb = new ExcelJS.Workbook();
@@ -300,7 +295,7 @@ export async function exportHistoryExcel(bundle: ExportBundle): Promise<void> {
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  downloadBlob(blob, exportFileName(bundle.mode, bundle.marketLabel, 'xlsx', bundle.generatedAt, bundle.fileTag));
+  return downloadBlob(blob, exportFileName(bundle.mode, bundle.marketLabel, 'xlsx', bundle.generatedAt, bundle.fileTag));
 }
 
 // ── PDF ──────────────────────────────────────────────────────────────────────
@@ -504,7 +499,7 @@ function drawFooters(doc: JsPdfDoc): void {
   }
 }
 
-export async function exportHistoryPdf(bundle: ExportBundle): Promise<void> {
+export async function exportHistoryPdf(bundle: ExportBundle): Promise<DownloadResult> {
   const [{ jsPDF }, autoTableMod, logo] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -614,5 +609,8 @@ export async function exportHistoryPdf(bundle: ExportBundle): Promise<void> {
   doc.text(`Beneficio total: ${formatMoney(t.profit)}`, pageW - margin, y - 3, { align: 'right' });
 
   drawFooters(doc);
-  doc.save(exportFileName(bundle.mode, bundle.marketLabel, 'pdf', bundle.generatedAt, bundle.fileTag));
+  return downloadBlob(
+    doc.output('blob'),
+    exportFileName(bundle.mode, bundle.marketLabel, 'pdf', bundle.generatedAt, bundle.fileTag),
+  );
 }

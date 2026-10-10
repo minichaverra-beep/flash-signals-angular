@@ -1,4 +1,5 @@
 import { Component, ElementRef, NgZone, OnDestroy, ViewChild, inject } from '@angular/core';
+import { DownloadService } from '../../services/download.service';
 import { ImageViewerService } from './image-viewer.service';
 import {
   MIN_SCALE,
@@ -38,6 +39,8 @@ export class ImageViewerComponent implements OnDestroy {
   /** En el WebView del APK un enlace a la imagen sustituiría la app entera: ahí no se ofrece. */
   readonly showOpenOriginal = typeof navigator === 'undefined' || !/\bwv\b/.test(navigator.userAgent);
   loadFailed = false;
+  downloading = false;
+  private readonly downloads = inject(DownloadService);
 
   private stage: HTMLElement | null = null;
   private image: HTMLImageElement | null = null;
@@ -103,6 +106,16 @@ export class ImageViewerComponent implements OnDestroy {
 
   close(): void {
     this.viewer.close();
+  }
+
+  /** Guarda la imagen abierta: Descargas en el APK (puente nativo), descarga normal en el navegador. */
+  download(): void {
+    const img = this.viewer.current();
+    if (!img || this.downloading) return;
+    this.downloading = true;
+    void this.downloads.saveUrl(img.src).finally(() => {
+      this.downloading = false;
+    });
   }
 
   zoomIn(): void {

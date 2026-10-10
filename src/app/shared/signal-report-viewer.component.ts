@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input } from '@angular/core';
+import { Component, Input, inject } from '@angular/core';
+import { DeviceService } from '../services/device.service';
+import { DownloadService } from '../services/download.service';
 import { HistoryMt5Real, SignalSummary } from '../services/signals-api.service';
 import {
   chartHref,
@@ -55,6 +57,10 @@ export type ReportViewMode = 'trader' | 'inversor' | 'rapida';
   styleUrl: './signal-report-viewer.component.scss',
 })
 export class SignalReportViewerComponent {
+  private readonly downloads = inject(DownloadService);
+  /** En el WebView del APK «abrir en pestaña nueva» sustituiría la app: solo se ofrece descargar. */
+  readonly isApk = inject(DeviceService).isApk;
+
   @Input() summary: SignalSummary | null = null;
   @Input() mode: ReportViewMode = 'trader';
   @Input() preview: string | null = null;
@@ -104,13 +110,18 @@ export class SignalReportViewerComponent {
   readonly instagramFormats = INSTAGRAM_FORMAT_OPTIONS;
   readonly statusMark = statusMark;
 
-  exportScoresImage(groups: RapidaScoreGroup[], format: InstagramFormat): void {
+  /** Guarda el PNG del gráfico (Descargas en el APK, descarga normal en el navegador). */
+  downloadChart(href: string): void {
+    void this.downloads.saveUrl(href);
+  }
+
+  async exportScoresImage(groups: RapidaScoreGroup[], format: InstagramFormat): Promise<void> {
     const s = this.summary;
     const market = (s?.market || this.market || 'btc').toUpperCase();
     const subtitle = [s?.verdict, s?.price ? `Precio ${s.price}` : '', s?.dataAsOf || '']
       .filter(Boolean)
       .join(' · ');
-    downloadScoresImage(
+    const result = await downloadScoresImage(
       groups,
       {
         title: `${market} · Scores y confluencias`,
@@ -120,6 +131,7 @@ export class SignalReportViewerComponent {
       format,
       scoreImageFilename(market, format),
     );
+    this.downloads.report(result);
   }
 
   verdictCellClass(valor: string | null | undefined): Record<string, boolean> {

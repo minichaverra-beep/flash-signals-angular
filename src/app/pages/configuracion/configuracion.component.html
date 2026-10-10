@@ -223,6 +223,25 @@
               <input type="checkbox" name="clearToken" [(ngModel)]="d.clearToken" /> Quitar token
             </label>
           </div>
+          <div class="field">
+            <label for="cfg-data-source">Fuente de datos para gráficos</label>
+            <select
+              id="cfg-data-source"
+              name="dataSource"
+              [(ngModel)]="d.form.dataSource"
+              title="Automática: MT5 en el PC (con respaldo Yahoo) y solo Yahoo en el móvil. Solo Yahoo ignora MT5 por completo. MT5 usa siempre el puente."
+            >
+              <option value="auto">Automática</option>
+              <option value="yahoo">Solo Yahoo</option>
+              <option value="mt5">MT5</option>
+            </select>
+            <small class="muted">
+              Velas de gráficos, capturas y análisis.
+              <ng-container *ngIf="st.dataSourceEffective as eff">
+                En uso: <strong>{{ eff.mode === 'yahoo' ? 'solo Yahoo' : 'MT5' }}</strong> ({{ eff.reason }}).
+              </ng-container>
+            </small>
+          </div>
         </div>
 
         <div class="actions">

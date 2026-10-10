@@ -20,6 +20,7 @@ const SCRIPT_ATTEMPTS = 2;
 const READ_RETRIES = 4;
 const READ_RETRY_MS = 250;
 const MAX_ERROR_LEN = 300;
+const MAX_ERROR_UNWRAP = 5;
 const ACCESS_DENIED_RE = /avgMonFltProxy|\[Errno 13\]|Permission denied|\[WinError (5|32)\]|EPERM|EACCES|EBUSY/i;
 
 /**
@@ -241,10 +242,11 @@ function stripUnbalancedBrackets(text) {
  * Texto de error apto para la UI: sin volcados JSON/dict, sin llaves sueltas, una línea y corto.
  * @param {unknown} raw
  */
-function cleanErrorMessage(raw) {
+function cleanErrorMessage(raw, depth = 0) {
   const text = String(rawErrorText(raw) || '').trim();
-  const inner = jsonDumpError(text);
-  if (inner) return cleanErrorMessage(inner);
+  // Volcados JSON dentro de volcados JSON: acotado para no recursar sin fin con entrada hostil.
+  const inner = depth < MAX_ERROR_UNWRAP ? jsonDumpError(text) : null;
+  if (inner) return cleanErrorMessage(inner, depth + 1);
   const lastLine = text.split(/\r?\n/).findLast((l) => l.trim()) || '';
   const clean = stripUnbalancedBrackets(lastLine.replace(/\s+/g, ' ').trim());
   if (!clean) return 'No se pudo generar la captura';
@@ -257,7 +259,9 @@ function describeScriptError(out, { python, workDir }) {
   if (out?.code === FILE_BLOCKED_CODE || ACCESS_DENIED_RE.test(detail)) {
     return { error: fileBlockedMessage({ python, workDir, detail }), code: FILE_BLOCKED_CODE };
   }
-  return { error: cleanErrorMessage(out?.error || 'No se pudo generar la captura') };
+  const error = cleanErrorMessage(out?.error || 'No se pudo generar la captura');
+  // Recursión en el script (p. ej. mathtext de matplotlib con texto anidado): código propio para la UI.
+  return out?.code === 'recursion' ? { error, code: 'recursion' } : { error };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

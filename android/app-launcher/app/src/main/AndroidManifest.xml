@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- Descargas (DownloadBridge usa MediaStore): en Android 10+ (minSdk 29) no hace falta permiso; se declara
+         con maxSdkVersion=28 por compatibilidad si algún día se baja el minSdk. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <queries>
         <package android:name="com.termux" />

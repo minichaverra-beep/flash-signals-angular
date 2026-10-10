@@ -6,6 +6,7 @@
 const mt5Settings = require('./mt5-settings');
 const { applyVolatilityToStops } = require('./volatility');
 const { effectiveTradeLimit } = require('./mt5-daily-limit');
+const { resolveDataSource } = require('./data-source');
 
 const TIMEOUT_MS = 15000;
 
@@ -314,8 +315,11 @@ function symbolDetails(name, settings) {
  * Variables de entorno para los scripts de Cursor Trading: velas del broker (puente /rates)
  * con los símbolos del perfil activo, para que análisis y chart usen la escala de precio de MT5.
  */
-function brokerFeedEnv(settings = mt5Settings.get()) {
-  const env = { FS_MT5_BRIDGE_URL: settings.bridgeUrl || '' };
+function brokerFeedEnv(settings = mt5Settings.get(), procEnv = process.env) {
+  // Solo Yahoo (Android o ajuste): sin FS_MT5_*; Python ni intenta el puente con FS_DATA_SOURCE=yahoo.
+  const { mode } = resolveDataSource(settings, procEnv);
+  if (mode === 'yahoo') return { FS_DATA_SOURCE: 'yahoo' };
+  const env = { FS_DATA_SOURCE: 'mt5', FS_MT5_BRIDGE_URL: settings.bridgeUrl || '' };
   if (settings.bridgeToken) env.FS_MT5_BRIDGE_TOKEN = settings.bridgeToken;
   for (const [market, key] of [['us30', 'US30'], ['xauusd', 'XAUUSD'], ['btc', 'BTC']]) {
     const symbol = symbolFor(market, settings);

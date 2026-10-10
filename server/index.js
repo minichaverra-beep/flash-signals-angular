@@ -22,6 +22,7 @@ const { registerAccountSettingsRoutes } = require('./account-settings-routes');
 const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
+const dataSource = require('./data-source');
 const mt5Sent = require('./mt5-sent');
 const { countTradesToday, dailyLimitStatus } = require('./mt5-daily-limit');
 const { positionParams } = require('./position-params');
@@ -33,6 +34,9 @@ const vixSource = require('./vix-source');
 const { resolveVolatilityAdjustment } = require('./volatility');
 const { registerVolatilityRoutes } = require('./volatility-routes');
 const { createAdminAuth } = require('./auth');
+const { createOriginMatcher } = require('./cors-origins');
+const { jsonErrorHandler } = require('./error-handler');
+const { applyDownloadHeaders } = require('./download-headers');
 const {
   resolveSignalRunner,
   signalScriptPath,
@@ -56,22 +60,12 @@ const TRADING_ROOT =
 const HISTORY_UNLOCK_PASSWORD =
   process.env.HISTORY_UNLOCK_PASSWORD || 'Elxokas2026*'; // NOSONAR S2068 — solo loopback local
 
-const ALLOWED_ORIGINS = new Set([
-  'http://localhost:4400',
-  'http://127.0.0.1:4400',
-  'http://localhost:8080',
-  'http://127.0.0.1:8080',
-  'http://localhost',
-  'http://127.0.0.1',
-]);
-
-/** Orígenes extra (CSV) p.ej. CORS_ORIGINS=http://localhost:8080,http://127.0.0.1:8080 */
-for (const origin of String(process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)) {
-  ALLOWED_ORIGINS.add(origin);
-}
+/**
+ * Orígenes CORS: lista fija + loopback de cualquier puerto (WebView/emulador) + capacitor://localhost
+ * + chrome-extension://<id> solo con CORS_EXTENSION_IDS (o CORS_ALLOW_ANY_EXTENSION=1). Ver cors-origins.js.
+ * Extra explícito: CORS_ORIGINS=http://localhost:8080,https://mi-origen
+ */
+const isOriginAllowed = createOriginMatcher(process.env);
 
 /** powershell (Windows) | bash (Android/Linux con stack Python) | none (Docker solo UI). */
 const SIGNAL_RUNNER = resolveSignalRunner(process.env.SIGNAL_RUNNER, process.platform);
@@ -386,12 +380,8 @@ app.disable('x-powered-by');
 app.use(
   cors({
     origin(origin, callback) {
-      // Sin Origin (curl / same-machine) o Angular local
-      if (!origin || ALLOWED_ORIGINS.has(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(null, false);
+      // Sin Origin (curl / same-machine), Angular local, WebView/APK o extensión autorizada
+      callback(null, isOriginAllowed(origin));
     },
   })
 );
@@ -1062,6 +1052,7 @@ app.get('/api/signals/chart', (req, res) => {
   }
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'no-cache');
+  applyDownloadHeaders(req, res, `grafico-${market}.png`);
   res.sendFile(chartFull);
 });
 
@@ -1091,6 +1082,7 @@ app.get('/api/signals/macd-chart', (req, res) => {
   }
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Cache-Control', 'no-cache');
+  applyDownloadHeaders(req, res, `macd-h4-${market}.png`);
   res.sendFile(chartFull);
 });
 
@@ -1316,6 +1308,7 @@ app.get('/api/signals/macd-quant/history/:id/chart', async (req, res) => {
     }
     res.setHeader('Content-Type', file.mime);
     res.setHeader('Cache-Control', 'public, max-age=3600');
+    applyDownloadHeaders(req, res, `macd-quant-${id}${path.extname(file.absPath) || '.png'}`);
     res.sendFile(file.absPath);
   } catch (err) {
     console.error('[macd-quant] chart:', err);
@@ -1872,6 +1865,7 @@ app.get('/api/history/:id/result-image', async (req, res) => {
     }
     res.setHeader('Content-Type', file.mime);
     res.setHeader('Cache-Control', 'private, max-age=120');
+    applyDownloadHeaders(req, res, `resultado-${id}${path.extname(file.absPath) || '.png'}`);
     res.sendFile(file.absPath);
   } catch (err) {
     console.error('[history] result-image get:', err);
@@ -2101,6 +2095,7 @@ app.get('/api/artifacts/raw', (req, res) => {
     'Content-Security-Policy',
     ext === '.html' || ext === '.htm' ? cspHtml : cspEmbed
   );
+  applyDownloadHeaders(req, res, path.basename(resolved.full));
   res.sendFile(resolved.full);
 });
 
@@ -2123,8 +2118,17 @@ app.get('/api/mt5/health', async (req, res) => {
   }
 });
 
+/** Estado de ajustes + fuente de datos efectiva (Yahoo/MT5) del perfil activo, para /configuracion. */
+function mt5SettingsResponse() {
+  return {
+    ...mt5Settings.publicState(),
+    defaults: mt5Settings.toPublic(mt5Settings.defaults()),
+    dataSourceEffective: dataSource.resolveDataSource(mt5Settings.get()),
+  };
+}
+
 app.get('/api/mt5/settings', (_req, res) => {
-  res.json({ ...mt5Settings.publicState(), defaults: mt5Settings.toPublic(mt5Settings.defaults()) });
+  res.json(mt5SettingsResponse());
 });
 
 /**
@@ -2140,7 +2144,7 @@ app.patch('/api/mt5/settings', (req, res) => {
   try {
     if (body.settings !== undefined) mt5Settings.update(body.settings, body.profile ?? mt5Settings.getActive());
     if (body.active !== undefined) mt5Settings.setActive(body.active);
-    res.json({ ...mt5Settings.publicState(), defaults: mt5Settings.toPublic(mt5Settings.defaults()) });
+    res.json(mt5SettingsResponse());
   } catch (err) {
     if (err.status === 400) return res.status(400).json({ error: err.message, errors: err.errors });
     console.error('[mt5] settings:', err);
@@ -2346,13 +2350,19 @@ async function rerenderDetailChart(id, levels, sent, settings = mt5Settings.get(
       windowsHide: true,
     });
     let stdout = '';
+    let stderr = '';
     const timer = setTimeout(() => child.kill(), 90_000);
     child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
     child.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
     child.on('close', () => {
       clearTimeout(timer);
       const line = stdout.trim().split(/\r?\n/).pop() || '';
-      try { resolve(JSON.parse(line)); } catch { resolve({ ok: false, error: 'salida inválida del script' }); }
+      let parsed;
+      try { parsed = JSON.parse(line); } catch { parsed = { ok: false, error: 'salida inválida del script' }; }
+      // Error del script: el traceback (stderr) va al log del servidor, no se traga.
+      if (!parsed.ok && stderr.trim()) console.warn(`[mt5] rerender #${id} stderr:`, stderr.trim().slice(-1500));
+      resolve(parsed);
     });
   });
   if (!out.ok) return { updated: false, reason: out.error || 'error al redibujar' };
@@ -2623,9 +2633,10 @@ app.post('/api/signals/run', (req, res) => {
     tier,
     command,
     exitCode: null,
-    logs: wantsTrend
-      ? [`[bias] Detectando tendencia H1 actual de ${market.toUpperCase()}…`]
-      : [`>> ${command}`],
+    logs: [
+      wantsTrend ? `[bias] Detectando tendencia H1 actual de ${market.toUpperCase()}…` : `>> ${command}`,
+      dataSource.describeDataSource(mt5Settings.get()),
+    ],
     error: null,
     reportPath: null,
     summary: null,
@@ -2733,6 +2744,9 @@ if (SERVE_WEB) {
   });
 }
 
+// Siempre último: errores de body-parser/rutas → JSON claro (incl. «Maximum call stack size exceeded»).
+app.use(jsonErrorHandler);
+
 void Promise.all([
   historyStore.init(),
   wikiStore.init(),
@@ -2745,6 +2759,7 @@ void Promise.all([
       console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
       console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
       console.log(`Runner señales: ${SIGNAL_RUNNER}`);
+      console.log(dataSource.describeDataSource(mt5Settings.get()));
       if (SERVE_WEB) console.log(`Web (build Angular): ${WEB_DIST}`);
       console.log(`Historial (hive box): ${historyStore.DB_PATH}`);
       console.log(`Wiki meta: ${wikiStore.DB_PATH}`);

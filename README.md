@@ -178,6 +178,14 @@ para actualizar por Wi-Fi). Guía corta: [`android/INSTALAR.md`](android/INSTALA
 La app instala vía Termux (`RUN_COMMAND`), arranca el servidor y muestra la UI en un WebView. Requiere Termux (F-Droid) y,
 una vez, pegar en Termux `allow-external-apps = true` (la app copia el comando). Guía: `docs/Artifacts/2026-10-08-android-instalacion-termux.html`.
 
+**Descargas en el APK:** imágenes (gráfico, captura del resultado, scores para Instagram), Excel y PDF se guardan
+directamente en la carpeta *Descargas* del teléfono, sin pasar por Chrome (botón «Descargar imagen» en el reporte y
+«⬇ Descargar» en el visor de imágenes). El WebView no sabe guardar `blob:`, así que `DownloadBridge.java` expone
+`window.AndroidDownloader.saveBase64(...)` (MediaStore, sin permisos en Android 10+) y la web lo usa vía
+`src/app/shared/file-download.ts`; en el navegador sigue la descarga normal. Los endpoints de imágenes también aceptan
+`?download=1` (`Content-Disposition: attachment`). Tras actualizar hay que **reconstruir y reinstalar el APK**
+(`release-android.ps1`) porque cambió código Java; la parte web llega con la actualización normal de Termux.
+
 Actualizar: repite 1–3; se conservan `data/` (historial) y `live/`. `--fresh` reinstala desde cero.
 Opciones: `SKIP_NEURAL=1` (sin torch), `WITH_OCR=1` (onnxruntime + rapidocr).
 En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de procesos secundarios* y quita Termux de la optimización de batería.
@@ -186,6 +194,9 @@ En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de
 |----------|-----|
 | `SIGNAL_RUNNER` | `powershell` (default Windows) · `bash` (Android/Linux) · `none` (default resto: 503 en `/run`) |
 | `SERVE_WEB=1` | La API sirve `dist/` en el mismo puerto (sin `ng serve`) |
+| `FS_DATA_SOURCE` | `yahoo` · `mt5` · `auto`. `android/start.sh` exporta `yahoo` por defecto: **en el móvil no hay MT5**, así que gráficos, capturas de resultado (WIN/LOSS), tendencia H1, ATR y VIX usan solo velas de Yahoo (BTC-USD, YM=F/^DJI, GC=F) y ni se intenta el puente |
+
+**Fuente de datos (`/configuracion` → «Fuente de datos para gráficos»; `dataSource` en `data/mt5-settings.json`):** *Automática* (por defecto: solo Yahoo en Android/Termux o sin puente configurado; MT5 en el PC, con respaldo Yahoo rotulado «sin MT5» si el puente no responde), *Solo Yahoo* o *MT5*. El entorno `FS_DATA_SOURCE` manda sobre el ajuste. Con Yahoo solo, `brokerFeedEnv()` no pasa `FS_MT5_*` a Python (`FS_DATA_SOURCE=yahoo`) y el log del job indica la fuente (`[datos] Fuente: …`). El cálculo de lotes de la calculadora de volatilidad sigue necesitando MT5 (ficha del símbolo).
 
 ## Contexto para agentes (Cursor / Claude)
 

@@ -62,6 +62,20 @@
   padding: 0.55rem 0.7rem;
 }
 
+.field select {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #1a1010;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+
+.field select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 .field input:focus {
   border-color: var(--accent);
   outline: none;

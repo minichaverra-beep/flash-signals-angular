@@ -5,6 +5,8 @@
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
 const vixSource = require('./vix-source');
+const yahooCandles = require('./yahoo-candles');
+const { isYahooOnly } = require('./data-source');
 const {
   ATR_PERIOD,
   LEVEL_LABELS,
@@ -43,8 +45,39 @@ function marketOf(raw) {
   return market;
 }
 
+/** Modo solo Yahoo (Android): ATR con velas de Yahoo; sin ficha del símbolo ni saldo (eso es de MT5). */
+async function yahooSnapshot(market, timeframe) {
+  const key = `yahoo|${market}|${timeframe}`;
+  const hit = snapshots.get(key);
+  if (hit && Date.now() - hit.at < SNAPSHOT_TTL_MS) return hit.value;
+  let rates;
+  try {
+    rates = await yahooCandles.marketRates({ market, timeframe, count: CANDLES });
+  } catch (err) {
+    throw httpError(err.status || 502, err.message);
+  }
+  const atr = atrFromCandles(rates.rates, ATR_PERIOD);
+  if (!atr) throw httpError(422, `${rates.symbol}: Yahoo no devolvió velas suficientes para medir el movimiento`);
+  const last = rates.rates.at(-1);
+  const value = {
+    symbol: rates.symbol,
+    timeframe,
+    atr,
+    price: Number(rates.bid) || last?.close || null,
+    asOf: rates.tickTime ? new Date(rates.tickTime * 1000).toISOString() : null,
+    candles: rates.rates.length,
+    details: null,
+    equity: null,
+    currency: 'USD',
+    source: 'yahoo',
+  };
+  snapshots.set(key, { at: Date.now(), value });
+  return value;
+}
+
 /** Lee del puente: velas → ATR, ficha del símbolo y equity. Caché de 60 s por perfil/mercado/marco. */
 async function marketSnapshot(settings, market, timeframe) {
+  if (isYahooOnly(settings)) return yahooSnapshot(market, timeframe);
   const symbol = mt5.symbolFor(market, settings);
   if (!symbol) throw httpError(400, `Mercado ${market} sin símbolo MT5`);
   const key = `${settings.bridgeUrl}|${symbol}|${timeframe}`;
@@ -139,6 +172,7 @@ function registerVolatilityRoutes(app) {
         price: snap.price,
         asOf: snap.asOf,
         candles: snap.candles,
+        source: snap.source || 'mt5',
       });
     } catch (err) {
       fail(res, err, 'No se pudo leer la volatilidad del mercado');
@@ -163,6 +197,9 @@ function registerVolatilityRoutes(app) {
       const pipSize = body.pipSize == null ? settings.pipSize[market] : positive(body.pipSize, 'pipSize', { max: 1000 });
 
       const snap = await marketSnapshot(settings, market, 'M5');
+      if (!snap.details) {
+        throw httpError(422, 'El cálculo de lotes necesita la ficha del símbolo del broker (MT5): no disponible en modo solo Yahoo');
+      }
       const typed = body.balance == null || body.balance === '' ? null : positive(body.balance, 'balance');
       const balance = typed ?? snap.equity;
       if (!balance) throw httpError(400, 'Indica el saldo de la cuenta (no se pudo leer el de MT5)');

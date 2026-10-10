@@ -21,6 +21,16 @@
         <button type="button" class="iv-btn" (click)="resetZoom()" aria-label="Ajustar a pantalla" title="Ajustar (0)">1x</button>
         <button type="button" class="iv-btn" (click)="zoomIn()" aria-label="Ampliar" title="Ampliar (+)">+</button>
       </div>
+      <button
+        type="button"
+        class="iv-btn iv-btn-text"
+        [disabled]="downloading || loadFailed"
+        (click)="download()"
+        aria-label="Descargar imagen"
+        title="Descargar imagen"
+      >
+        {{ downloading ? 'Guardando…' : '⬇ Descargar' }}
+      </button>
       @if (showOpenOriginal) {
         <a class="iv-btn iv-btn-text" [href]="img.src" target="_blank" rel="noopener">Abrir original</a>
       }

@@ -2,6 +2,7 @@
  * Exporta «Scores y confluencias» como PNG para Instagram (sin columna Detalle).
  * Dibujo directo en canvas: tamaño exacto y sin dependencias de captura de DOM.
  */
+import type { DownloadResult } from './file-download';
 import type { RapidaScoreGroup } from './signal-report.helpers';
 
 export type InstagramFormat = 'post' | 'story';
@@ -221,22 +222,16 @@ export function scoreImageFilename(market: string, format: InstagramFormat, now 
   return `scores-${market.toLowerCase()}-${format}-${stamp}.png`;
 }
 
-export function downloadScoresImage(
+export async function downloadScoresImage(
   groups: RapidaScoreGroup[],
   meta: ScoreImageMeta,
   format: InstagramFormat,
   filename: string,
-): void {
+): Promise<DownloadResult> {
   const canvas = renderScoresImage(groups, meta, format);
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, 'image/png');
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return { ok: false, via: 'none', filename, message: 'No se pudo generar la imagen' };
+  // import() dinámico: este módulo se carga también en las pruebas con node (sin resolver «./file-download»).
+  const { saveBlob } = await import('./file-download');
+  return saveBlob(blob, filename);
 }

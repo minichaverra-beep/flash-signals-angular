@@ -4,6 +4,7 @@
  */
 const tls = require('node:tls');
 const mt5 = require('./mt5');
+const { isYahooOnly } = require('./data-source');
 
 const CACHE_TTL_MS = 60_000;
 const SYMBOL_TTL_MS = 10 * 60_000;
@@ -147,7 +148,10 @@ function createVixSource({ bridge = mt5, fetchImpl = (...args) => fetch(...args)
 
   async function read(settings) {
     const attempts = [];
-    const value = (await fromBroker(settings, attempts)) || (await fromYahoo(attempts));
+    // Modo solo Yahoo (Android): ni se consulta el puente MT5.
+    const skipBroker = isYahooOnly(settings);
+    if (skipBroker) attempts.push('Broker: omitido (modo solo Yahoo)');
+    const value = (skipBroker ? null : await fromBroker(settings, attempts)) || (await fromYahoo(attempts));
     if (!value) {
       const err = new Error(`No se pudo obtener el VIX · ${attempts.join(' · ')}`);
       err.status = 502;

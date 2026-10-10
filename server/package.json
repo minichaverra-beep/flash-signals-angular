@@ -5,7 +5,7 @@
   "main": "index.js",
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test db/history-lock.test.js db/history-store.test.js db/wiki-store.test.js db/macd-quant-store.test.js db/account-settings-store.test.js artifacts.test.js job-events.test.js live-freshness.test.js mt5.test.js mt5-settings.test.js mt5-sent.test.js mt5-duplicate.test.js mt5-pnl.test.js auto-capture.test.js history-lock.test.js trend-bias.test.js volatility.test.js vix-source.test.js position-params.test.js signal-runner.test.js auth.test.js"
+    "test": "node --test db/history-lock.test.js db/history-store.test.js db/wiki-store.test.js db/macd-quant-store.test.js db/account-settings-store.test.js artifacts.test.js job-events.test.js live-freshness.test.js mt5.test.js mt5-settings.test.js mt5-sent.test.js mt5-duplicate.test.js mt5-pnl.test.js auto-capture.test.js history-lock.test.js trend-bias.test.js volatility.test.js vix-source.test.js position-params.test.js signal-runner.test.js auth.test.js cors-origins.test.js error-handler.test.js download-headers.test.js"
   },
   "keywords": [],
   "author": "",

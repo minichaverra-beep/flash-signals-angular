@@ -429,6 +429,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     const f = d.form;
     const settings: Mt5SettingsPatch = {
       bridgeUrl: f.bridgeUrl.trim(),
+      dataSource: f.dataSource ?? 'auto',
       symbols: { ...f.symbols },
       riskPct: f.riskPct,
       volume: d.lotMode === 'fixed' ? d.fixedVolume : null,

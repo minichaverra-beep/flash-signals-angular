@@ -299,8 +299,11 @@
           <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
             <img class="rapida-chart" appZoomImage [src]="chartHref" alt="Gráfico de la señal" />
           </a>
-          <p class="path chart-link">
-            <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+          <p class="chart-actions">
+            <button type="button" class="btn-export" (click)="downloadChart(chartHref)">Descargar imagen</button>
+            @if (!isApk()) {
+              <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+            }
           </p>
         </div>
       </details>
@@ -646,8 +649,11 @@
             <a class="rapida-chart-link" [href]="chartHref" target="_blank" rel="noopener">
               <img class="rapida-chart" appZoomImage [src]="chartHref" alt="Gráfico de la señal" />
             </a>
-            <p class="path chart-link">
-              <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+            <p class="chart-actions">
+              <button type="button" class="btn-export" (click)="downloadChart(chartHref)">Descargar imagen</button>
+              @if (!isApk()) {
+                <a [href]="chartHref" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+              }
             </p>
           </div>
         </details>

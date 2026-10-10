@@ -19,6 +19,9 @@ export PORT="${PORT:-3847}"
 export BIND_HOST="${BIND_HOST:-127.0.0.1}"
 export MPLBACKEND=Agg
 export PYTHONIOENCODING=utf-8
+# Sin MT5 en el móvil: gráficos/capturas/análisis con velas de Yahoo y MT5 ignorado por completo.
+# (Con MetaApi/túnel a un PC: FS_DATA_SOURCE=auto ./start.sh para volver a usar el puente.)
+export FS_DATA_SOURCE="${FS_DATA_SOURCE:-yahoo}"
 
 cd "$APP/flash-signals-angular"
 
