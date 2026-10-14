@@ -307,6 +307,63 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     assert.deepEqual(await store.listTakenSince(new Date(Date.now() + 3600_000).toISOString()), []);
   });
 
+  it('internalOrder: correlativo global y cronológico solo de ganada/perdida', async () => {
+    /** Inserta (y opcionalmente marca) con el reloj en `iso` para que la fila no quede bloqueada. */
+    const add = async (iso, market, resultado) => {
+      store._setClockForTests(() => new Date(iso));
+      const { id } = await store.insertSnapshot(sampleSnap({ market }));
+      if (resultado) assert.equal((await store.updateAnnotation(id, { resultado })).ok, true);
+      return id;
+    };
+    const setResultado = async (iso, id, resultado) => {
+      store._setClockForTests(() => new Date(iso));
+      return store.updateAnnotation(id, { resultado });
+    };
+    try {
+      // Ids no siguen el orden cronológico: c se inserta primero pero es la cerrada más reciente.
+      const c = await add('2026-03-03T15:00:00.000Z', 'us30', 'ganada');
+      const a = await add('2026-03-01T15:00:00.000Z', 'btc', 'perdida');
+      const skipped = await add('2026-03-02T15:00:00.000Z', 'btc', 'no_tomada');
+      const b = await add('2026-03-02T17:00:00.000Z', 'xauusd', 'ganada');
+      const open = await add('2026-03-04T15:00:00.000Z', 'btc', 'operando');
+      const empty = await add('2026-03-04T16:00:00.000Z', 'us30', null);
+      // Mismo created_at: desempata por id
+      const d = await add('2026-03-05T15:00:00.000Z', 'btc', 'ganada');
+      const e = await add('2026-03-05T15:00:00.000Z', 'us30', 'perdida');
+
+      const orderMap = (items) => Object.fromEntries(items.map((i) => [i.id, i.internalOrder]));
+      const all = orderMap((await store.listHistory({ pageSize: 100 })).items);
+      assert.deepEqual(all, { [a]: 1, [b]: 2, [c]: 3, [d]: 4, [e]: 5, [skipped]: null, [open]: null, [empty]: null });
+
+      // Estable con filtro de mercado (numeración global, no por mercado)
+      const btc = orderMap((await store.listHistory({ market: 'btc', pageSize: 100 })).items);
+      assert.deepEqual(btc, { [a]: 1, [d]: 4, [skipped]: null, [open]: null });
+
+      // Estable con paginación y ordenable por internalOrder (vacíos al final)
+      const p1 = await store.listHistory({ sortBy: 'internalOrder', sortDir: 'asc', page: 1, pageSize: 3 });
+      const p2 = await store.listHistory({ sortBy: 'internalOrder', sortDir: 'asc', page: 2, pageSize: 3 });
+      assert.deepEqual(p1.items.map((i) => i.internalOrder), [1, 2, 3]);
+      assert.deepEqual(p2.items.map((i) => i.internalOrder), [4, 5, null]);
+      const desc = await store.listHistory({ sortBy: 'internalOrder', sortDir: 'desc', pageSize: 100 });
+      assert.deepEqual(desc.items.map((i) => i.internalOrder), [5, 4, 3, 2, 1, null, null, null]);
+      const pageOne = await store.listHistory({ sortBy: 'createdAt', sortDir: 'desc', page: 1, pageSize: 2 });
+      assert.deepEqual(pageOne.items.map((i) => i.internalOrder), [5, 4]);
+
+      // Detalle
+      assert.equal((await store.getById(c)).internalOrder, 3);
+      assert.equal((await store.getById(open)).internalOrder, null);
+
+      // Cambiar el resultado renumera
+      const won = await setResultado('2026-03-02T18:00:00.000Z', skipped, 'ganada');
+      assert.equal(won.item.internalOrder, 2);
+      assert.equal((await setResultado('2026-03-02T18:00:00.000Z', b, 'no_tomada')).item.internalOrder, null);
+      const after = orderMap((await store.listHistory({ pageSize: 100 })).items);
+      assert.deepEqual(after, { [a]: 1, [skipped]: 2, [b]: null, [c]: 3, [d]: 4, [e]: 5, [open]: null, [empty]: null });
+    } finally {
+      store._setClockForTests(null);
+    }
+  });
+
   it('updateAnnotation guarda comment y resultado (ganada/perdida/no_tomada)', async () => {
     const { id } = await store.insertSnapshot(sampleSnap());
     const a = await store.updateAnnotation(id, {
@@ -344,6 +401,58 @@ describe('history-store (better-sqlite3 o motor disponible)', () => {
     const miss = await store.updateAnnotation(999999, { comment: 'x' });
     assert.equal(miss.ok, false);
     assert.equal(miss.error, 'not_found');
+  });
+
+  it('updateAnnotation acepta resultado operando; inválidos siguen rechazados', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    const a = await store.updateAnnotation(id, { resultado: 'operando' });
+    assert.equal(a.ok, true);
+    assert.equal(a.item?.resultado, 'operando');
+    assert.equal((await store.getById(id)).resultado, 'operando');
+
+    const b = await store.updateAnnotation(id, { resultado: ' Operando ' });
+    assert.equal(b.ok, true);
+    assert.equal(b.item?.resultado, 'operando');
+
+    const bad = await store.updateAnnotation(id, { resultado: 'en_curso' });
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /operando/);
+    assert.equal((await store.getById(id)).resultado, 'operando');
+
+    const closed = await store.updateAnnotation(id, { resultado: 'ganada', pnlUsd: 12 });
+    assert.equal(closed.item?.resultado, 'ganada');
+  });
+
+  it('operando no cuenta como tomada en listTakenSince', async () => {
+    const { id } = await store.insertSnapshot(sampleSnap());
+    await store.updateAnnotation(id, { resultado: 'operando' });
+    const taken = await store.listTakenSince(new Date(Date.now() - 3600_000).toISOString());
+    assert.equal(taken.some((r) => r.id === id), false);
+  });
+
+  it('markOperando: solo con Resultado vacío y sin candado', async () => {
+    const { markOperando } = require('../history-operando');
+    const empty = (await store.insertSnapshot(sampleSnap())).id;
+    const won = (await store.insertSnapshot(sampleSnap())).id;
+    const skipped = (await store.insertSnapshot(sampleSnap())).id;
+    const locked = (await store.insertSnapshot(sampleSnap())).id;
+    await store.updateAnnotation(won, { resultado: 'ganada' });
+    await store.updateAnnotation(skipped, { resultado: 'no_tomada' });
+    await store.setLocked(locked, true);
+
+    const ok = await markOperando(store, empty);
+    assert.equal(ok.marked, true);
+    assert.equal(ok.item?.resultado, 'operando');
+
+    assert.deepEqual(await markOperando(store, won), { marked: false, reason: 'has_resultado', resultado: 'ganada' });
+    assert.equal((await store.getById(won)).resultado, 'ganada');
+    assert.equal((await markOperando(store, skipped)).reason, 'has_resultado');
+    assert.equal((await store.getById(skipped)).resultado, 'no_tomada');
+    assert.equal((await markOperando(store, empty)).reason, 'has_resultado');
+
+    assert.deepEqual(await markOperando(store, locked), { marked: false, reason: 'locked' });
+    assert.equal((await store.getById(locked)).resultado, null);
+    assert.deepEqual(await markOperando(store, 999999), { marked: false, reason: 'not_found' });
   });
 
   it('updateAnnotation guarda pnlUsd (nullable float)', async () => {
@@ -918,5 +1027,17 @@ describe('history-store fallback sql.js', () => {
     const cleared = await store.clearAll();
     assert.ok(cleared.deleted >= 2);
     assert.equal((await store.listHistory()).total, 0);
+  });
+
+  it('internalOrder (ROW_NUMBER) funciona con sql.js', async () => {
+    const a = (await store.insertSnapshot(sampleSnap())).id;
+    const skipped = (await store.insertSnapshot(sampleSnap({ market: 'us30' }))).id;
+    const b = (await store.insertSnapshot(sampleSnap({ market: 'us30' }))).id;
+    await store.updateAnnotation(a, { resultado: 'ganada' });
+    await store.updateAnnotation(skipped, { resultado: 'no_tomada' });
+    await store.updateAnnotation(b, { resultado: 'perdida' });
+    const list = await store.listHistory({ market: 'us30', sortBy: 'internalOrder', sortDir: 'asc' });
+    assert.deepEqual(list.items.map((i) => [i.id, i.internalOrder]), [[b, 2], [skipped, null]]);
+    assert.equal((await store.getById(a)).internalOrder, 1);
   });
 });

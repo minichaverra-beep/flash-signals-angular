@@ -63,6 +63,33 @@ describe('computeHistoryMetrics', () => {
     assert.equal(m.maxConsecutiveLosses, 1);
   });
 
+  it('operando es una operación abierta: no gana, no pierde, no cerrada', () => {
+    const m = computeHistoryMetrics([
+      row({ id: 1, resultado: 'ganada', plannedRr: '1:2', pnlUsd: 100 }),
+      row({ id: 2, resultado: 'operando', plannedRr: '1:3', pnlUsd: -999 }),
+      row({ id: 3, resultado: 'perdida', pnlUsd: -40 }),
+      row({ id: 4, resultado: 'operando' }),
+    ]);
+    assert.equal(m.closed, 2);
+    assert.equal(m.wins, 1);
+    assert.equal(m.losses, 1);
+    assert.equal(m.open, 2);
+    assert.equal(m.unmarked, 2);
+    assert.equal(m.winratePct, 50);
+    assert.equal(m.pnlUnit, 'usd');
+    assert.equal(m.pnl, 60);
+    assert.equal(m.maxConsecutiveLosses, 1);
+    assert.deepEqual(m.equityCurve, [100, 60]);
+  });
+
+  it('solo operando → sin cerradas ni winrate', () => {
+    const m = computeHistoryMetrics([row({ id: 1, resultado: 'operando' })]);
+    assert.equal(m.closed, 0);
+    assert.equal(m.open, 1);
+    assert.equal(m.winratePct, null);
+    assert.equal(m.pnl, null);
+  });
+
   it('estima PnL/PF/expectativa/DD en R si todas las ganadas tienen R:R', () => {
     const m = computeHistoryMetrics([
       row({ id: 1, resultado: 'ganada', plannedRr: '1:2' }), // +2

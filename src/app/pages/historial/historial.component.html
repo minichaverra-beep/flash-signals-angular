@@ -146,7 +146,7 @@
         <thead>
           <tr>
             <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Hora <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
-            <th [attr.aria-sort]="ariaSort('id')"><button type="button" class="th-sort" [class.active]="sortBy === 'id'" (click)="toggleSort('id')">Ticket <span class="sort-ind">{{ sortIcon('id') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('internalOrder')"><button type="button" class="th-sort" [class.active]="sortBy === 'internalOrder'" (click)="toggleSort('internalOrder')" title="Correlativo de operaciones cerradas (ganada/perdida), global y cronológico">Orden interna <span class="sort-ind">{{ sortIcon('internalOrder') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Símbolo <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Tipo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
             <th class="num" [attr.aria-sort]="ariaSort('plannedEntry')"><button type="button" class="th-sort" [class.active]="sortBy === 'plannedEntry'" (click)="toggleSort('plannedEntry')">Precio <span class="sort-ind">{{ sortIcon('plannedEntry') }}</span></button></th>
@@ -214,7 +214,7 @@
         <thead>
           <tr>
             <th aria-label="Acciones"></th>
-            <th [attr.aria-sort]="ariaSort('id')"><button type="button" class="th-sort" [class.active]="sortBy === 'id'" (click)="toggleSort('id')">Ticket <span class="sort-ind">{{ sortIcon('id') }}</span></button></th>
+            <th [attr.aria-sort]="ariaSort('internalOrder')"><button type="button" class="th-sort" [class.active]="sortBy === 'internalOrder'" (click)="toggleSort('internalOrder')" title="Correlativo de operaciones cerradas (ganada/perdida), global y cronológico">Orden interna <span class="sort-ind">{{ sortIcon('internalOrder') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('createdAt')"><button type="button" class="th-sort" [class.active]="sortBy === 'createdAt'" (click)="toggleSort('createdAt')">Fecha <span class="sort-ind">{{ sortIcon('createdAt') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('market')"><button type="button" class="th-sort" [class.active]="sortBy === 'market'" (click)="toggleSort('market')">Mercado <span class="sort-ind">{{ sortIcon('market') }}</span></button></th>
             <th [attr.aria-sort]="ariaSort('bias')"><button type="button" class="th-sort" [class.active]="sortBy === 'bias'" (click)="toggleSort('bias')">Sesgo <span class="sort-ind">{{ sortIcon('bias') }}</span></button></th>
@@ -346,12 +346,12 @@
                 </div>
               </ng-container>
               <ng-template #runBtn>
-                <span *ngIf="!mt5Hidden() && canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip()">
+                <span *ngIf="!mt5Hidden() && canRunOperation(item); else noRun" class="has-tip" [attr.data-tooltip]="runTip(item)">
                   <button
                     type="button"
                     class="run-btn sm"
                     [attr.data-tone]="runTone(item)"
-                    [disabled]="!runWindowOpen() || dailyLimitReached() || runItem?.id === item.id"
+                    [disabled]="!runWindowOpen() || dailyLimitReached() || probabilityBlocked(item) || runItem?.id === item.id"
                     (click)="openRun(item, $event)"
                   >▶ Run</button>
                 </span>
@@ -894,8 +894,8 @@
             class="run-btn sm"
             [attr.data-tone]="runTone(item)"
             *ngIf="!sentInfo(item) && canRunOperation(item)"
-            [disabled]="!runWindowOpen() || dailyLimitReached() || runItem?.id === item.id"
-            [attr.title]="runTip()"
+            [disabled]="!runWindowOpen() || dailyLimitReached() || probabilityBlocked(item) || runItem?.id === item.id"
+            [attr.title]="runTip(item)"
             (click)="openRun(item, $event)"
           >▶ Run</button>
           </ng-container>
@@ -1120,7 +1120,7 @@
   >
     <div class="drawer-head">
       <div>
-        <p class="eyebrow">Detalle #{{ detail?.id || '…' }}{{ detailExpanded ? ' · expandido' : '' }}</p>
+        <p class="eyebrow">Detalle #{{ detail?.id || '…' }}{{ detail?.internalOrder != null ? ' · Orden interna ' + detail?.internalOrder : '' }}{{ detailExpanded ? ' · expandido' : '' }}</p>
         <h2 *ngIf="detail">{{ detail.market | uppercase }} · {{ detail.tier }}</h2>
         <p class="muted tiny hide-on-phone" *ngIf="detail">{{ absoluteTime(detail.createdAt) }} · {{ relativeTime(detail.createdAt) }}</p>
         <p class="muted tiny phone-only" *ngIf="detail">{{ relativeTime(detail.createdAt) }}</p>
@@ -1470,19 +1470,29 @@
   <dialog open class="unlock-dialog run-dialog" *ngIf="runItem as it" aria-modal="true" aria-label="Confirmar envío a MT5">
     <p class="eyebrow">MetaTrader 5 · señal #{{ it.id }} · {{ it.market | uppercase }}</p>
     <h2>¿Ejecutar esta operación?</h2>
-    <p class="msg err" *ngIf="!isEntrarVerdict(it)">
-      Veredicto de la señal: <strong>{{ it.verdict || 'n/d' }}</strong> (no es ENTRAR). Se enviará igualmente si confirmas.
-    </p>
     <p class="muted tiny" *ngIf="mt5ProfileLabel">
       Perfil: <strong>{{ mt5ProfileLabel }}</strong> · <a routerLink="/configuracion">cambiar</a>
     </p>
-    <p class="muted" *ngIf="runLoading">Validando con MT5…</p>
+    <fieldset class="seg run-style-seg" aria-label="Estilo de operación">
+      <button
+        type="button"
+        *ngFor="let s of runStyleOptions"
+        [class.active]="runStyle === s.id"
+        [attr.aria-pressed]="runStyle === s.id"
+        [disabled]="runSending"
+        (click)="setRunStyle(s.id)"
+      >{{ s.label }}</button>
+    </fieldset>
+    <p class="muted" *ngIf="runLoading">{{ runPreview ? 'Recalculando…' : 'Validando con MT5…' }}</p>
 
     <ng-container *ngIf="runPreview as p">
+      <p class="run-style-summary" *ngIf="p.style as st" [class.stale]="runLoading">
+        Estilo: <strong>{{ st.summary }}</strong>
+      </p>
       <p class="run-account" [class.real]="!p.account.demo">
         Cuenta {{ p.account.demo ? 'DEMO' : 'REAL' }} · {{ p.account.login }} · {{ p.account.server }}
       </p>
-      <dl class="export-confirm-list">
+      <dl class="export-confirm-list" [class.stale]="runLoading">
         <dt>Operación</dt>
         <dd [class.run-long]="p.side === 'LONG'" [class.run-short]="p.side === 'SHORT'">{{ p.side }} {{ p.symbol }}</dd>
         <dt>Tipo</dt>
@@ -1503,8 +1513,9 @@
       <p class="run-volume-note" *ngIf="p.volumeNote">⚠ {{ p.volumeNote }}</p>
       <p class="run-volume-note" *ngIf="p.checkWarning">⚠ {{ p.checkWarning }}</p>
       <p class="muted tiny">
-        SL y TP incluyen el margen extra en pips de Configuración (y el ajuste por volatilidad si está activo). Mercado o LIMIT se recalcula con el precio
-        del broker al confirmar. Solo se puede enviar una vez.
+        SL = SL de la señal + el SL extra del estilo; TP = entrada ± R:R × distancia al SL (sin R:R: TP de la señal + TP extra). Lote con el riesgo %
+        del estilo (salvo lotes fijos). Ajuste por volatilidad si está activo. Mercado o LIMIT se recalcula con el precio del broker al confirmar.
+        Solo se puede enviar una vez.
       </p>
     </ng-container>
 
@@ -1621,7 +1632,7 @@
   <p class="run-toast" *ngIf="runToast" [class.err]="runToastErr" role="status">{{ runToast }}</p>
 </div>
 
-<!-- Ticket (#id + indicador de bloqueo): tabla resumida y no resumida. -->
+<!-- Orden interna (solo cerradas; #id en el tooltip) + indicador de bloqueo: tabla resumida y no resumida. -->
 <!-- Icono de ojo del botón «Ver detalle» -->
 <ng-template #eyeIcon>
   <svg class="eye-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1631,7 +1642,7 @@
 </ng-template>
 
 <ng-template #ticketCell let-item>
-  #{{ item.id }}
+  <span [title]="'Señal #' + item.id" [attr.aria-label]="(item.internalOrder != null ? 'Orden interna ' + item.internalOrder + ' · ' : 'Sin orden interna · ') + 'Señal #' + item.id">{{ item.internalOrder ?? '—' }}</span>
   <span class="lock-ind" *ngIf="isLocked(item)" role="img" aria-label="Fila bloqueada" title="Fila bloqueada">🔒</span>
 </ng-template>
 

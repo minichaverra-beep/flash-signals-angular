@@ -56,9 +56,12 @@ function entryOf(result = {}) {
   };
 }
 
-/** @param {object} result respuesta del puente (orden enviada). */
-function record(profile, key, result = {}) {
-  const entry = entryOf(result);
+/**
+ * @param {object} result respuesta del puente (orden enviada).
+ * @param {object} [meta] datos extra del envío (p. ej. style del Run operation).
+ */
+function record(profile, key, result = {}, meta = {}) {
+  const entry = { ...entryOf(result), ...meta };
   persist({ ...state(), [keyOf(profile, key)]: entry });
   return entry;
 }

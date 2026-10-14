@@ -69,4 +69,14 @@ describe('historial-summary (vista Resumido tipo MT5)', () => {
       [1, 1, 1, 1]
     );
   });
+
+  it('operando: etiqueta «Operando», cuenta como pendiente y no suma al total', () => {
+    assert.equal(summaryRow({ id: 5, market: 'btc', resultado: 'operando' }).resultLabel, 'Operando');
+    const t = summaryTotals([
+      { id: 1, market: 'btc', resultado: 'ganada', pnlUsd: 100 },
+      { id: 2, market: 'btc', resultado: 'operando', pnlUsd: -30 },
+    ]);
+    assert.equal(t.profit, '+100.00');
+    assert.deepEqual([t.ganadas, t.perdidas, t.noTomadas, t.pendientes], [1, 0, 0, 1]);
+  });
 });

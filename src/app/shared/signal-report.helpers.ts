@@ -360,6 +360,17 @@ export function firstPercent(
   return null;
 }
 
+/** Veredictos que la UI no muestra como texto (NO_OPERAR / NO OPERAR (LONG|SHORT) / ESPERAR). */
+export function isHiddenVerdict(v: string | null | undefined): boolean {
+  const t = String(v || '').toUpperCase().replace(/[_\s-]+/g, ' ');
+  return /\bNO OPERAR\b|\bESPERAR\b/.test(t);
+}
+
+/** Texto visible del veredicto: '' si está oculto (ver isHiddenVerdict). */
+export function displayVerdict(v: string | null | undefined): string {
+  return isHiddenVerdict(v) ? '' : String(v || '').trim();
+}
+
 export function verdictTone(v: string | null | undefined): string {
   const raw = String(v || '');
   const t = raw.toUpperCase();
@@ -804,12 +815,11 @@ export function resolveRunBias(
 
 export function investorVerdictTitle(s: SignalSummary | null): string {
   const v = (s?.verdict || '').toUpperCase();
-  if (/NO_OPERAR|NO OPERAR/.test(v)) return 'No operar ahora';
-  if (/ESPERAR|WAIT/.test(v)) return 'Esperar confirmación';
+  if (isHiddenVerdict(v) || /WAIT/.test(v)) return '';
   if (/SHORT/.test(v) && !/NO_/.test(v)) return 'Hay señal de venta (corto)';
   if (/LONG/.test(v) && !/NO_/.test(v)) return 'Hay señal de compra (largo)';
   if (/OPERAR|GO/.test(v) && !/NO_/.test(v)) return 'Hay señal de entrada';
-  return s?.verdict || 'Sin decisión todavía';
+  return displayVerdict(s?.verdict) || 'Sin decisión todavía';
 }
 
 export function investorVerdictExplain(s: SignalSummary | null): string {
@@ -1118,7 +1128,7 @@ export function investorScoresWaitTip(s: SignalSummary | null): string | null {
     (s.confluencePct != null && s.confluencePct < 50);
   const scoreBajo = s.scoreCombined != null && s.scoreCombined < 50;
   if (baja || scoreBajo) {
-    return 'Tip: la nota o el acuerdo entre capas es bajo. Mejor esperar otra oportunidad más clara.';
+    return 'Tip: la nota o el acuerdo entre capas es bajo. Mejor aguardar otra oportunidad más clara.';
   }
   return null;
 }

@@ -64,6 +64,18 @@ describe('mt5-settings', () => {
     assert.throws(() => settings.update({ dailyTradeLimitEnabled: 'si' }), (err) => err.status === 400);
   });
 
+  it('probabilidad mínima para Run: 45 por defecto, rango 0–100 y por perfil', () => {
+    assert.equal(settings.get().minProbabilityPct, 45);
+    settings.update({ minProbabilityPct: 0 }, 'secundaria');
+    settings.update({ minProbabilityPct: 52.5 });
+    settings._resetForTests();
+    assert.equal(settings.get().minProbabilityPct, 52.5);
+    assert.equal(settings.get('secundaria').minProbabilityPct, 0);
+    assert.throws(() => settings.update({ minProbabilityPct: -1 }), (err) => err.status === 400);
+    assert.throws(() => settings.update({ minProbabilityPct: 101 }), (err) => err.status === 400);
+    assert.throws(() => settings.update({ minProbabilityPct: '' }), (err) => err.status === 400);
+  });
+
   it('límite diario: un 0 antiguo (sin límite) en el archivo pasa al valor por defecto', () => {
     fs.writeFileSync(
       process.env.MT5_SETTINGS_PATH,

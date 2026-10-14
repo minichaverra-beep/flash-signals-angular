@@ -27,12 +27,12 @@ const helpers: ExportRowHelpers = {
 
 const items: ExportItem[] = [
   // Martes 2026-09-22 08:30 NY (12:30 UTC) → NY AM
-  { id: 1, createdAt: '2026-09-22T12:30:00Z', market: 'us30', plannedEntry: 42450, plannedSl: 42315, plannedTp: 42850, plannedRr: '1:3', scoreCombined: 71.25, resultado: 'ganada', pnlUsd: 300, confluencias: [{ name: 'CRT' }, { name: 'FVG' }], tags: [{ name: 'LONG' }] },
+  { id: 1, internalOrder: 2, createdAt: '2026-09-22T12:30:00Z', market: 'us30', plannedEntry: 42450, plannedSl: 42315, plannedTp: 42850, plannedRr: '1:3', scoreCombined: 71.25, resultado: 'ganada', pnlUsd: 300, confluencias: [{ name: 'CRT' }, { name: 'FVG' }], tags: [{ name: 'LONG' }] },
   // Martes 03:00 NY (07:00 UTC) → Londres
-  { id: 2, createdAt: '2026-09-22T07:00:00Z', market: 'xauusd', plannedEntry: 3992, plannedSl: 4001, resultado: 'perdida', pnlUsd: -100, confluencias: [{ name: 'CRT' }] },
+  { id: 2, internalOrder: 1, createdAt: '2026-09-22T07:00:00Z', market: 'xauusd', plannedEntry: 3992, plannedSl: 4001, resultado: 'perdida', pnlUsd: -100, confluencias: [{ name: 'CRT' }] },
   // Miércoles 20:00 NY (00:00 UTC jueves) → Asia
   { id: 3, createdAt: '2026-09-24T00:00:00Z', market: 'btc', resultado: 'no_tomada', pnlUsd: 50 },
-  { id: 4, createdAt: '2026-09-24T15:00:00Z', market: 'us30', resultado: 'ganada', pnlUsd: 150, confluencias: [{ name: 'FVG' }] },
+  { id: 4, internalOrder: 3, createdAt: '2026-09-24T15:00:00Z', market: 'us30', resultado: 'ganada', pnlUsd: 150, confluencias: [{ name: 'FVG' }] },
   { id: 5, createdAt: '2026-09-25T15:00:00Z', market: 'us30', resultado: null, comment: 'pendiente' },
 ];
 
@@ -58,14 +58,16 @@ const metrics: ExportMetricsLite = {
 describe('historial-export (Excel / PDF)', () => {
   it('columnas según modo: resumido tipo MT5 y detallado con anotaciones', () => {
     const r = exportColumns('resumido').map((c) => c.key);
-    assert.deepEqual(r, ['fecha', 'ticket', 'simbolo', 'tipo', 'precio', 'sl', 'tp', 'rr', 'prob', 'resultado', 'beneficio']);
+    assert.deepEqual(r, ['fecha', 'orden', 'simbolo', 'tipo', 'precio', 'sl', 'tp', 'rr', 'prob', 'resultado', 'beneficio']);
     const d = exportColumns('detallado').map((c) => c.key);
     for (const k of ['sesgo', 'tasa', 'direccion', 'confluencias', 'comentario', 'motivo']) assert.ok(d.includes(k), k);
   });
 
   it('exportRow: valores numéricos crudos y no tomada sin beneficio', () => {
     const row = exportRow(items[0], 'resumido', helpers);
-    assert.equal(row['ticket'], '#1');
+    assert.equal(row['orden'], 2);
+    assert.equal(exportColumns('resumido').find((c) => c.key === 'orden')?.header, 'Orden interna');
+    assert.equal(exportRow(items[4], 'resumido', helpers)['orden'], null);
     assert.equal(row['simbolo'], 'US30');
     assert.equal(row['tipo'], 'buy');
     assert.equal(row['precio'], 42450);
@@ -79,11 +81,22 @@ describe('historial-export (Excel / PDF)', () => {
 
   it('exportTable ordena como la UI (más reciente arriba)', () => {
     const t = exportTable(items, 'resumido', helpers);
-    assert.deepEqual(t.rows.map((r) => r['ticket']), ['#5', '#4', '#3', '#1', '#2']);
+    assert.deepEqual(t.rows.map((r) => r['orden']), [null, 3, null, 2, 1]);
   });
 
   it('exportTotals excluye no tomadas del beneficio', () => {
     assert.deepEqual(exportTotals(items), { ganadas: 2, perdidas: 1, noTomadas: 1, pendientes: 1, profit: 350 });
+  });
+
+  it('operando: etiqueta «Operando», cuenta como pendiente, sin beneficio ni disciplina', () => {
+    const open: ExportItem = { id: 6, createdAt: '2026-09-26T15:00:00Z', market: 'us30', resultado: 'operando', pnlUsd: 25 };
+    const row = exportRow(open, 'resumido', helpers);
+    assert.equal(row['resultado'], 'Operando');
+    assert.equal(row['beneficio'], null);
+    assert.deepEqual(exportTotals([...items, open]), { ganadas: 2, perdidas: 1, noTomadas: 1, pendientes: 2, profit: 350 });
+    const x = extraKpis([...items, open]);
+    assert.equal(x.markedPct, 66.7);
+    assert.equal(x.maxWinStreak, 2);
   });
 
   it('extraKpis: mejor/peor, payoff, rachas y disciplina', () => {

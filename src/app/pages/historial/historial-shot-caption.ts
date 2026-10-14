@@ -63,5 +63,6 @@ export function shotCaption(
   }
   if (resultado === 'no_tomada') return { text: 'No tomada · 0 $', tone: 'muted' };
   if (sent?.order) return liveCaption(sent);
+  if (resultado === 'operando') return { text: '▶ Operando', tone: 'wait' };
   return null;
 }

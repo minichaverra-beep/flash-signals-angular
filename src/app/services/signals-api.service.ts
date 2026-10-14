@@ -161,6 +161,27 @@ export interface Mt5PushRequest {
   allowMultiple?: boolean;
   /** Solo con historyId: ejecuta el plan aunque el veredicto no sea ENTRAR. */
   anyVerdict?: boolean;
+  /** Estilo del Run operation: SL extra, TP por R:R y riesgo % del estilo (Configuración). */
+  style?: Mt5TradeStyle;
+}
+
+export type Mt5TradeStyle = 'scalping' | 'daytrading';
+
+/** Parámetros de un estilo de operación por perfil; tpRr null = TP de la señal + extraTpPips. */
+export interface Mt5StyleSettings {
+  extraSlPips: number;
+  extraTpPips: number;
+  riskPct: number;
+  tpRr: number | null;
+}
+
+/** Estilo aplicado a un envío (vista previa del Run). */
+export interface Mt5AppliedStyle extends Mt5StyleSettings {
+  id: Mt5TradeStyle;
+  label: string;
+  /** Lotes fijos del perfil (el riesgo % del estilo no se usa). */
+  fixedVolume: number | null;
+  summary: string;
 }
 
 /** Respuesta del puente MT5 (orden enviada o vista previa con dryRun). */
@@ -185,6 +206,8 @@ export interface Mt5OrderResult {
   checkWarning?: string | null;
   /** Ajuste de SL/TP por VIX aplicado (o aviso si no se pudo leer); ausente con el toggle apagado. */
   volatilityNote?: string | null;
+  /** Estilo usado (solo si el envío indicó style). */
+  style?: Mt5AppliedStyle;
 }
 
 export interface Mt5PushOutcome {
@@ -194,6 +217,8 @@ export interface Mt5PushOutcome {
   result?: Mt5OrderResult;
   /** Perfil de configuración usado (activo al enviar). */
   profile?: { id: 'principal' | 'secundaria'; label: string };
+  /** Envío real desde el historial: Resultado → «operando» (solo si estaba vacío y sin candado). */
+  operando?: { marked: boolean; reason?: string; resultado?: string | null; item?: HistoryListItem };
 }
 
 /** Filtro del historial por Dirección (cualquiera / sin dirección) y Confluencias (todas / ninguna). */
@@ -216,6 +241,8 @@ export interface Mt5SentEntry {
   tp: number | null;
   order: number | null;
   deal: number | null;
+  /** Estilo elegido en el Run operation (envíos antiguos: ausente). */
+  style?: Mt5TradeStyle | null;
   /** Último estado leído de MT5 con Recalcular. */
   state?: 'pending' | 'open' | 'closed' | 'canceled' | 'expired' | null;
   /** Niveles tal como se enviaron (antes del primer Recalcular). */
@@ -319,6 +346,8 @@ export interface Mt5SentState {
   sent: Record<number, Mt5SentEntry>;
   runnable: Mt5Runnable | null;
   dailyLimit?: Mt5DailyLimit;
+  /** Probabilidad mínima (%) para Run con el perfil activo; 0 = sin mínimo. */
+  minProbabilityPct?: number;
 }
 
 export type Mt5SignalMarket = 'btc' | 'us30' | 'xauusd';
@@ -357,9 +386,13 @@ export interface Mt5Settings {
   maxTradesPerDay: number;
   /** Drawdown diario máx. (%); 0 = sin límite. */
   maxDailyDrawdownPct: number;
+  /** Run no se ejecuta si la Probabilidad de la señal es menor (0–100, 0 = sin mínimo; por defecto 45). */
+  minProbabilityPct?: number;
   /** Margen extra sobre SL/TP de la señal, en pips. */
   extraSlPips: number;
   extraTpPips: number;
+  /** Estilos del Run operation (sin guardar: derivados del SL/TP extra y riesgo % del perfil). */
+  styles: Record<Mt5TradeStyle, Mt5StyleSettings>;
   /** Valor en precio de 1 pip por mercado. */
   pipSize: Record<Mt5SignalMarket, number>;
   /** Ajusta SL/TP según el nivel del VIX al enviar (desactivado por defecto). */
@@ -869,7 +902,7 @@ export class SignalsApiService {
   }
 }
 
-export type HistoryResultado = 'ganada' | 'perdida' | 'no_tomada';
+export type HistoryResultado = 'ganada' | 'perdida' | 'no_tomada' | 'operando';
 
 /** Resultado detectado con precio real por la auto captura (app.views.trade_outcome_chart). */
 export interface HistoryAutoCaptureOutcome {
@@ -936,6 +969,8 @@ export interface HistoryMt5Real {
 
 export interface HistoryListItem {
   id: number;
+  /** Orden interna: correlativo global de cerradas (ganada/perdida); null si no está cerrada. */
+  internalOrder?: number | null;
   createdAt: string;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -964,7 +999,7 @@ export interface HistoryListItem {
   comment?: string | null;
   /** Motivo de entrada/salida (editable, hive box local). */
   motivoEntradaSalida?: string | null;
-  /** Resultado de la operación: ganada | perdida | no_tomada. */
+  /** Resultado de la operación: ganada | perdida | no_tomada | operando (enviada a MT5, abierta). */
   resultado?: HistoryResultado | null;
   /** PnL real en USD (nullable; editable en /historial). */
   pnlUsd?: number | null;
@@ -1006,6 +1041,7 @@ export interface HistoryTag {
 export type HistorySortKey =
   | 'createdAt'
   | 'id'
+  | 'internalOrder'
   | 'market'
   | 'bias'
   | 'winrate'

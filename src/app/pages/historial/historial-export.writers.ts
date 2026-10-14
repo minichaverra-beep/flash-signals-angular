@@ -61,6 +61,7 @@ function cellToneColor(col: ExportColumn, value: CellValue): string | null {
     if (value === 'Ganada') return BRAND.ok;
     if (value === 'Perdida') return BRAND.bad;
     if (value === 'No tomada') return BRAND.muted;
+    if (value === 'Operando') return BRAND.teal;
     return BRAND.warn;
   }
   if (col.tone === 'type') {

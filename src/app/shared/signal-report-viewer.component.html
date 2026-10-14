@@ -400,7 +400,9 @@
         <div class="collapsible-body">
           <div class="investor-card" [attr.data-tone]="verdictTone(s.verdict)">
             <p class="eyebrow">Recomendación</p>
-            <h3 class="investor-title">{{ investorVerdictTitle(s) }}</h3>
+            @if (investorVerdictTitle(s); as title) {
+              <h3 class="investor-title">{{ title }}</h3>
+            }
             <p>{{ investorVerdictExplain(s) }}</p>
             <p class="investor-action">{{ investorActionHint(s) }}</p>
           </div>

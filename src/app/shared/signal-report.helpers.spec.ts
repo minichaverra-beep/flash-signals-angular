@@ -11,6 +11,9 @@ import {
   hasRapidaScores,
   verdictRows,
   verdictTone,
+  isHiddenVerdict,
+  displayVerdict,
+  investorVerdictTitle,
   displayScoreLabel,
   isCombinedScoreLabel,
   biasTone,
@@ -117,6 +120,21 @@ describe('signal-report.helpers', () => {
     assert.equal(verdictTone('OPERAR_SHORT'), 'bearish');
     assert.equal(verdictTone('OPERAR'), 'ok');
     assert.equal(verdictTone(null), '');
+  });
+
+  it('isHiddenVerdict / displayVerdict ocultan NO OPERAR y ESPERAR', () => {
+    for (const v of ['NO_OPERAR', 'NO OPERAR', 'No operar', 'NO OPERAR (LONG)', 'no_operar (short)', 'ESPERAR', 'Esperar']) {
+      assert.equal(isHiddenVerdict(v), true, v);
+      assert.equal(displayVerdict(v), '', v);
+    }
+    for (const v of ['ENTRAR', 'ENTRAR LONG', 'OPERAR_LONG', 'OPERAR']) {
+      assert.equal(isHiddenVerdict(v), false, v);
+      assert.equal(displayVerdict(v), v, v);
+    }
+    assert.equal(displayVerdict(null), '');
+    assert.equal(investorVerdictTitle({ verdict: 'NO_OPERAR' }), '');
+    assert.equal(investorVerdictTitle({ verdict: 'ESPERAR' }), '');
+    assert.equal(investorVerdictTitle({ verdict: 'OPERAR_LONG' }), 'Hay señal de compra (largo)');
   });
 
   it('biasTone y biasLabel colorean dirección', () => {

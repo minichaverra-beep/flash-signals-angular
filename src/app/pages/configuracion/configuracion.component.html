@@ -348,6 +348,74 @@
         </div>
       </section>
 
+      <section class="panel">
+        <h2>Estilos de operación (Run)</h2>
+        <p class="muted tiny hide-on-phone">
+          Al pulsar ▶ Run en el Historial eliges Scalping o Day trading y la orden se recalcula con estos valores (en lugar del margen extra de
+          arriba): SL = SL de la señal + SL extra; TP = entrada ± R:R × distancia al SL; lote = equity × riesgo % ÷ pérdida hasta el SL.
+        </p>
+        <p class="vol-note" *ngIf="d.lotMode === 'fixed'">
+          Estás en «Lotes fijos»: el riesgo % de los estilos no se usa, se envían {{ d.fixedVolume }} lotes.
+        </p>
+        <div class="grid style-grid">
+          <div class="style-col" *ngFor="let st of tradeStyles">
+            <h3 class="sub-title">{{ st.label }}</h3>
+            <small class="muted">{{ st.hint }}</small>
+            <div class="field">
+              <label [for]="'cfg-style-sl-' + st.id">SL extra (pips)</label>
+              <input
+                [id]="'cfg-style-sl-' + st.id"
+                [name]="'style-sl-' + st.id"
+                type="number"
+                min="0"
+                max="10000"
+                step="1"
+                [(ngModel)]="d.form.styles[st.id].extraSlPips"
+              />
+              <small class="muted hide-on-phone">Aleja el SL de la señal; 0 = SL exacto de la señal.</small>
+            </div>
+            <div class="field">
+              <label [for]="'cfg-style-risk-' + st.id">Riesgo por operación (% equity)</label>
+              <input
+                [id]="'cfg-style-risk-' + st.id"
+                [name]="'style-risk-' + st.id"
+                type="number"
+                min="0.01"
+                max="5"
+                step="0.05"
+                [(ngModel)]="d.form.styles[st.id].riskPct"
+              />
+              <small class="muted hide-on-phone">El lote se calcula con este % y la distancia al SL final (máx. 5 %).</small>
+            </div>
+            <div class="field">
+              <label [for]="'cfg-style-rr-' + st.id">TP por R:R (1:x)</label>
+              <input
+                [id]="'cfg-style-rr-' + st.id"
+                [name]="'style-rr-' + st.id"
+                type="number"
+                min="0"
+                max="10"
+                step="0.1"
+                [(ngModel)]="d.form.styles[st.id].tpRr"
+              />
+              <small class="muted hide-on-phone">2 = el TP está al doble de distancia que el SL. Vacío o 0 = TP de la señal + TP extra.</small>
+            </div>
+            <div class="field" *ngIf="!d.form.styles[st.id].tpRr">
+              <label [for]="'cfg-style-tp-' + st.id">TP extra sin R:R (pips)</label>
+              <input
+                [id]="'cfg-style-tp-' + st.id"
+                [name]="'style-tp-' + st.id"
+                type="number"
+                min="0"
+                max="10000"
+                step="1"
+                [(ngModel)]="d.form.styles[st.id].extraTpPips"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel vol-panel">
         <h2>Volatilidad (VIX) · {{ label(editing) }}</h2>
         <p class="muted tiny hide-on-phone">
@@ -749,6 +817,11 @@
             <label for="cfg-max-dd">Límite de drawdown de hoy (%)</label>
             <input id="cfg-max-dd" name="maxDailyDrawdownPct" type="number" min="0" max="100" step="0.5" [(ngModel)]="d.form.maxDailyDrawdownPct" />
             <small class="muted hide-on-phone">0 = sin límite. Pérdida de hoy (cerrada + flotante) sobre el balance al inicio del día.</small>
+          </div>
+          <div class="field">
+            <label for="cfg-min-prob">Probabilidad mínima para Run (%)</label>
+            <input id="cfg-min-prob" name="minProbabilityPct" type="number" min="0" max="100" step="1" [(ngModel)]="d.form.minProbabilityPct" />
+            <small class="muted">Run no se ejecuta si la Probabilidad de la señal es menor que este valor (0 = sin mínimo)</small>
           </div>
         </div>
       </section>

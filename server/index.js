@@ -22,9 +22,13 @@ const { registerAccountSettingsRoutes } = require('./account-settings-routes');
 const artifacts = require('./artifacts');
 const mt5 = require('./mt5');
 const mt5Settings = require('./mt5-settings');
+const mt5Style = require('./mt5-style');
+const { parsePushOverrides } = require('./mt5-push-body');
 const dataSource = require('./data-source');
 const mt5Sent = require('./mt5-sent');
 const { countTradesToday, dailyLimitStatus } = require('./mt5-daily-limit');
+const { minProbabilityPct, probabilityRejection } = require('./mt5-probability');
+const historyOperando = require('./history-operando');
 const { positionParams } = require('./position-params');
 const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
@@ -326,22 +330,43 @@ function volatilitySuffix(volatility) {
   return ` · ${warn}${volatility.note}`;
 }
 
+/** Estilo aplicado a un envío (para la vista previa del Run y el mensaje). */
+function styleResultInfo(style, settings, overrides = {}) {
+  const fixedVolume = overrides.volume ?? settings.volume ?? null;
+  const riskPct = overrides.risk_pct ?? style.riskPct;
+  const info = {
+    id: style.id,
+    label: style.label,
+    riskPct,
+    extraSlPips: style.extraSlPips,
+    extraTpPips: style.extraTpPips,
+    tpRr: style.tpRr,
+    fixedVolume,
+  };
+  return { ...info, summary: mt5Style.styleSummary(info, { fixedVolume }) };
+}
+
 /**
  * Envía el plan Entry/SL/TP de una señal al puente MT5.
  * @returns {Promise<{ status: 'sent'|'skipped'|'error', message: string, result?: object, order?: object }>}
  */
-async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdict = false }) {
+async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdict = false, style: styleId = null }) {
   const profileId = mt5Settings.getActive();
   const settings = mt5Settings.get(profileId);
   const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
-  let built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict });
+  const style = styleId ? mt5Style.resolveStyle(settings, styleId) : null;
+  let built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict, style });
   if (!built.order) return { status: 'skipped', message: built.skip, profile };
   // Con el toggle apagado no se pide el VIX; si falla la lectura la orden sigue con ×1 y un aviso.
   if (settings.volatilityAdjustEnabled) {
     const volatility = await readVolatility(settings);
-    built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict, volatility });
+    built = mt5.buildOrderFromSummary(market, summary, settings, { anyVerdict, volatility, style });
   }
   const { order, volatility } = built;
+  const styleInfo = style ? styleResultInfo(style, settings, overrides) : null;
+  // Lote del estilo: su riesgo %, salvo lotes fijos en el perfil o volume/riskPct explícitos en el body.
+  const useStyleRisk = styleInfo && !styleInfo.fixedVolume && overrides.risk_pct == null;
+  const pushOverrides = useStyleRisk ? { ...overrides, risk_pct: style.riskPct } : overrides;
   // Por perfil (persistido): la misma señal puede ir a la cuenta principal y a la secundaria.
   const allowMultiple = overrides.allow_multiple || settings.allowMultiple;
   if (key && mt5Sent.has(profileId, key) && !allowMultiple) {
@@ -353,16 +378,18 @@ async function pushSignalToMt5({ key, market, summary, overrides = {}, anyVerdic
   }
   if (lockKey) mt5InFlight.add(lockKey);
   try {
-    const result = await mt5.pushOrder(order, { clientId: key, ...overrides }, settings);
-    if (lockKey) mt5Sent.record(profileId, key, result);
+    const result = await mt5.pushOrder(order, { clientId: key, ...pushOverrides }, settings);
+    if (lockKey) mt5Sent.record(profileId, key, result, style ? { style: style.id } : {});
     if (volatility) {
       result.volatilityNote = volatility.note;
       result.volatility = volatility;
     }
+    if (styleInfo) result.style = styleInfo;
     const how = result.mode === 'market' ? 'mercado' : 'LIMIT';
+    const styleText = styleInfo ? ` · ${styleInfo.summary}` : '';
     return {
       status: 'sent',
-      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${result.dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}${volatilitySuffix(volatility)}`,
+      message: `${order.side} ${result.symbol} ${result.volume} lotes · ${how} @ ${result.price} · SL ${result.sl} · TP ${result.tp} · ${profile.label}${styleText}${result.dryRun ? ' (dry-run)' : ''}${volumeNoteSuffix(result)}${volatilitySuffix(volatility)}`,
       order,
       result,
       profile,
@@ -1635,7 +1662,7 @@ app.patch('/api/history/:id', async (req, res) => {
   if (!Object.keys(patch).length) {
     return res.status(400).json({
       error:
-        'Envía comment, motivoEntradaSalida, resultado (ganada|perdida|no_tomada|vacío), pnlUsd, tagIds y/o confluenceIds',
+        'Envía comment, motivoEntradaSalida, resultado (ganada|perdida|no_tomada|operando|vacío), pnlUsd, tagIds y/o confluenceIds',
     });
   }
   try {
@@ -2166,7 +2193,7 @@ async function resolvePushSource(body) {
     if (id == null) return { status: 400, error: 'historyId inválido' };
     const item = await historyStore.getById(id).catch(() => null);
     if (!item) return { status: 404, error: 'Entrada de historial no encontrada' };
-    return { key: `h${id}`, market: item.market, summary: item.summary };
+    return { key: `h${id}`, market: item.market, summary: item.summary, row: item };
   }
   const wantedMarket = body.market == null ? null : normalizeMarket(body.market);
   if (body.market != null && !wantedMarket) return { status: 400, error: MARKET_ERROR };
@@ -2188,22 +2215,6 @@ async function resolvePushSource(body) {
   return { key, market: wantedMarket, summary: latest.summary };
 }
 
-/** dryRun / allowMultiple / volume / riskPct del body → { overrides } | { error }. */
-function parsePushOverrides(body) {
-  const overrides = { dry_run: body.dryRun === true, allow_multiple: body.allowMultiple === true };
-  if (body.volume != null) {
-    const volume = Number(body.volume);
-    if (!Number.isFinite(volume) || volume <= 0) return { error: 'volume debe ser > 0' };
-    overrides.volume = volume;
-  }
-  if (body.riskPct != null) {
-    const riskPct = Number(body.riskPct);
-    if (!Number.isFinite(riskPct) || riskPct <= 0 || riskPct > 5) return { error: 'riskPct debe estar entre 0 y 5' };
-    overrides.risk_pct = riskPct;
-  }
-  return { overrides };
-}
-
 /** Run operation: solo la última señal y dentro de la ventana. → mensaje de rechazo o null. */
 async function runWindowRejection(historyId) {
   const runnable = await runnableHistory().catch(() => null);
@@ -2218,12 +2229,12 @@ async function runWindowRejection(historyId) {
 
 app.post('/api/mt5/push', async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { overrides, style, error } = parsePushOverrides(body);
+  if (error) return res.status(400).json({ error });
+
   const source = await resolvePushSource(body);
   if (source.error) return res.status(source.status).json({ error: source.error });
   const { key, market, summary } = source;
-
-  const { overrides, error } = parsePushOverrides(body);
-  if (error) return res.status(400).json({ error });
 
   const anyVerdict = body.anyVerdict === true && body.historyId != null;
   if (anyVerdict) {
@@ -2231,15 +2242,37 @@ app.post('/api/mt5/push', async (req, res) => {
     if (rejection) return res.status(409).json({ status: 'skipped', message: rejection });
   }
   const profileId = mt5Settings.getActive();
+  const probabilityCheck = source.row ? probabilityRejection(source.row, mt5Settings.get(profileId)) : null;
+  if (probabilityCheck?.blocked) {
+    const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
+    return res.status(409).json({
+      status: 'skipped',
+      message: probabilityCheck.message,
+      profile,
+      probability: probabilityCheck.probability,
+      minProbabilityPct: probabilityCheck.min,
+    });
+  }
   const dailyLimit = await tradeLimitStatus(profileId);
   if (dailyLimit.reached) {
     const profile = { id: profileId, label: mt5Settings.PROFILE_LABELS[profileId] };
     return res.status(429).json({ status: 'skipped', message: dailyLimit.message, profile, dailyLimit });
   }
-  const outcome = await pushSignalToMt5({ key, market, summary, overrides, anyVerdict });
+  const outcome = await pushSignalToMt5({ key, market, summary, overrides, anyVerdict, style });
+  if (probabilityCheck?.warning) {
+    outcome.probabilityWarning = probabilityCheck.warning;
+    outcome.message = `${outcome.message} · ⚠ ${probabilityCheck.warning}`;
+  }
   if (!overrides.dry_run && currentJob.summary === summary) {
     currentJob.mt5 = outcome;
     currentJob.logs.push(`[mt5] ${outcome.status}: ${outcome.message}`);
+  }
+  const operandoId = historyOperando.isRealSend(outcome, overrides) ? historyOperando.historyIdFromKey(key) : null;
+  if (operandoId != null) {
+    outcome.operando = await historyOperando.markOperando(historyStore, operandoId).catch((err) => ({
+      marked: false,
+      reason: err.message,
+    }));
   }
   const status = { sent: 200, skipped: 409 }[outcome.status] || outcome.httpStatus || 502;
   res.status(status).json(outcome);
@@ -2256,6 +2289,7 @@ app.get('/api/mt5/sent', async (_req, res) => {
     sent: mt5Sent.historyMap(profileId),
     runnable: await runnableHistory().catch(() => null),
     dailyLimit: await tradeLimitStatus(profileId),
+    minProbabilityPct: minProbabilityPct(mt5Settings.get(profileId)),
   });
 });
 
@@ -2391,9 +2425,10 @@ app.post('/api/mt5/recalc', async (req, res) => {
     const status = await mt5.orderStatus(sent.order, settings);
     const rec = mt5.reconcileOrder(sent, status);
     const dup = await reconcileDuplicate(sent.duplicate, settings);
-    const annotation = sent.duplicate?.order
+    const closed = sent.duplicate?.order
       ? mt5.combineAnnotations(rec.annotation, dup.rec?.annotation)
       : rec.annotation;
+    const annotation = historyOperando.recalcAnnotation(closed, row, [status?.state, dup.rec?.sentPatch?.state]);
 
     const failed = await applyRecalcToRow(id, rec.levels, annotation);
     if (failed?.locked) return sendHistoryLocked(res);

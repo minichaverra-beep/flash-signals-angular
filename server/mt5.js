@@ -7,6 +7,7 @@ const mt5Settings = require('./mt5-settings');
 const { applyVolatilityToStops } = require('./volatility');
 const { effectiveTradeLimit } = require('./mt5-daily-limit');
 const { resolveDataSource } = require('./data-source');
+const { styleStops } = require('./mt5-style');
 
 const TIMEOUT_MS = 15000;
 
@@ -64,9 +65,10 @@ function executionFromDeals(deals = [], ticket) {
  * El lado se deduce de la geometría SL/TP (no del texto), así un plan incoherente se descarta.
  * anyVerdict: el trader decide ejecutar un plan aunque el veredicto no sea ENTRAR (Run operation del historial).
  * volatility: ajuste por VIX ya resuelto (resolveVolatilityAdjustment); null/undefined = sin ajuste.
+ * style: estilo resuelto (mt5-style.resolveStyle); sustituye el margen extra del perfil por el del estilo y el TP por su R:R.
  * @returns {{ order?: object, skip?: string, volatility?: object|null }}
  */
-function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { anyVerdict = false, volatility = null } = {}) {
+function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { anyVerdict = false, volatility = null, style = null } = {}) {
   if (!summary) return { skip: 'Sin resumen de señal' };
   if (!anyVerdict && !/entrar/i.test(String(summary.verdict || ''))) {
     return { skip: `Veredicto "${summary.verdict || 'n/d'}": no se envía orden` };
@@ -90,7 +92,12 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { 
 
   // 1) El multiplicador de volatilidad escala las distancias de la señal; 2) después se suma el margen extra en pips.
   const scaled = applyVolatilityToStops({ entry, side, sl, tp, multiplier: volatility?.multiplier });
-  return { order: { symbol, side, entry, ...padStops(market, side, scaled.sl, scaled.tp, settings) }, volatility };
+  const stops = style
+    ? styleStops(market, side, { entry, sl: scaled.sl, tp: scaled.tp }, style, settings)
+    : padStops(market, side, scaled.sl, scaled.tp, settings);
+  const coherent = side === 'LONG' ? stops.sl < entry && entry < stops.tp : stops.tp < entry && entry < stops.sl;
+  if (!coherent) return { skip: `Plan incoherente tras el ajuste: entry=${entry} sl=${stops.sl} tp=${stops.tp}` };
+  return { order: { symbol, side, entry, ...stops }, volatility };
 }
 
 const roundPrice = (n) => Math.round(n * 1e6) / 1e6;

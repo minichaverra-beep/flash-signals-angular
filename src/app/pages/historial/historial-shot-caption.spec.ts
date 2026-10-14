@@ -42,6 +42,11 @@ describe('shotCaption', () => {
     assert.equal(shotCaption(null, null, null), null);
   });
 
+  it('operando: estado vivo de MT5 si hay envío; si no, «Operando»', () => {
+    assert.equal(shotCaption('operando', null, { ...base, state: 'open', profit: 2 })?.text, '▶ En curso · +2.00 $');
+    assert.deepEqual(shotCaption('operando', null, null), { text: '▶ Operando', tone: 'wait' });
+  });
+
   it('ganada sin PnL ni MT5 → solo la palabra', () => {
     assert.deepEqual(shotCaption('ganada', null, null), { text: '✓ Ganada', tone: 'pos' });
   });

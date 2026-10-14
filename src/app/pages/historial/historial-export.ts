@@ -28,10 +28,12 @@ export interface ExportTable {
   rows: Record<string, CellValue>[];
 }
 
-export type ExportResultado = 'ganada' | 'perdida' | 'no_tomada';
+export type ExportResultado = 'ganada' | 'perdida' | 'no_tomada' | 'operando';
 
 export interface ExportItem {
   id: number;
+  /** Orden interna (servidor): correlativo global de cerradas; null si no está cerrada. */
+  internalOrder?: number | null;
   createdAt: string;
   market: string;
   tier?: string | null;
@@ -156,6 +158,7 @@ const RESULT_LABEL: Record<ExportResultado, string> = {
   ganada: 'Ganada',
   perdida: 'Perdida',
   no_tomada: 'No tomada',
+  operando: 'Operando',
 };
 
 export function resultLabel(r: ExportResultado | null | undefined): string {
@@ -196,9 +199,9 @@ function names(list: Array<{ name?: string | null }> | null | undefined): string
     .join(', ');
 }
 
-/** Beneficio de la fila: no tomadas no cuentan. */
+/** Beneficio de la fila: no tomadas y operando (aún abierta) no cuentan. */
 function rowProfit(item: ExportItem): number | null {
-  if (item.resultado === 'no_tomada') return null;
+  if (item.resultado === 'no_tomada' || item.resultado === 'operando') return null;
   return finite(item.pnlUsd) ? round(item.pnlUsd) : null;
 }
 
@@ -206,7 +209,7 @@ function rowProfit(item: ExportItem): number | null {
 
 const RESUMIDO_COLUMNS: ExportColumn[] = [
   { key: 'fecha', header: 'Hora', width: 18, kind: 'datetime' },
-  { key: 'ticket', header: 'Ticket', width: 9, kind: 'text' },
+  { key: 'orden', header: 'Orden interna', width: 9, kind: 'int' },
   { key: 'simbolo', header: 'Símbolo', width: 10, kind: 'text' },
   { key: 'tipo', header: 'Tipo', width: 7, kind: 'text', tone: 'type' },
   { key: 'precio', header: 'Precio', width: 12, kind: 'number' },
@@ -220,7 +223,7 @@ const RESUMIDO_COLUMNS: ExportColumn[] = [
 
 const DETALLADO_COLUMNS: ExportColumn[] = [
   { key: 'fecha', header: 'Fecha', width: 17, kind: 'datetime' },
-  { key: 'ticket', header: 'Ticket', width: 8, kind: 'text' },
+  { key: 'orden', header: 'Orden interna', width: 8, kind: 'int' },
   { key: 'simbolo', header: 'Mercado', width: 12, kind: 'text' },
   { key: 'tier', header: 'Tier', width: 9, kind: 'text' },
   { key: 'sesgo', header: 'Sesgo', width: 11, kind: 'text' },
@@ -252,7 +255,7 @@ export function exportRow(
   const type = helpers.tradeType(item);
   const base: Record<string, CellValue> = {
     fecha: item.createdAt,
-    ticket: `#${item.id}`,
+    orden: finite(item.internalOrder) ? item.internalOrder : null,
     simbolo: item.market.toUpperCase(),
     tipo: type ?? DASH,
     precio: entryPrice(item),
@@ -345,7 +348,7 @@ export function extraKpis(items: ExportItem[]): ExtraKpis {
   }
 
   const noTomadas = items.filter((i) => i.resultado === 'no_tomada').length;
-  const marked = items.filter((i) => i.resultado != null).length;
+  const marked = items.filter((i) => i.resultado != null && i.resultado !== 'operando').length;
 
   return {
     bestTrade: best,

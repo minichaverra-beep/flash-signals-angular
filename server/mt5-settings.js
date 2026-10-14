@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { VIX_DEFAULTS, thresholdsError } = require('./volatility');
 const { MODES, normalizeMode } = require('./data-source');
+const { completeStyles, defaultStyles, mergeStyles, validateStyles } = require('./mt5-style');
 
 const SIGNAL_MARKETS = ['btc', 'us30', 'xauusd'];
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -25,6 +26,11 @@ function envNumber(name) {
 }
 
 function defaults() {
+  const base = baseDefaults();
+  return { ...base, styles: defaultStyles(base) };
+}
+
+function baseDefaults() {
   return {
     bridgeUrl: process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:8765',
     bridgeToken: process.env.MT5_BRIDGE_TOKEN || '',
@@ -51,6 +57,8 @@ function defaults() {
     maxTradesPerDay: 6,
     /** Drawdown diario máx. (%); 0 = sin límite. */
     maxDailyDrawdownPct: 0,
+    /** Run operation no se ejecuta si la Probabilidad (scoreCombined) de la señal es menor (0 = sin mínimo). */
+    minProbabilityPct: 45,
     /** Margen extra sobre el SL/TP de la señal, en pips (0 = niveles exactos de la señal). */
     extraSlPips: 30,
     extraTpPips: 30,
@@ -90,6 +98,7 @@ const NUMBER_FIELDS = {
   extraTpPips: { min: 0, max: 10000 },
   maxTradesPerDay: { min: 1, max: 100, integer: true },
   maxDailyDrawdownPct: { min: 0, max: 100 },
+  minProbabilityPct: { min: 0, max: 100 },
   vixLowMax: { min: 0, max: 200, minExclusive: true },
   vixNormalMax: { min: 0, max: 200, minExclusive: true },
   vixHighMax: { min: 0, max: 200, minExclusive: true },
@@ -187,6 +196,7 @@ const FIELD_VALIDATORS = {
     errors.push('vixSymbol: símbolo inválido');
     return undefined;
   },
+  styles: validateStyles,
   ...Object.fromEntries(
     Object.entries(NUMBER_FIELDS).map(([key, range]) => [key, (errors, raw) => numberIn(errors, key, raw, range)])
   ),
@@ -210,6 +220,7 @@ function merge(base, patch) {
     ...patch,
     symbols: { ...base.symbols, ...patch.symbols },
     pipSize: { ...base.pipSize, ...patch.pipSize },
+    styles: mergeStyles(base.styles, patch.styles),
   };
 }
 
@@ -238,7 +249,10 @@ function load() {
   const rawProfiles = saved?.profiles ?? (saved ? { principal: saved } : {});
   const profiles = {};
   for (const id of PROFILES) {
-    const profile = merge(base, cleanPatch(rawProfiles[id]));
+    const patch = cleanPatch(rawProfiles[id]);
+    const merged = merge(base, patch);
+    // Estilos sin guardar: derivados del SL/TP extra y riesgo % de este perfil (no de los de fábrica).
+    const profile = { ...merged, styles: completeStyles(patch.styles, merged) };
     // Archivo editado a mano con umbrales desordenados: vuelven a los de fábrica.
     profiles[id] = thresholdsError(profile)
       ? { ...profile, vixLowMax: base.vixLowMax, vixNormalMax: base.vixNormalMax, vixHighMax: base.vixHighMax }

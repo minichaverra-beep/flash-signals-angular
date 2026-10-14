@@ -410,8 +410,8 @@ function seedDefaultHistoryConfluencias(e, nowIso) {
   }
 }
 
-/** Valores persistidos: NULL | ganada | perdida | no_tomada */
-const RESULTADO_OK = new Set(['ganada', 'perdida', 'no_tomada']);
+/** Valores persistidos: NULL | ganada | perdida | no_tomada | operando (enviada a MT5, aún abierta) */
+const RESULTADO_OK = new Set(['ganada', 'perdida', 'no_tomada', 'operando']);
 
 const IMAGE_MIME = {
   'image/png': 'png',
@@ -877,6 +877,8 @@ function rowToListItem(row) {
   const plannedRr = trimOrNull(row.summary_planned_rr);
   return {
     id: Number(row.id),
+    /** Correlativo global de cerradas (ganada/perdida); null si no está cerrada. */
+    internalOrder: row.internal_order != null ? Number(row.internal_order) : null,
     createdAt: row.created_at,
     startedAt: row.started_at || null,
     finishedAt: row.finished_at || null,
@@ -1032,10 +1034,19 @@ function historyListWhere(market, opts) {
   return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
 
+/**
+ * Orden interna: correlativo global (todos los mercados) solo de cerradas ganada/perdida,
+ * cronológico por created_at (desempate id). Se calcula sobre todo el historial, no la página.
+ */
+const INTERNAL_ORDER_JOIN =
+  'LEFT JOIN (SELECT id AS io_id, ROW_NUMBER() OVER (ORDER BY created_at, id) AS internal_order ' +
+  "FROM signal_history WHERE resultado IN ('ganada', 'perdida')) io ON io.io_id = signal_history.id";
+
 /** sortBy permitido → expresión SQL (whitelist: nunca interpolar input del cliente). */
 const HISTORY_SORT_SQL = {
   createdAt: 'created_at',
   id: 'id',
+  internalOrder: 'internal_order',
   market: 'market',
   bias: "json_extract(summary_json, '$.bias')",
   winrate: "CAST(LTRIM(json_extract(summary_json, '$.winrate'), '~ ') AS REAL)",
@@ -1089,8 +1100,10 @@ async function listHistory(opts = {}) {
             json_extract(summary_json, '$.planDetails.rr') AS summary_planned_rr,
             json_extract(summary_json, '$.planDetails.entry') AS summary_planned_entry,
             json_extract(summary_json, '$.planDetails.sl') AS summary_planned_sl,
-            json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp
+            json_extract(summary_json, '$.planDetails.tp') AS summary_planned_tp,
+            io.internal_order
      FROM signal_history
+     ${INTERNAL_ORDER_JOIN}
      ${where}
      ORDER BY ${orderBy}
      LIMIT ? OFFSET ?`,
@@ -1128,7 +1141,11 @@ async function getById(id) {
   const e = await getEngine();
   const n = Number(id);
   if (!Number.isInteger(n) || n < 1) return null;
-  const row = e.get(`SELECT * FROM signal_history WHERE id = ?`, [n]);
+  const row = e.get(
+    `SELECT signal_history.*, io.internal_order FROM signal_history ${INTERNAL_ORDER_JOIN}
+     WHERE signal_history.id = ?`,
+    [n]
+  );
   const detail = rowToDetail(row);
   if (!detail) return null;
   const tagMap = loadTagsByHistoryIds(e, [detail.id]);
@@ -1204,7 +1221,7 @@ function annotationPatchSets(patch) {
   if (Object.hasOwn(patch, 'resultado')) {
     const r = normalizeResultado(patch.resultado);
     if (r === undefined) {
-      return { sets, params, error: 'resultado inválido (usa ganada|perdida|no_tomada|vacío)' };
+      return { sets, params, error: 'resultado inválido (usa ganada|perdida|no_tomada|operando|vacío)' };
     }
     sets.push('resultado = ?');
     params.push(r);

@@ -452,6 +452,7 @@ button:disabled {
 
 .mt5-res.res-win { color: var(--ok); }
 .mt5-res.res-lose { color: var(--fire); }
+.mt5-res.res-open { color: color-mix(in srgb, var(--teal) 35%, white); }
 .mt5-res.res-skip,
 .mt5-res.res-empty { color: var(--muted); }
 
@@ -1024,6 +1025,11 @@ tr.row-locked > td:first-child,
 .hist-select.res-skip {
   color: var(--muted);
   border-color: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.hist-select.res-open {
+  border-color: color-mix(in srgb, var(--teal) 70%, transparent);
+  color: color-mix(in srgb, var(--teal) 35%, white);
 }
 
 .hist-select.res-empty {
@@ -1990,6 +1996,23 @@ tr.row-no-tomada:hover > td {
 
 .run-dialog {
   --tone: var(--ok);
+}
+
+.run-style-seg {
+  margin: 0.2rem 0 0.7rem;
+}
+
+.run-style-seg button {
+  flex: 1 1 0;
+}
+
+.run-style-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+}
+
+.run-dialog .stale {
+  opacity: 0.45;
 }
 
 .params-btn {

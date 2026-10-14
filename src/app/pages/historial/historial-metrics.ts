@@ -4,7 +4,7 @@
  * si no, estima en R con R:R planificado. No inventa valores faltantes.
  */
 
-export type HistoryResultadoLite = 'ganada' | 'perdida' | 'no_tomada';
+export type HistoryResultadoLite = 'ganada' | 'perdida' | 'no_tomada' | 'operando';
 
 export type HistoryPnlUnit = 'usd' | 'R';
 
@@ -23,7 +23,10 @@ export interface HistoryMetrics {
   closed: number;
   wins: number;
   losses: number;
+  /** Sin cerrar (vacío, no_tomada u operando). */
   unmarked: number;
+  /** Operaciones en curso (operando): ni ganada ni perdida ni cerrada. */
+  open: number;
   /** Tasa de acierto % sobre cerradas con resultado. */
   winratePct: number | null;
   /** Máx. pérdidas consecutivas (orden cronológico). */
@@ -83,7 +86,7 @@ function chronological(items: HistoryMetricSource[]): HistoryMetricSource[] {
   });
 }
 
-/** Cerrada para métricas: solo ganada/perdida. no_tomada y vacío excluidos. */
+/** Cerrada para métricas: solo ganada/perdida. no_tomada, operando y vacío excluidos. */
 function isClosed(
   r: HistoryResultadoLite | null | undefined
 ): r is 'ganada' | 'perdida' {
@@ -178,6 +181,7 @@ export function computeHistoryMetrics(
   const losses = items.filter((i) => i.resultado === 'perdida').length;
   const closed = wins + losses;
   const unmarked = total - closed;
+  const open = items.filter((i) => i.resultado === 'operando').length;
   const notes: string[] = [];
 
   const winratePct =
@@ -287,6 +291,7 @@ export function computeHistoryMetrics(
     wins,
     losses,
     unmarked,
+    open,
     winratePct,
     maxConsecutiveLosses,
     avgRewardMultiple,

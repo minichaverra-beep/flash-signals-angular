@@ -15,7 +15,7 @@ export interface SummaryItemLite {
   plannedSl?: number | null;
   plannedTp?: number | null;
   plannedRr?: string | null;
-  resultado?: 'ganada' | 'perdida' | 'no_tomada' | null;
+  resultado?: 'ganada' | 'perdida' | 'no_tomada' | 'operando' | null;
   pnlUsd?: number | null;
   tags?: Array<{ name?: string | null }> | null;
 }
@@ -95,6 +95,7 @@ const RESULT_LABEL: Record<string, string> = {
   ganada: 'Ganada',
   perdida: 'Perdida',
   no_tomada: 'No tomada',
+  operando: 'Operando',
 };
 
 export function summaryRow(item: SummaryItemLite): SummaryRow {
@@ -115,7 +116,7 @@ export function summaryRow(item: SummaryItemLite): SummaryRow {
   };
 }
 
-/** Pie tipo MT5: beneficio total (sin no tomadas) y conteo por resultado. */
+/** Pie tipo MT5: beneficio total (sin no tomadas) y conteo por resultado (operando = pendiente). */
 export function summaryTotals(items: SummaryItemLite[]): SummaryTotals {
   let sum = 0;
   let hasPnl = false;
@@ -125,7 +126,8 @@ export function summaryTotals(items: SummaryItemLite[]): SummaryTotals {
     else if (it.resultado === 'perdida') out.perdidas++;
     else if (it.resultado === 'no_tomada') out.noTomadas++;
     else out.pendientes++;
-    if (it.resultado !== 'no_tomada' && it.pnlUsd != null && Number.isFinite(it.pnlUsd)) {
+    const counts = it.resultado !== 'no_tomada' && it.resultado !== 'operando';
+    if (counts && it.pnlUsd != null && Number.isFinite(it.pnlUsd)) {
       sum += it.pnlUsd;
       hasPnl = true;
     }

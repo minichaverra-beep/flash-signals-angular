@@ -13,6 +13,7 @@ import {
   Mt5SettingsPatch,
   Mt5SettingsState,
   Mt5SignalMarket,
+  Mt5TradeStyle,
   SignalsApiService,
   VixReading,
   VolatilityCalcResult,
@@ -86,6 +87,10 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     { id: 'btc', label: 'BTC', hint: 'ej. BTCUSD, BTCUSD.m' },
     { id: 'us30', label: 'US30', hint: 'ej. US30, US30.cash, DJ30' },
     { id: 'xauusd', label: 'XAUUSD', hint: 'ej. XAUUSD, XAUUSDm, GOLD' },
+  ];
+  readonly tradeStyles: { id: Mt5TradeStyle; label: string; hint: string }[] = [
+    { id: 'scalping', label: 'Scalping', hint: 'Stops cortos y objetivo cercano' },
+    { id: 'daytrading', label: 'Day trading', hint: 'Más margen y objetivo más amplio' },
   ];
 
   state: Mt5SettingsState | null = null;
@@ -441,8 +446,10 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
       dailyTradeLimitEnabled: f.dailyTradeLimitEnabled,
       ...(f.dailyTradeLimitEnabled ? { maxTradesPerDay: f.maxTradesPerDay } : {}),
       maxDailyDrawdownPct: f.maxDailyDrawdownPct,
+      minProbabilityPct: f.minProbabilityPct ?? 45,
       extraSlPips: f.extraSlPips,
       extraTpPips: f.extraTpPips,
+      styles: { scalping: { ...f.styles.scalping }, daytrading: { ...f.styles.daytrading } },
       pipSize: { ...f.pipSize },
       volatilityAdjustEnabled: f.volatilityAdjustEnabled,
       vixSymbol: (f.vixSymbol ?? '').trim(),
@@ -671,7 +678,12 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
 
   private toDraft(s: Mt5Settings): ProfileDraft {
     return {
-      form: { ...s, symbols: { ...s.symbols }, pipSize: { ...s.pipSize } },
+      form: {
+        ...s,
+        symbols: { ...s.symbols },
+        pipSize: { ...s.pipSize },
+        styles: { scalping: { ...s.styles.scalping }, daytrading: { ...s.styles.daytrading } },
+      },
       lotMode: s.volume ? 'fixed' : 'risk',
       fixedVolume: s.volume ?? 0.01,
       tokenInput: '',

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS signal_history (
   error TEXT,
   -- Anotaciones del trader (editables desde /historial)
   comment TEXT,
-  -- NULL | ganada | perdida | no_tomada (métricas solo con ganada/perdida)
+  -- NULL | ganada | perdida | no_tomada | operando (métricas solo con ganada/perdida)
   resultado TEXT,
   -- PnL real en USD (nullable; el trader lo rellena a mano)
   pnl_usd REAL,

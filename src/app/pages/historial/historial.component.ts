@@ -18,6 +18,7 @@ import {
   Mt5PositionLeg,
   Mt5PositionParams,
   Mt5SentEntry,
+  Mt5TradeStyle,
   SignalsApiService,
   SortDir,
 } from '../../services/signals-api.service';
@@ -112,6 +113,17 @@ function readPageSize(): number {
     return (PAGE_SIZE_OPTIONS as readonly number[]).includes(n) ? n : PAGE_SIZE_OPTIONS[0];
   } catch {
     return PAGE_SIZE_OPTIONS[0];
+  }
+}
+
+const RUN_STYLE_KEY = 'historial.runStyle';
+const RUN_STYLE_LABELS: Record<Mt5TradeStyle, string> = { scalping: 'Scalping', daytrading: 'Day trading' };
+
+function readRunStyle(): Mt5TradeStyle {
+  try {
+    return localStorage.getItem(RUN_STYLE_KEY) === 'scalping' ? 'scalping' : 'daytrading';
+  } catch {
+    return 'daytrading';
   }
 }
 
@@ -255,6 +267,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
   mt5Runnable: Mt5Runnable | null = null;
   /** Operaciones de hoy frente al límite diario del perfil activo. */
   dailyLimit: Mt5DailyLimit | null = null;
+  /** Probabilidad mínima (%) del perfil activo para Run; la impone el servidor (0 = sin mínimo). */
+  minProbabilityPct = 45;
   /** Reloj para deshabilitar Run al vencer la ventana sin recargar. */
   nowMs = Date.now();
   private clockTimer?: ReturnType<typeof setInterval>;
@@ -263,6 +277,14 @@ export class HistorialComponent implements OnInit, OnDestroy {
   runLoading = false;
   runSending = false;
   runPreview: Mt5OrderResult | null = null;
+  /** Estilo elegido en el diálogo (recordado en localStorage): recalcula lote, SL y TP. */
+  runStyle: Mt5TradeStyle = readRunStyle();
+  readonly runStyleOptions: { id: Mt5TradeStyle; label: string }[] = [
+    { id: 'scalping', label: RUN_STYLE_LABELS.scalping },
+    { id: 'daytrading', label: RUN_STYLE_LABELS.daytrading },
+  ];
+  /** Descarta vistas previas de un estilo anterior que lleguen tarde. */
+  private runPreviewSeq = 0;
   runError = '';
   runToast = '';
   runToastErr = false;
@@ -291,6 +313,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     { value: 'ganada', label: 'Ganada (win)' },
     { value: 'perdida', label: 'Perdida (loss)' },
     { value: 'no_tomada', label: 'No tomada' },
+    { value: 'operando', label: 'Operando' },
   ];
 
   /** Catálogo Dirección (SQLite history_tags). */
@@ -445,13 +468,14 @@ export class HistorialComponent implements OnInit, OnDestroy {
         this.mt5ProfileLabel = r.profile?.label ?? '';
         this.mt5Runnable = r.runnable ?? null;
         this.dailyLimit = r.dailyLimit ?? null;
+        this.minProbabilityPct = r.minProbabilityPct ?? 45;
         this.nowMs = Date.now();
       },
       error: (err: unknown) => console.warn('[historial] envíos MT5 opcionales:', err),
     });
   }
 
-  /** Última señal con plan Entry/SL/TP coherente (LONG: SL<E<TP · SHORT: TP<E<SL); el veredicto solo se avisa. */
+  /** Última señal con plan Entry/SL/TP coherente (LONG: SL<E<TP · SHORT: TP<E<SL); el veredicto no bloquea. */
   canRunOperation(item: HistoryListItem): boolean {
     if (item.id !== this.mt5Runnable?.id) return false;
     const { plannedEntry: e, plannedSl: sl, plannedTp: tp } = item;
@@ -475,9 +499,21 @@ export class HistorialComponent implements OnInit, OnDestroy {
     return d?.enabled ? `Operaciones hoy: ${d.count} / ${d.limit}` : '';
   }
 
-  runTip(): string {
+  /** Probabilidad conocida menor que el mínimo del perfil: Run bloqueado (sin probabilidad se permite). */
+  probabilityBlocked(item: HistoryListItem): boolean {
+    const p = item.scoreCombined;
+    return this.minProbabilityPct > 0 && p != null && Number.isFinite(p) && p < this.minProbabilityPct;
+  }
+
+  probabilityBlockedTip(item: HistoryListItem): string {
+    const p = Math.round((item.scoreCombined ?? 0) * 10) / 10;
+    return `Probabilidad ${p}% < ${this.minProbabilityPct}%: Run bloqueado`;
+  }
+
+  runTip(item?: HistoryListItem): string {
     const r = this.mt5Runnable;
     if (!r) return '';
+    if (item && this.probabilityBlocked(item)) return this.probabilityBlockedTip(item);
     if (this.dailyLimitReached()) return `${this.dailyLimit!.message}. Vuelve mañana o sube el límite en Configuración.`;
     if (!this.runWindowOpen()) return `Pasaron más de ${r.windowMinutes} min desde la señal: ya no se puede ejecutar.`;
     const left = Math.max(1, Math.ceil((Date.parse(r.expiresAt) - this.nowMs) / 60_000));
@@ -490,10 +526,6 @@ export class HistorialComponent implements OnInit, OnDestroy {
     if (/NO OPERAR/.test(v)) return 'bad';
     if (/ESPERAR/.test(v)) return 'warn';
     return 'ok';
-  }
-
-  isEntrarVerdict(item: HistoryListItem): boolean {
-    return /entrar/i.test(item.verdict ?? '');
   }
 
   sentInfo(item: HistoryListItem): Mt5SentEntry | null {
@@ -597,7 +629,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   sentTip(s: Mt5SentEntry): string {
     const how = s.mode === 'market' ? 'mercado' : 'LIMIT';
-    const head = `${s.side ?? ''} ${s.symbol ?? ''} · ${how}${this.ticketState(s)}`;
+    const style = s.style ? ` · ${RUN_STYLE_LABELS[s.style] ?? s.style}` : '';
+    const head = `${s.side ?? ''} ${s.symbol ?? ''} · ${how}${style}${this.ticketState(s)}`;
     const body = s.checkedAt
       ? [
           `Enviada: ${this.sentLevels(s.original ?? s)} (${this.absoluteTime(s.at)})`,
@@ -665,19 +698,46 @@ export class HistorialComponent implements OnInit, OnDestroy {
   openRun(item: HistoryListItem, ev?: Event): void {
     ev?.stopPropagation();
     if (this.sentInfo(item) || !this.canRunOperation(item) || !this.runWindowOpen() || this.dailyLimitReached()) return;
+    if (this.probabilityBlocked(item)) return;
     this.runItem = item;
     this.runPreview = null;
+    this.loadRunPreview(item);
+  }
+
+  setRunStyle(style: Mt5TradeStyle): void {
+    if (style === this.runStyle || this.runSending || !this.runItem) return;
+    this.runStyle = style;
+    try {
+      localStorage.setItem(RUN_STYLE_KEY, style);
+    } catch {
+      /* storage no disponible */
+    }
+    this.loadRunPreview(this.runItem);
+  }
+
+  /** Vista previa (dryRun) con el estilo actual; ignora respuestas de un estilo o señal anterior. */
+  private loadRunPreview(item: HistoryListItem): void {
+    const seq = ++this.runPreviewSeq;
+    const style = this.runStyle;
     this.runError = '';
     this.runLoading = true;
-    this.api.mt5Push({ historyId: item.id, anyVerdict: true, dryRun: true }).subscribe({
+    const stale = () => seq !== this.runPreviewSeq || this.runItem?.id !== item.id;
+    this.api.mt5Push({ historyId: item.id, anyVerdict: true, dryRun: true, style }).subscribe({
       next: (r) => {
+        if (stale()) return;
         this.runLoading = false;
         this.mt5ProfileLabel = r.profile?.label ?? this.mt5ProfileLabel;
-        if (r.status === 'sent' && r.result) this.runPreview = r.result;
-        else this.runError = r.message;
+        if (r.status === 'sent' && r.result) {
+          this.runPreview = r.result;
+        } else {
+          this.runPreview = null;
+          this.runError = r.message;
+        }
       },
       error: (err: unknown) => {
+        if (stale()) return;
         this.runLoading = false;
+        this.runPreview = null;
         this.runError = this.runErrMsg(err, 'No se pudo preparar la orden MT5.');
         this.loadMt5Sent();
       },
@@ -686,7 +746,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   confirmRun(): void {
     const item = this.runItem;
-    if (!item || !this.runPreview || this.runSending) return;
+    if (!item || !this.runPreview || this.runLoading || this.runSending) return;
     this.nowMs = Date.now();
     if (!this.runWindowOpen()) {
       this.runError = this.runTip();
@@ -694,12 +754,15 @@ export class HistorialComponent implements OnInit, OnDestroy {
     }
     this.runSending = true;
     this.runError = '';
-    this.api.mt5Push({ historyId: item.id, anyVerdict: true }).subscribe({
+    this.api.mt5Push({ historyId: item.id, anyVerdict: true, style: this.runStyle }).subscribe({
       next: (r) => {
         this.runSending = false;
         this.runItem = null;
-        this.showRunToast(`Enviada a MT5: ${r.message}`);
+        const operandoMsg = r.operando?.reason === 'locked' ? ' · fila bloqueada: Resultado sin cambiar' : '';
+        this.showRunToast(`Enviada a MT5: ${r.message}${operandoMsg}`);
         this.loadMt5Sent();
+        if (r.operando?.item) this.applyItemPatch(item.id, r.operando.item);
+        else this.load();
       },
       error: (err: unknown) => {
         this.runSending = false;
@@ -711,6 +774,8 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   cancelRun(): void {
     if (this.runSending) return;
+    this.runPreviewSeq++;
+    this.runLoading = false;
     this.runItem = null;
   }
 
@@ -1167,6 +1232,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     if (value === 'ganada') return 'res-win';
     if (value === 'perdida') return 'res-lose';
     if (value === 'no_tomada') return 'res-skip';
+    if (value === 'operando') return 'res-open';
     return 'res-empty';
   }
 
@@ -1392,7 +1458,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     const el = ev.target as HTMLSelectElement;
     const raw = el.value;
     const next: HistoryResultado | null =
-      raw === 'ganada' || raw === 'perdida' || raw === 'no_tomada' ? raw : null;
+      raw === 'ganada' || raw === 'perdida' || raw === 'no_tomada' || raw === 'operando' ? raw : null;
     if ((item.resultado || null) === next) return;
     const closed = next === 'ganada' || next === 'perdida' ? next : null;
     const auto = this.autoCapture ? closed : null;
@@ -1480,9 +1546,14 @@ export class HistorialComponent implements OnInit, OnDestroy {
 
   private applyItemPatch(id: number, updated: HistoryListItem): void {
     const idx = this.items.findIndex((i) => i.id === id);
+    const orderChanged =
+      updated.internalOrder !== undefined &&
+      idx >= 0 &&
+      (updated.internalOrder ?? null) !== (this.items[idx].internalOrder ?? null);
     if (idx >= 0) {
       this.items[idx] = {
         ...this.items[idx],
+        ...(updated.internalOrder !== undefined ? { internalOrder: updated.internalOrder } : {}),
         comment: updated.comment ?? null,
         motivoEntradaSalida: updated.motivoEntradaSalida ?? null,
         resultado: updated.resultado ?? null,
@@ -1520,6 +1591,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
     if (this.detail?.id === id) {
       this.detail = {
         ...this.detail,
+        ...(updated.internalOrder !== undefined ? { internalOrder: updated.internalOrder } : {}),
         comment: updated.comment ?? null,
         motivoEntradaSalida: updated.motivoEntradaSalida ?? null,
         resultado: updated.resultado ?? null,
@@ -1533,6 +1605,29 @@ export class HistorialComponent implements OnInit, OnDestroy {
         ...lockFields(updated),
       };
     }
+    if (orderChanged) this.refreshInternalOrders();
+  }
+
+  /** Cerrar/reabrir una operación renumera las demás cerradas: refresca solo «Orden interna». */
+  private refreshInternalOrders(): void {
+    this.api
+      .historyList({
+        page: this.page,
+        pageSize: this.pageSize,
+        market: this.marketFilter || undefined,
+        sortBy: this.sortBy,
+        sortDir: this.sortDir,
+        ...this.catalogFilter,
+      })
+      .subscribe({
+        next: (res) => {
+          const orders = new Map(res.items.map((i) => [i.id, i.internalOrder ?? null]));
+          this.items = this.items.map((i) => (orders.has(i.id) ? { ...i, internalOrder: orders.get(i.id) } : i));
+          this.rebuildDisplayRows();
+        },
+        error: (err: unknown) => console.warn('[historial] orden interna opcional:', err),
+      });
+    this.loadMetricsDataset();
   }
 
   onDropZoneDragOver(ev: DragEvent): void {
