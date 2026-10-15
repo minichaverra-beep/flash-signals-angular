@@ -41,6 +41,7 @@ import {
   type InstagramFormat,
 } from './score-image-export';
 import { ZoomImageDirective } from './image-viewer/zoom-image.directive';
+import { engineBarLevel, enginePanel } from './engine-panel.helpers';
 
 const INSTAGRAM_FORMAT_OPTIONS = (Object.keys(INSTAGRAM_SIZES) as InstagramFormat[]).map((id) => ({
   id,
@@ -96,6 +97,8 @@ export class SignalReportViewerComponent {
   readonly riskGaugeNeedle = riskGaugeNeedle;
   readonly riskGaugeHint = riskGaugeHint;
   readonly volMarkerPct = volMarkerPct;
+  readonly enginePanel = enginePanel;
+  readonly engineBarLevel = engineBarLevel;
 
   biasClass(campoOrValue: string | null | undefined, valor?: string | null): string {
     const isDireccion = valor !== undefined && /direcci[oó]n/i.test(campoOrValue || '');

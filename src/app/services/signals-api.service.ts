@@ -112,6 +112,50 @@ export interface SignalSummary {
     kzOn?: boolean | null;
     note?: string;
   };
+  /** JSON crudo del motor Cursor Trading (schemaVersion 1); ausente en filas antiguas. */
+  engine?: EngineSignal | null;
+  /** 'json' si el summary se armó con el JSON del motor; 'markdown' si solo con el .md. */
+  engineSource?: 'json' | 'markdown';
+}
+
+type EngineScalar = string | number | boolean | null;
+
+/** Subconjunto del JSON del motor (live/<asset>_m5_high_signal.json) que usa la UI. */
+export interface EngineSignal {
+  schemaVersion: number;
+  asset: string;
+  mode?: string;
+  generatedUtc?: string | null;
+  signalId?: string | null;
+  verdict?: string | null;
+  direction?: string | null;
+  price?: number | null;
+  probability?: {
+    pct?: number | null;
+    ci?: [number | null, number | null] | null;
+    evR?: number | null;
+    kellyFrac?: number | null;
+    calibrated?: boolean;
+    hasEdge?: boolean | null;
+    method?: string | null;
+    n?: number | null;
+    nEff?: number | null;
+  } | null;
+  fusion?: {
+    score?: number | null;
+    weights?: Record<string, number> | null;
+    layers?: Partial<Record<'rules' | 'extended' | 'crt' | 'neural' | 'ml' | 'e2', number | null>>;
+  } | null;
+  zentinel?: {
+    volume?: Record<string, EngineScalar> | null;
+    killzone?: string | null;
+    killzoneOn?: boolean;
+  } | null;
+  macdQuant?: Record<string, EngineScalar> | null;
+  ict?: { refined?: boolean | null; source?: string | null; note?: string | null; summary?: string | null } | null;
+  crt?: Record<string, EngineScalar> | null;
+  contingencies?: string[];
+  dataFreshness?: { stale?: boolean | null; message?: string | null; lastCandleUtc?: string | null } | null;
 }
 
 export interface JobStatus {

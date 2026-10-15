@@ -44,6 +44,9 @@
       >
         {{ recalcBusy ? 'Recalculando…' : 'Actualizar Probabilidad' }}
       </button>
+          <button type="button" class="danger" (click)="clearAll()" [disabled]="clearing || !total">
+            {{ clearing ? 'Limpiando…' : 'Limpiar historial' }}
+          </button>
     </div>
   </div>
 

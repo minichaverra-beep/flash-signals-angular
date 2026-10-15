@@ -33,6 +33,8 @@ const { positionParams } = require('./position-params');
 const mt5Pnl = require('./mt5-pnl');
 const { JOB_EVENTS, createJobEvents } = require('./job-events');
 const autoCapture = require('./auto-capture');
+const engineSignal = require('./engine-signal');
+const engineOutcomes = require('./engine-outcomes');
 const trendBias = require('./trend-bias');
 const vixSource = require('./vix-source');
 const { resolveVolatilityAdjustment } = require('./volatility');
@@ -972,12 +974,14 @@ function readLatest(market, tierHint) {
     if (fs.existsSync(full)) {
       const md = fs.readFileSync(full, 'utf8');
       const reportStat = fs.statSync(full);
+      const tier = tierHint || 'high';
+      const { engine } = engineSignal.loadEngineJson(full, reportStat.mtimeMs);
       return {
         reportPath: full,
         reportName: name,
         ...latestChartInfo(key, files.chart, reportStat.mtimeMs),
         mtime: reportStat.mtime.toISOString(),
-        summary: parseSummary(md, key, tierHint || 'high'),
+        summary: engineSignal.mergeEngineSummary(parseSummary(md, key, tier), engine, key, tier),
         preview: md.slice(0, 50000),
       };
     }
@@ -1679,6 +1683,7 @@ app.patch('/api/history/:id', async (req, res) => {
     if (!result.ok) {
       return res.status(400).json({ error: result.error || 'No se pudo actualizar' });
     }
+    recordPatchedOutcome(patch, result.item);
     res.json({ ok: true, item: result.item });
   } catch (err) {
     console.error('[history] patch:', err);
@@ -1728,6 +1733,32 @@ app.post('/api/history/:id/result-image', async (req, res) => {
     res.status(500).json({ error: 'No se pudo guardar la imagen del resultado' });
   }
 });
+
+/** Envío MT5 registrado de la fila (perfil activo primero), sin consultar el puente. */
+function sentForHistory(historyId) {
+  const key = `h${historyId}`;
+  const active = mt5Settings.getActive();
+  const profile = [active, ...mt5Settings.PROFILES.filter((p) => p !== active)]
+    .find((p) => mt5Sent.get(p, key)?.order);
+  return profile ? { sent: mt5Sent.get(profile, key), profile } : { sent: null, profile: null };
+}
+
+/** Resultado final de la fila → JSONL de Cursor Trading (nunca rompe la acción del usuario). */
+function recordEngineOutcome(item, source) {
+  try {
+    const { sent, profile } = sentForHistory(item?.id);
+    engineOutcomes.recordOutcome({ tradingRoot: TRADING_ROOT, row: item, source, sent, profile });
+  } catch (err) {
+    console.warn('[engine-outcomes]', err.message);
+  }
+}
+
+/** PATCH manual: solo si tocó Resultado o $/PnL. */
+function recordPatchedOutcome(patch, item) {
+  if (Object.hasOwn(patch, 'resultado') || Object.hasOwn(patch, 'pnlUsd')) {
+    recordEngineOutcome(item, 'manual');
+  }
+}
 
 /** Filas con auto captura en curso (evita dos scripts sobre la misma fila). */
 const autoCaptureInFlight = new Set();
@@ -1815,6 +1846,7 @@ app.post('/api/history/:id/auto-capture', async (req, res) => {
   try {
     const { status, body } = await autoCaptureRow(id, req.body?.resultado);
     if (body.locked) return sendHistoryLocked(res);
+    if (body.ok) recordEngineOutcome(body.item, 'auto_capture');
     res.status(status).json(body);
   } catch (err) {
     console.error('[history] auto-capture:', err);
@@ -1866,6 +1898,7 @@ app.post('/api/history/:id/mt5-pnl', async (req, res) => {
     const saved = await historyStore.updateMt5Execution(id, action === 'confirm' ? real : { ...real, pnlUsd: pnl.value });
     if (saved.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
     if (!saved.ok) return res.status(400).json({ error: saved.error || 'No se pudo guardar el PnL' });
+    recordEngineOutcome(saved.item, 'auto_capture');
     res.json({
       ok: true,
       applied: action === 'fill',
@@ -2435,6 +2468,7 @@ app.post('/api/mt5/recalc', async (req, res) => {
     if (failed) return res.status(failed.status).json({ error: failed.error });
     const patch = dup.rec ? { ...rec.sentPatch, duplicate: { ...sent.duplicate, ...dup.rec.sentPatch } } : rec.sentPatch;
     const updated = mt5Sent.update(profileId, key, patch);
+    if (annotation) recordEngineOutcome(await historyStore.getById(id), 'mt5_recalc');
     const chart = await rerenderDetailChart(id, rec.levels, updated, settings).catch((err) => ({
       updated: false,
       reason: err.message,

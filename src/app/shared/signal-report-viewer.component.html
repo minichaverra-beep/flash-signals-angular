@@ -71,6 +71,8 @@
       }
     }
 
+    <ng-container *ngTemplateOutlet="engineTpl; context: { $implicit: s }"></ng-container>
+
     @if (hasMarketPlan(s)) {
       <details class="report-card collapsible" open>
         <summary>Precio y plan de la operación</summary>
@@ -644,6 +646,8 @@
         }
       }
 
+      <ng-container *ngTemplateOutlet="engineTpl; context: { $implicit: s }"></ng-container>
+
       @if (href(); as chartHref) {
         <details id="sec-grafico" data-section="sec-grafico" class="report-card collapsible" open>
           <summary>Gráfico</summary>
@@ -664,3 +668,130 @@
     </div>
   }
 }
+
+<ng-template #engineTpl let-s>
+  @if (enginePanel(s); as e) {
+    <details id="sec-motor" data-section="sec-motor" class="report-card collapsible engine-panel" open>
+      <summary>Motor (Cursor Trading)</summary>
+      <div class="collapsible-body">
+        <p class="card-hint muted hide-on-phone">
+          Lo que calculó el motor para esta señal.
+          @if (e.fromJson) {
+            Fuente: JSON del motor@if (e.signalId) { · {{ e.signalId }}}.
+          } @else {
+            Fila sin JSON del motor: solo los datos disponibles en el reporte.
+          }
+        </p>
+
+        @if (e.staleMessage) {
+          <p class="engine-stale" role="alert">⚠ {{ e.staleMessage }}</p>
+        }
+
+        @if (e.probability; as p) {
+          <div class="engine-prob">
+            <div class="engine-prob-main">
+              <span class="engine-label">Probabilidad de éxito</span>
+              <strong class="engine-prob-value">{{ p.pct | number:'1.0-1' }}%</strong>
+              <span class="engine-badge" [attr.data-tone]="p.tone">{{ p.badge }}</span>
+            </div>
+            <div class="engine-prob-stats">
+              @if (p.ci) {
+                <span title="Intervalo de confianza del 80%">Intervalo 80%: {{ p.ci }}</span>
+              }
+              @if (p.evR != null) {
+                <span title="Valor esperado por operación, en múltiplos del riesgo">EV {{ p.evR | number:'1.2-2' }} R</span>
+              }
+              @if (p.kellyPct != null) {
+                <span title="Kelly fraccional acotado (porcentaje de la cuenta)">Kelly {{ p.kellyPct | number:'1.0-2' }}%</span>
+              }
+              @if (p.sample) {
+                <span class="muted tiny">{{ p.sample }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (e.layers.length) {
+          <div class="extra-section">
+            <h4>Fusión por capas
+              @if (e.fusionScore != null) {
+                <span class="muted tiny"> · score {{ e.fusionScore | number:'1.0-1' }}%</span>
+              }
+            </h4>
+            <div class="charts">
+              @for (l of e.layers; track l.label) {
+                <div class="bar-row">
+                  <div class="bar-meta">
+                    <span>{{ l.label }}@if (l.weightPct != null) {<span class="muted tiny"> · peso {{ l.weightPct | number:'1.0-1' }}%</span>}</span>
+                    <strong>{{ l.score | number:'1.0-1' }}%</strong>
+                  </div>
+                  <div class="bar-track">
+                    <div
+                      class="bar-fill"
+                      [style.width.%]="l.score ?? 0"
+                      [attr.data-high]="engineBarLevel(l.score) === 'high'"
+                      [attr.data-mid]="engineBarLevel(l.score) === 'mid'"
+                      [attr.data-lo]="engineBarLevel(l.score) === 'lo'"
+                    ></div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (e.zentinel || e.macd || e.ict.length || e.crt.length) {
+          <div class="table-wrap extra-section">
+            <table class="matrix kpi-table engine-facts">
+              <tbody>
+                @if (e.zentinel; as z) {
+                  <tr>
+                    <th>Volumen Zentinel</th>
+                    <td>
+                      {{ z.band || '—' }}@if (z.ratio != null) { · {{ z.ratio | number:'1.2-2' }}×}
+                    </td>
+                  </tr>
+                  @if (z.killzone) {
+                    <tr>
+                      <th>Killzone</th>
+                      <td [class.ok-text]="z.kzOn === true">{{ z.killzone }}@if (z.kzOn != null) { · {{ z.kzOn ? 'activa' : 'fuera' }}}</td>
+                    </tr>
+                  }
+                }
+                @if (e.macd; as m) {
+                  <tr>
+                    <th>Filtro MACD-quant</th>
+                    <td><span class="engine-badge" [attr.data-tone]="m.tone">{{ m.filter }}</span> <span class="muted tiny">{{ m.detail }}</span></td>
+                  </tr>
+                }
+                @if (e.ict.length) {
+                  <tr>
+                    <th>ICT</th>
+                    <td>{{ e.ict.join(' · ') }}</td>
+                  </tr>
+                }
+                @if (e.crt.length) {
+                  <tr>
+                    <th>CRT</th>
+                    <td>{{ e.crt.join(' · ') }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (e.contingencies.length) {
+          <div class="extra-section">
+            <h4>Contingencias</h4>
+            <ul class="engine-list">
+              @for (c of e.contingencies; track $index) {
+                <li>{{ c }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </details>
+  }
+</ng-template>
