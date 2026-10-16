@@ -107,7 +107,7 @@
   padding: 0 0.8rem;
   border-radius: 999px;
   border: 1px solid rgb(255 255 255 / 0.28);
-  background: rgb(20 12 12 / 0.78);
+  background: rgb(16 17 16 / 0.78);
   color: #fff;
   font: 600 1rem var(--font, sans-serif);
   line-height: 1;
@@ -117,7 +117,7 @@
   -webkit-tap-highlight-color: transparent;
 
   &:hover {
-    border-color: var(--gold, #ffd700);
+    border-color: var(--gold, #f075c0);
   }
 
   &:active {
@@ -125,7 +125,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--gold, #ffd700);
+    outline: 2px solid var(--gold, #f075c0);
     outline-offset: 2px;
   }
 }

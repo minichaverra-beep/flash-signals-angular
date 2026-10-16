@@ -49,7 +49,7 @@ h2 {
   align-items: center;
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
-  background: color-mix(in srgb, var(--panel) 82%, #1a1010);
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 8px 28px color-mix(in srgb, black 35%, transparent);
@@ -215,7 +215,7 @@ h2 {
   }
 
   &.pdf {
-    --tone: #ff8c00;
+    --tone: var(--accent-2);
   }
 
   &:hover:not(:disabled) {
@@ -281,7 +281,7 @@ button:disabled {
 }
 
 .panel {
-  background: color-mix(in srgb, var(--panel) 82%, #1a1010);
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.5rem 1.6rem;
@@ -359,17 +359,17 @@ button:disabled {
 }
 
 .compact-toggle input:checked + .compact-toggle-track {
-  border-color: var(--gold);
-  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .compact-toggle input:checked + .compact-toggle-track .compact-toggle-thumb {
   left: calc(100% - 1rem);
-  background: var(--gold);
+  background: var(--text);
 }
 
 .compact-toggle input:focus-visible + .compact-toggle-track {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -492,7 +492,7 @@ button:disabled {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #160e0e;
+  background: var(--bg);
   width: 100%;
 }
 
@@ -578,7 +578,7 @@ button:disabled {
   font-family: inherit;
   font-size: 0.82rem;
   line-height: 1.4;
-  color: color-mix(in srgb, #e8e4dc 85%, transparent);
+  color: color-mix(in srgb, var(--text) 85%, transparent);
   background: color-mix(in srgb, black 35%, transparent);
   border-radius: 0.4rem;
   border: 1px solid color-mix(in srgb, var(--gold) 15%, transparent);
@@ -760,7 +760,7 @@ button:disabled {
   border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
   border-radius: 8px;
   overflow: hidden;
-  background: #0e0808;
+  background: var(--bg);
   cursor: zoom-in;
   width: 3.25rem;
   height: 2.4rem;
@@ -848,7 +848,7 @@ button:disabled {
   &.tone-pos { color: var(--ok); }
   &.tone-neg { color: color-mix(in srgb, var(--err) 55%, white); }
   &.tone-wait { color: var(--warn); }
-  &.tone-muted { color: var(--muted, #a8968a); }
+  &.tone-muted { color: var(--muted, #8e9992); }
 }
 
 .card-annotate .auto-capture-note,
@@ -899,7 +899,7 @@ button:disabled {
   font: inherit;
   font-size: 0.9rem;
   color: var(--text);
-  background: #160e0e;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.65rem 0.75rem;
@@ -1053,7 +1053,7 @@ tr.row-locked > td:first-child,
   padding: 0.85rem 1rem;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #160e0e;
+  background: var(--bg);
 }
 
 .annotate-label {
@@ -1080,7 +1080,7 @@ tr.row-locked > td:first-child,
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  background: #160e0e;
+  background: var(--bg);
 }
 
 .hist-card header {
@@ -1148,7 +1148,7 @@ tr.row-locked > td:first-child,
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
-  background: color-mix(in srgb, var(--panel-deep) 80%, #1a1010);
+  background: color-mix(in srgb, var(--panel-deep) 80%, var(--bg));
   color: color-mix(in srgb, var(--muted) 88%, white);
   font-size: 0.7rem;
   line-height: 1.3;
@@ -1225,7 +1225,7 @@ tr.row-locked > td:first-child,
   padding: 0.65rem 0.8rem;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
-  background: color-mix(in srgb, #1a1210 92%, black);
+  background: color-mix(in srgb, var(--bg) 92%, black);
   color: color-mix(in srgb, var(--text) 92%, white);
   font-size: 0.75rem;
   font-weight: 400;
@@ -1287,7 +1287,7 @@ tr.row-locked > td:first-child,
   padding: 0.45rem 0.55rem;
   border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-deep) 88%, #1a1010);
+  background: color-mix(in srgb, var(--panel-deep) 88%, var(--bg));
 }
 
 .hit-rate-label {
@@ -1374,7 +1374,7 @@ tr.row-locked > td:first-child,
 .pager-size {
   font: inherit;
   color: var(--text);
-  background: #160e0e;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.3rem 0.5rem;
@@ -1521,7 +1521,7 @@ tr.row-no-tomada:hover > td {
   height: 100vh;
   overflow: auto;
   z-index: 50;
-  background: linear-gradient(180deg, #1a1010 0%, #2a1a1a 100%);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--panel-deep) 100%);
   border-left: 1px solid var(--border);
   box-shadow: -12px 0 40px color-mix(in srgb, black 45%, transparent);
   padding: 1.1rem 1.15rem 2rem;
@@ -1550,7 +1550,7 @@ tr.row-no-tomada:hover > td {
   margin-bottom: 1rem;
   position: sticky;
   top: 0;
-  background: color-mix(in srgb, #1a1010 92%, transparent);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   padding-bottom: 0.75rem;
   z-index: 1;
 }
@@ -1579,14 +1579,14 @@ tr.row-no-tomada:hover > td {
   border-radius: 14px;
   background:
     radial-gradient(120% 80% at 10% 0%, color-mix(in srgb, var(--fire) 10%, transparent), transparent 55%),
-    #160e0e;
+    var(--bg);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .result-shot.drop-active {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 28%, transparent);
-  background: color-mix(in srgb, var(--teal) 8%, #160e0e);
+  background: color-mix(in srgb, var(--teal) 8%, var(--bg));
 }
 
 .result-shot.has-image {
@@ -1651,7 +1651,7 @@ tr.row-no-tomada:hover > td {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  background: #0a0606;
+  background: var(--bg);
   cursor: zoom-in;
 }
 
@@ -1660,7 +1660,7 @@ tr.row-no-tomada:hover > td {
   width: 100%;
   max-height: 320px;
   object-fit: contain;
-  background: #0a0606;
+  background: var(--bg);
 }
 
 .unlock-backdrop {
@@ -1687,7 +1687,7 @@ tr.row-no-tomada:hover > td {
   padding: 1.25rem 1.35rem 1.35rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
-  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
   box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
 }
 
@@ -1725,7 +1725,7 @@ tr.row-no-tomada:hover > td {
 }
 
 .export-confirm-dialog.pdf {
-  --tone: #ff8c00;
+  --tone: var(--accent-2);
 }
 
 .export-confirm-list {
@@ -1900,7 +1900,7 @@ tr.row-no-tomada:hover > td {
   padding: 0 0.3rem;
   border-radius: 999px;
   background: var(--gold);
-  color: #1a1206;
+  color: var(--bg);
   font-size: 0.7rem;
   line-height: 1.1rem;
   text-align: center;
@@ -1924,7 +1924,7 @@ tr.row-no-tomada:hover > td {
   font-weight: 500;
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
   border-radius: 8px;
-  background: var(--bg-elev, #1b1410);
+  background: var(--bg-elev, #1e2220);
   box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
 }
 
@@ -2162,7 +2162,7 @@ tr.row-no-tomada:hover > td {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--ok);
-  background: #1a1010;
+  background: var(--bg);
   border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
   box-shadow: 0 12px 32px color-mix(in srgb, black 50%, transparent);
 }
@@ -2287,7 +2287,7 @@ code {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.85rem 0.9rem 1rem;
-  background: #160e0e;
+  background: var(--bg);
   min-height: 8.5rem;
   display: flex;
   flex-direction: column;
@@ -2368,7 +2368,7 @@ code {
 
 .ring-bg {
   fill: none;
-  stroke: color-mix(in srgb, var(--border) 80%, #2a1a1a);
+  stroke: color-mix(in srgb, var(--border) 80%, var(--panel-deep));
   stroke-width: 3.2;
 }
 
@@ -2410,7 +2410,7 @@ code {
 .bar-track {
   height: 0.45rem;
   border-radius: 999px;
-  background: color-mix(in srgb, black 35%, #2a1a1a);
+  background: color-mix(in srgb, black 35%, var(--panel-deep));
   overflow: hidden;
 }
 
@@ -2526,7 +2526,7 @@ code {
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text);
   line-height: 1.2;
   max-width: 100%;
 }
@@ -2572,8 +2572,8 @@ code {
   overflow-y: auto;
   padding: 0.55rem;
   border-radius: 0.65rem;
-  background: color-mix(in srgb, var(--panel) 94%, #120808);
-  border: 1px solid color-mix(in srgb, var(--gold, #c9a227) 28%, var(--border));
+  background: color-mix(in srgb, var(--panel) 94%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--gold, #f075c0) 28%, var(--border));
   box-shadow: 0 12px 28px color-mix(in srgb, black 45%, transparent);
   display: flex;
   flex-direction: column;
@@ -2620,7 +2620,7 @@ code {
 }
 
 .tag-option.active {
-  border-color: color-mix(in srgb, var(--gold, #c9a227) 45%, var(--border));
+  border-color: color-mix(in srgb, var(--gold, #f075c0) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
@@ -2641,7 +2641,7 @@ code {
   display: inline-block;
   padding: 0.18rem 0.55rem;
   border-radius: 0.35rem;
-  color: #f8fafc;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.25;
@@ -2685,7 +2685,7 @@ code {
     position: sticky;
     left: 0;
     z-index: 2;
-    background: #160e0e;
+    background: var(--bg);
     box-shadow: 1px 0 0 color-mix(in srgb, var(--border) 60%, transparent);
   }
 
@@ -2695,12 +2695,12 @@ code {
   }
 
   .mt5-row:nth-child(even) > td:first-child {
-    background: color-mix(in srgb, var(--panel-deep) 40%, #160e0e);
+    background: color-mix(in srgb, var(--panel-deep) 40%, var(--bg));
   }
 
   .mt5-row:hover > td:first-child,
   .mt5-row:focus-visible > td:first-child {
-    background: color-mix(in srgb, var(--gold) 10%, #160e0e);
+    background: color-mix(in srgb, var(--gold) 10%, var(--bg));
   }
 
   .mt5-table tfoot td:first-child {
@@ -3152,7 +3152,7 @@ code {
     gap: 0.5rem;
     margin: 0 0 0.6rem;
     padding: calc(0.5rem + env(safe-area-inset-top, 0px)) 0 0.5rem;
-    background: #1a1010;
+    background: var(--bg);
   }
 
   #{$d} .drawer-head > div:first-child {
@@ -3205,4 +3205,114 @@ code {
 
 @media (max-height: 520px) and (pointer: coarse) {
   @include drawer-fullscreen('.drawer');
+}
+
+/* Tarjeta de historial en teléfono: más compacta. Los chips de la tabla de escritorio no cambian. */
+@media (max-width: 768px) {
+  .hist-card {
+    padding: 0.55rem 0.6rem;
+  }
+
+  .hist-card header {
+    margin-bottom: 0.2rem;
+  }
+
+  .hist-card .when {
+    margin: 0.1rem 0 0.15rem;
+  }
+
+  .hist-card .card-annotate {
+    gap: 0.22rem;
+    margin-top: 0.28rem;
+  }
+
+  .hist-card .hist-input,
+  .hist-card .hist-select {
+    min-height: 2.05rem;
+    padding: 0.28rem 0.55rem;
+    font-size: 0.82rem;
+    border-radius: 8px;
+  }
+
+  .hist-card textarea.hist-textarea {
+    min-height: 2.05rem;
+  }
+
+  .hist-card .pnl-field {
+    gap: 0.08rem;
+  }
+
+  .hist-card .pnl-field-label {
+    font-size: 0.62rem;
+  }
+
+  .hist-card .card-shot {
+    gap: 0.35rem;
+    margin-top: 0;
+    max-width: 100%;
+  }
+
+  .hist-card .card-annotate .btn-attach {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+    min-height: 2rem;
+    padding: 0.28rem 0.55rem;
+    font-size: 0.78rem;
+    border-radius: 8px;
+  }
+
+  .hist-card .tag-chips {
+    gap: 0.16rem;
+    max-width: 100%;
+  }
+
+  .hist-card .tag-chip,
+  .hist-card .tag-add {
+    gap: 0.08rem;
+    padding: 0.02rem 0.28rem;
+    font-size: 0.6rem;
+    line-height: 1.15;
+    max-width: 100%;
+  }
+
+  .hist-card .tag-add {
+    white-space: normal;
+  }
+
+  .hist-card .tag-x {
+    font-size: 0.68rem;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .hist-card .card-actions {
+    justify-content: center;
+    gap: 0.28rem;
+    margin-top: 0.35rem;
+    max-width: 100%;
+  }
+
+  .hist-card .run-sent {
+    padding: 0.06rem 0.4rem;
+    font-size: 0.68rem;
+  }
+
+  .hist-card .lot-box {
+    padding: 0.22rem 0.45rem;
+    font-size: 0.76rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hist-card .card-actions .lock-btn,
+  .hist-card .card-actions .icon-btn {
+    flex: 0 0 2rem;
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0;
+  }
 }

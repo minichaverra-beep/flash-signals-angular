@@ -3,10 +3,12 @@ import { Component, OnDestroy, OnInit, effect, inject, untracked } from '@angula
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { AuthService } from '../services/auth.service';
 import { JobStatus, Market, SignalsApiService, Tier } from '../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../services/signal-job.service';
+import { localizeBiasWords } from './signal-report.helpers';
 
-/** « · Tendencia H1: BAJISTA → Bearish» a partir del log `[bias]` de la API (vacío si no aplica). */
+/** Nota de estado a partir del log `[bias]` (`… → -Bullish|-Bearish`). Vacío si no aplica. */
 function trendNote(j: JobStatus): string {
   const line = [...(j.logs ?? [])].reverse().find((l) => l.startsWith('[bias] '));
   if (!line) return '';
@@ -14,8 +16,8 @@ function trendNote(j: JobStatus): string {
   if (!m) {
     return line.includes('No se pudo detectar') ? ' · Tendencia H1 no detectada → sin forzar' : ' · Detectando tendencia H1…';
   }
-  const action = m[2] === 'sin forzar bias' ? 'sin forzar' : m[2].slice(1);
-  return ` · Tendencia H1: ${m[1]} → ${action}`;
+  const action = m[2] === 'sin forzar bias' ? 'sin forzar' : localizeBiasWords(m[2].slice(1));
+  return ` · Tendencia H1: ${localizeBiasWords(m[1])} → ${action}`;
 }
 
 /** «Configurar corrida» + estado del job de señal (cabecera de /senales). */
@@ -29,6 +31,8 @@ function trendNote(j: JobStatus): string {
 export class SignalRunFormComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
   readonly jobs = inject(SignalJobService);
+  /** Checkboxes Capas (ML / Neural): solo con sesión admin. */
+  readonly isAdmin = inject(AuthService).isAdmin;
   private finishedSub?: Subscription;
   /** Job cuya config (mercado/tier) ya se adoptó al reconectar. */
   private adoptedJobId: string | null = null;
@@ -37,7 +41,7 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
   readonly tier: Tier = 'high';
   /** `trend` = «Tendencia actual»: la API detecta el bias H1 y fuerza Bullish o Bearish. */
   bias: 'trend' | 'bullish' | 'bearish' = 'bullish';
-  readonly trendTitle = 'Detecta la tendencia H1 actual y fuerza Bullish o Bearish';
+  readonly trendTitle = 'Detecta la tendencia H1 actual y fuerza Alcista o Bajista';
   setup: 'break' | 'reverse' = 'break';
   /**
    * `reversalsEnabled` del perfil MT5 activo. `null` = desconocido (cargando o API caída):
@@ -177,8 +181,9 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
       trendBias: this.bias === 'trend',
       breakSetup: this.setup === 'break',
       reverse: this.setup === 'reverse',
-      ml: this.ml,
-      neural: this.neural,
+      // Sin las casillas, la corrida conserva el valor inicial (ML y Neural activos).
+      ml: this.isAdmin() ? this.ml : true,
+      neural: this.isAdmin() ? this.neural : true,
       ilustrate: this.ilustrate,
       advanced: this.advanced,
       noChart: this.noChart,

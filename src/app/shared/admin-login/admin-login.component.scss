@@ -84,7 +84,7 @@
   padding: 1.25rem 1.35rem 1.35rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
-  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
   box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
   text-align: left;
 }

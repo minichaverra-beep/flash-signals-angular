@@ -36,8 +36,14 @@ describe('account-settings-store', () => {
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('sin fila devuelve valores vacíos', async () => {
-    assert.deepEqual(await store.get(), { balance: null, currency: 'USD', riskPct: null, updatedAt: null });
+  it('sin fila devuelve valores vacíos y el menú apagado', async () => {
+    const got = await store.get();
+    assert.equal(got.balance, null);
+    assert.equal(got.currency, 'USD');
+    assert.equal(got.riskPct, null);
+    assert.equal(got.updatedAt, null);
+    assert.equal(got.wikiEnabled, false);
+    assert.equal(got.quantumEnabled, false);
   });
 
   it('update persiste y conserva los campos no enviados', async () => {
@@ -66,6 +72,62 @@ describe('account-settings-store', () => {
     await assert.rejects(() => store.update({ currency: 'dólar' }), (err) => err.status === 400);
     await assert.rejects(() => store.update({}), (err) => err.status === 400);
     assert.equal((await store.update({ riskPct: 0.01, currency: 'eur' })).currency, 'EUR');
+  });
+
+  it('wikiEnabled y quantumEnabled persisten en false por defecto y no se pisan entre sí', async () => {
+    const created = await store.update({ wikiEnabled: true });
+    assert.equal(created.wikiEnabled, true);
+    assert.equal(created.quantumEnabled, false);
+
+    const kept = await store.update({ quantumEnabled: true });
+    assert.equal(kept.wikiEnabled, true);
+    assert.equal(kept.quantumEnabled, true);
+
+    const off = await store.update({ wikiEnabled: false });
+    assert.equal(off.wikiEnabled, false);
+    assert.equal(off.quantumEnabled, true);
+
+    await assert.rejects(() => store.update({ wikiEnabled: 'sí' }), (err) => err.status === 400);
+    await assert.rejects(() => store.update({ quantumEnabled: 1 }), (err) => err.status === 400);
+
+    store._resetForTests();
+    store = loadStore(tempDir);
+    const reloaded = await store.get();
+    assert.equal(reloaded.wikiEnabled, false);
+    assert.equal(reloaded.quantumEnabled, true);
+  });
+
+  it('una base antigua sin las columnas arranca con wiki y quantum en false', async () => {
+    store._resetForTests();
+    const dbPath = path.join(tempDir, 'account-settings.sqlite');
+    for (const suffix of ['', '-wal', '-shm']) fs.rmSync(dbPath + suffix, { force: true });
+    const Database = require('better-sqlite3');
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE account_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        balance REAL,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        risk_pct REAL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE account_settings_schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      INSERT INTO account_settings (id, balance, currency, risk_pct, updated_at)
+      VALUES (1, 42, 'USD', 1, '2020-01-01T00:00:00.000Z');
+      INSERT INTO account_settings_schema_migrations (id, applied_at)
+      VALUES ('001_account_settings_init', '2020-01-01T00:00:00.000Z');
+    `);
+    db.close();
+
+    store = loadStore(tempDir);
+    const got = await store.get();
+    assert.equal(got.balance, 42);
+    assert.equal(got.riskPct, 1);
+    assert.equal(got.wikiEnabled, false);
+    assert.equal(got.quantumEnabled, false);
   });
 
   it('importLegacy solo importa con la tabla vacía', async () => {

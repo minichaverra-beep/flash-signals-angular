@@ -26,7 +26,7 @@ import {
   ReportViewMode,
   SignalReportViewerComponent,
 } from '../../shared/signal-report-viewer.component';
-import { biasTone, biasLabel, resolveRunBias, hitRateTone, parseHitRateAnalysis, probabilityHint, hitRateTooltip, probabilityTooltip, explainHitFactor, HIT_RATE_COLUMN_TOOLTIP } from '../../shared/signal-report.helpers';
+import { biasTone, biasLabel, resolveRunBias, hitRateTone, parseHitRateAnalysis, probabilityHint, hitRateTooltip, probabilityTooltip, explainHitFactor, HIT_RATE_COLUMN_TOOLTIP, localizeBiasWords } from '../../shared/signal-report.helpers';
 import type { HitRateAnalysis, HitRateFactor } from '../../shared/signal-report.helpers';
 import {
   computeHistoryMetrics,
@@ -61,6 +61,7 @@ import { SignalRunFormComponent } from '../../shared/signal-run-form.component';
 import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
 import { AuthService } from '../../services/auth.service';
 import { DeviceService } from '../../services/device.service';
+import { NavFeaturesService } from '../../services/nav-features.service';
 import { Subscription } from 'rxjs';
 
 export type ExportFormat = 'excel' | 'pdf';
@@ -174,6 +175,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
   readonly isAdmin = inject(AuthService).isAdmin;
   /** APK o pantalla pequeña: sin acciones MT5 (Run, Parámetros, Duplicar, Recalcular). */
   readonly mt5Hidden = inject(DeviceService).mt5Hidden;
+  readonly navFeatures = inject(NavFeaturesService);
   /** «Ver detalle» (ojo) a pantalla completa, sin scroll del body y cerrable con Atrás. */
   readonly isMobileOrApk = inject(DeviceService).isMobileOrApk;
   private detailHistoryPushed = false;
@@ -2062,7 +2064,7 @@ export class HistorialComponent implements OnInit, OnDestroy {
       biasText: (item) => this.biasText(this.itemBias(item as HistoryListItem)),
       hitRate: (item) => {
         const ha = parseHitRateAnalysis(item.winrate);
-        return [ha.pctLabel, ha.source].filter(Boolean).join(' · ') || '—';
+        return localizeBiasWords([ha.pctLabel, ha.source].filter(Boolean).join(' · ') || '—');
       },
     };
     const pageScope = this.exportScope === 'pagina';

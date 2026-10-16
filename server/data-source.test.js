@@ -51,6 +51,17 @@ describe('resolveDataSource', () => {
     assert.equal(resolveDataSource({ ...bridge, dataSource: 'yahoo' }, {}).mode, 'yahoo');
     assert.equal(resolveDataSource({ ...bridge, dataSource: 'mt5' }, { TERMUX_VERSION: '1' }).mode, 'mt5');
   });
+  it('pantalla pequeña: el ajuste MT5 pasa a solo Yahoo', () => {
+    const { clientContextMiddleware } = require('./data-source');
+    const req = { headers: { 'x-fs-client': 'small' } };
+    clientContextMiddleware(req, {}, () => {
+      const r = resolveDataSource({ ...bridge, dataSource: 'mt5' }, {});
+      assert.equal(r.mode, 'yahoo');
+      assert.match(r.reason, /pantalla pequeña/);
+      assert.equal(isYahooOnly({ ...bridge, dataSource: 'mt5' }, {}), true);
+    });
+    assert.equal(resolveDataSource({ ...bridge, dataSource: 'mt5' }, {}).mode, 'mt5');
+  });
   it('env FS_DATA_SOURCE gana al ajuste; valores inválidos se ignoran', () => {
     assert.equal(resolveDataSource({ ...bridge, dataSource: 'mt5' }, { FS_DATA_SOURCE: 'yahoo' }).mode, 'yahoo');
     assert.equal(resolveDataSource({ ...bridge, dataSource: 'yahoo' }, { FS_DATA_SOURCE: 'mt5' }).mode, 'mt5');

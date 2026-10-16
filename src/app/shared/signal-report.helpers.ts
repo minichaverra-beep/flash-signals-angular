@@ -1,5 +1,23 @@
 import type { HistoryMt5Real, PlanDetails, SignalSummary } from '../services/signals-api.service';
 
+/**
+ * Texto que lee el usuario. No toca flags, campos de API ni argumentos del motor.
+ * Conserva las mayúsculas: Bullish → Alcista, BULLISH → ALCISTA, bullish → alcista.
+ */
+export function localizeBiasWords(text: string | null | undefined): string {
+  if (!text) return '';
+  return text.replace(/\b(bullish|bearish)\b/gi, (word) => {
+    const es = word.toLowerCase() === 'bullish' ? 'alcista' : 'bajista';
+    if (word === word.toUpperCase()) return es.toUpperCase();
+    const head = word.charAt(0);
+    const tail = word.slice(1);
+    if (head === head.toUpperCase() && tail === tail.toLowerCase()) {
+      return es.charAt(0).toUpperCase() + es.slice(1);
+    }
+    return es;
+  });
+}
+
 export type { ChecklistItem } from '../services/signals-api.service';
 
 export interface KpiRow {
@@ -65,11 +83,11 @@ export function marketRows(s: SignalSummary | null): KpiRow[] {
 export function setupRows(s: SignalSummary | null): KpiRow[] {
   if (!s) return [];
   const rows: KpiRow[] = [];
-  if (s.bias) rows.push({ campo: 'Dirección', valor: s.bias });
-  if (s.twoM5) rows.push({ campo: 'Estructura (2M5)', valor: s.twoM5 });
-  if (s.setup) rows.push({ campo: 'Tipo de setup', valor: s.setup });
-  if (s.winrate) rows.push({ campo: 'Tasa de acierto', valor: s.winrate });
-  if (s.impulso) rows.push({ campo: 'Impulso', valor: s.impulso });
+  if (s.bias) rows.push({ campo: 'Dirección', valor: localizeBiasWords(s.bias) });
+  if (s.twoM5) rows.push({ campo: 'Estructura (2M5)', valor: localizeBiasWords(s.twoM5) });
+  if (s.setup) rows.push({ campo: 'Tipo de setup', valor: localizeBiasWords(s.setup) });
+  if (s.winrate) rows.push({ campo: 'Tasa de acierto', valor: localizeBiasWords(s.winrate) });
+  if (s.impulso) rows.push({ campo: 'Impulso', valor: localizeBiasWords(s.impulso) });
   return rows;
 }
 
@@ -241,15 +259,15 @@ function layerSources(s: SignalSummary): { tecnico: string; valor: string; detal
       .filter((row) => !isCombinedScoreLabel(row.label))
       .map((row) => ({
         tecnico: displayScoreLabel(row.label),
-        valor: row.raw || (row.value == null ? '—' : `${row.value}%`),
-        detalle: joinDetail(row.weight, row.note),
+        valor: localizeBiasWords(row.raw || (row.value == null ? '—' : `${row.value}%`)),
+        detalle: localizeBiasWords(joinDetail(row.weight, row.note)),
       }));
   }
   return (s.chartScores || [])
     .filter((bar) => !isCombinedScoreLabel(bar.label))
     .map((bar) => ({
       tecnico: displayScoreLabel(bar.label),
-      valor: bar.value == null ? bar.raw || '—' : `${Math.round(bar.value * 10) / 10}%`,
+      valor: localizeBiasWords(bar.value == null ? bar.raw || '—' : `${Math.round(bar.value * 10) / 10}%`),
       detalle: '',
     }));
 }
@@ -467,7 +485,7 @@ export function parseHitRateAnalysis(
     .map((c) => c.replace(/^\s*·\s*/, '').trim())
     .filter((c) => c && !/^hist[oó]rico/i.test(c))
     .map((chunk) => ({
-      label: chunk,
+      label: localizeBiasWords(chunk),
       delta: parseFactorDelta(chunk),
       kind: classifyHitFactor(chunk),
     }));
@@ -528,8 +546,8 @@ function biasOrAcuerdoHint(
   acuerdo: HitRateFactor | undefined
 ): string | null {
   if (bias) {
-    const m = /\b(BULLISH|BEARISH|NEUTRAL|CLI\s+\w+)\b/i.exec(bias.label);
-    return m ? m[1].toUpperCase().replace(/\s+/, ' ') : null;
+    const m = /\b(BULLISH|BEARISH|ALCISTA|BAJISTA|NEUTRAL|CLI\s+\w+)\b/i.exec(bias.label);
+    return m ? localizeBiasWords(m[1].toUpperCase().replace(/\s+/, ' ')) : null;
   }
   const m = acuerdo ? /acuerdo\s+(\w+)/i.exec(acuerdo.label) : null;
   return m ? `acuerdo ${m[1]}` : null;
@@ -645,7 +663,7 @@ export function calibratedBandLabel(pct: number): string {
 export function hitRateTooltip(winrate: string | null | undefined): string {
   const a = parseHitRateAnalysis(winrate);
   if (!a.raw || a.pct == null) {
-    return a.raw && a.raw !== '—' ? a.raw : 'Sin tasa de acierto estimada.';
+    return a.raw && a.raw !== '—' ? localizeBiasWords(a.raw) : 'Sin tasa de acierto estimada.';
   }
   const pct = a.pct;
   if (isCalibratedWinrate(a.raw)) {
@@ -653,7 +671,7 @@ export function hitRateTooltip(winrate: string | null | undefined): string {
       `Probabilidad calibrada: ${a.pctLabel} — ${calibratedBandLabel(pct)}`,
       `≈ ${Math.round(pct / 10)} de cada 10 señales parecidas tocaron TP antes que SL (replay histórico).`,
       '',
-      a.raw,
+      localizeBiasWords(a.raw),
       '',
       'Modelo logístico validado walk-forward: RSI vs dirección, premium/discount,',
       '2 velas M5 y coherencia CRT. El rango 80% indica la incertidumbre del estimado.',
@@ -732,7 +750,7 @@ export function probabilityTooltip(item: {
     return [
       `Probabilidad de éxito: ${pct} (calibrada)`,
       '',
-      String(item.winrate || ''),
+      localizeBiasWords(String(item.winrate || '')),
       '',
       'ML / Neural solo entran si mejoran el Brier fuera de muestra.',
     ].join('\n');

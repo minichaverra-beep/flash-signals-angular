@@ -20,6 +20,7 @@ import {
 } from '../../services/signals-api.service';
 import { biasLabel, biasTone } from '../../shared/signal-report.helpers';
 import { AuthService } from '../../services/auth.service';
+import { NavFeaturesService } from '../../services/nav-features.service';
 import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
 import {
   ZoomImageDirective,
@@ -53,6 +54,7 @@ export class WikiComponent implements OnInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   /** Gestión (categorías, renombrar, dirección) solo con sesión admin. */
   readonly isAdmin = inject(AuthService).isAdmin;
+  readonly navFeatures = inject(NavFeaturesService);
 
   constructor() {
     effect(() => {

@@ -1,7 +1,7 @@
 <section id="sec-config" class="panel form">
   <h2>Configurar corrida</h2>
 
-  <div class="run-grid">
+  <div class="run-grid" [class.no-capas]="!isAdmin()">
     <div class="field">
       <label>Mercado</label>
       <div class="seg">
@@ -23,8 +23,8 @@
         [attr.title]="bias === 'trend' ? trendTitle : null"
       >
         <option value="trend" [attr.title]="trendTitle">Tendencia actual</option>
-        <option value="bullish">Bullish</option>
-        <option value="bearish">Bearish</option>
+        <option value="bullish">Alcista</option>
+        <option value="bearish">Bajista</option>
       </select>
     </div>
     <div class="field" [class.dim]="highOnlyDisabled">
@@ -41,7 +41,7 @@
         Reversiones desactivadas · <a routerLink="/configuracion">activar en Configuración</a>
       </p>
     </div>
-    <div class="field" [class.dim]="flagsDisabled">
+    <div class="field" [class.dim]="flagsDisabled" *ngIf="isAdmin()">
       <label>Capas</label>
       <div class="flags">
         <label><input type="checkbox" [(ngModel)]="ml" [disabled]="flagsDisabled" /> ML</label>

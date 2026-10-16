@@ -44,8 +44,8 @@ describe('enginePanel', () => {
     ]);
     assert.deepEqual(v.zentinel, { band: 'normal', ratio: 1.47, killzone: 'NY AM 08-10', kzOn: true });
     assert.deepEqual(v.macd, { filter: 'En contra', tone: 'warn', detail: 'H4 · cruce SELL · hist -288.87' });
-    assert.deepEqual(v.ict, ['Entrada refinada: FVG BEARISH edge', '80152.9->80208.4']);
-    assert.deepEqual(v.crt, ['H1 COMPLETED_BEAR', 'PD BEARISH', 'DISCOUNT']);
+    assert.deepEqual(v.ict, ['Entrada refinada: FVG BAJISTA edge', '80152.9->80208.4']);
+    assert.deepEqual(v.crt, ['H1 COMPLETED_BEAR', 'PD BAJISTA', 'DISCOUNT']);
     assert.equal(v.staleMessage, 'Última vela hace 3 h');
     assert.equal(v.contingencies.length, 2);
   });

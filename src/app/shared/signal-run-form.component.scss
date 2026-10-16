@@ -3,7 +3,7 @@
 }
 
 .panel {
-  background: color-mix(in srgb, var(--panel) 82%, #1a1010);
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.5rem 1.6rem;
@@ -46,6 +46,14 @@
       minmax(11rem, 1fr)
       minmax(11rem, 1fr)
       minmax(9rem, 0.8fr)
+      auto;
+  }
+
+  .run-grid.no-capas {
+    grid-template-columns:
+      minmax(15rem, 1.2fr)
+      minmax(11rem, 1fr)
+      minmax(11rem, 1fr)
       auto;
   }
 }
@@ -98,7 +106,7 @@
   width: 100%;
   min-height: 2.45rem;
   border: 1px solid var(--border);
-  background: #1a1010;
+  background: var(--bg);
   color: var(--text);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
@@ -153,17 +161,16 @@
 .primary {
   background: var(--accent-fire) !important;
   border-color: transparent !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
   font-weight: 700;
   letter-spacing: 0.03em;
-  text-shadow: 0 1px 2px color-mix(in srgb, black 40%, transparent);
   box-shadow: var(--glow-fire);
 }
 
 .primary:hover:not(:disabled) {
   box-shadow:
-    0 0 22px color-mix(in srgb, var(--fire) 55%, transparent),
-    0 0 8px color-mix(in srgb, var(--red) 40%, transparent);
+    0 0 22px color-mix(in srgb, var(--accent-2) 55%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 40%, transparent);
   filter: brightness(1.06);
 }
 
@@ -213,7 +220,7 @@ pre.job-tail {
   white-space: pre-wrap;
   word-break: break-word;
   opacity: 0.85;
-  background: #0e0808;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem;

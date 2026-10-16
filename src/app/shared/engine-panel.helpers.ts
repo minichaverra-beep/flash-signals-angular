@@ -4,6 +4,20 @@
  */
 import type { EngineSignal, SignalSummary } from '../services/signals-api.service';
 
+/** Igual que localizeBiasWords del visor: solo el texto que se muestra en el panel. */
+function localizeBiasWords(text: string): string {
+  return text.replace(/\b(bullish|bearish)\b/gi, (word) => {
+    const es = word.toLowerCase() === 'bullish' ? 'alcista' : 'bajista';
+    if (word === word.toUpperCase()) return es.toUpperCase();
+    const head = word.charAt(0);
+    const tail = word.slice(1);
+    if (head === head.toUpperCase() && tail === tail.toLowerCase()) {
+      return es.charAt(0).toUpperCase() + es.slice(1);
+    }
+    return es;
+  });
+}
+
 export type EngineTone = 'ok' | 'warn' | 'muted';
 
 export interface EngineLayerRow {
@@ -137,10 +151,10 @@ function ictFacts(engine: EngineSignal | null | undefined): string[] {
   const ict = engine?.ict;
   if (!ict) return [];
   const facts: string[] = [];
-  if (ict.refined === true && ict.source) facts.push(`Entrada refinada: ${ict.source}`);
-  else if (ict.source) facts.push(ict.source);
-  if (ict.summary) facts.push(ict.summary);
-  else if (ict.note) facts.push(ict.note);
+  if (ict.refined === true && ict.source) facts.push(localizeBiasWords(`Entrada refinada: ${ict.source}`));
+  else if (ict.source) facts.push(localizeBiasWords(ict.source));
+  if (ict.summary) facts.push(localizeBiasWords(ict.summary));
+  else if (ict.note) facts.push(localizeBiasWords(ict.note));
   return facts.slice(0, 3);
 }
 
@@ -148,9 +162,9 @@ function crtFacts(engine: EngineSignal | null | undefined): string[] {
   const crt = engine?.crt;
   if (!crt) return [];
   const facts = [
-    crt['h1_state'] ? `H1 ${crt['h1_state']}` : null,
-    crt['pd_reading'] ? `PD ${crt['pd_reading']}` : null,
-    crt['premium_discount'] ? `${crt['premium_discount']}` : null,
+    crt['h1_state'] ? localizeBiasWords(`H1 ${crt['h1_state']}`) : null,
+    crt['pd_reading'] ? localizeBiasWords(`PD ${crt['pd_reading']}`) : null,
+    crt['premium_discount'] ? localizeBiasWords(`${crt['premium_discount']}`) : null,
     crt['fakeout_pdh'] === true ? 'Fakeout PDH' : null,
     crt['fakeout_pdl'] === true ? 'Fakeout PDL' : null,
   ];

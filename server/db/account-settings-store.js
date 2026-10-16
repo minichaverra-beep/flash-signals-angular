@@ -92,7 +92,29 @@ async function getEngine() {
     '001_account_settings_init',
     new Date().toISOString(),
   ]);
+  ensureNavColumns(engine);
   return engine;
+}
+
+/** CREATE IF NOT EXISTS no añade columnas a una base ya creada. */
+function addColumnIfMissing(e, sql) {
+  try {
+    e.run(sql);
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    if (!/duplicate column/i.test(msg)) throw err;
+  }
+}
+
+function ensureNavColumns(e) {
+  const id = '002_nav_wiki_quantum';
+  if (e.get(`SELECT id FROM account_settings_schema_migrations WHERE id = ?`, [id])) return;
+  addColumnIfMissing(e, `ALTER TABLE account_settings ADD COLUMN wiki_enabled INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfMissing(e, `ALTER TABLE account_settings ADD COLUMN quantum_enabled INTEGER NOT NULL DEFAULT 0`);
+  e.run(`INSERT OR IGNORE INTO account_settings_schema_migrations (id, applied_at) VALUES (?, ?)`, [
+    id,
+    new Date().toISOString(),
+  ]);
 }
 
 function badRequest(errors) {
@@ -124,8 +146,19 @@ function parseNumberField(raw, { valid, normalize, error }, errors) {
   return undefined;
 }
 
+const BOOL_FIELDS = {
+  wikiEnabled: 'Activar wiki',
+  quantumEnabled: 'Activar quantum',
+};
+
+function parseBoolField(raw, label, errors) {
+  if (typeof raw === 'boolean') return raw;
+  errors.push(`${label} debe ser verdadero o falso`);
+  return undefined;
+}
+
 /**
- * Valida un patch parcial { balance?, riskPct?, currency? }.
+ * Valida un patch parcial { balance?, riskPct?, currency?, wikiEnabled?, quantumEnabled? }.
  * @returns {{ value: object, errors: string[] }}
  */
 function validatePatch(patch) {
@@ -144,10 +177,19 @@ function validatePatch(patch) {
     if (!CURRENCY_RE.test(c)) errors.push('La moneda debe ser un código de 3 letras (ej. USD)');
     else value.currency = c;
   }
+  for (const [key, label] of Object.entries(BOOL_FIELDS)) {
+    if (patch[key] === undefined) continue;
+    const v = parseBoolField(patch[key], label, errors);
+    if (v !== undefined) value[key] = v;
+  }
   if (!errors.length && !Object.keys(value).length) {
-    errors.push('Nada que guardar: envía balance, riskPct o currency');
+    errors.push('Nada que guardar: envía balance, riskPct, currency, wikiEnabled o quantumEnabled');
   }
   return { value, errors };
+}
+
+function flagOn(raw) {
+  return raw === true || raw === 1 || raw === '1';
 }
 
 function rowToSettings(row) {
@@ -155,13 +197,17 @@ function rowToSettings(row) {
     balance: row?.balance != null ? Number(row.balance) : null,
     currency: row?.currency || 'USD',
     riskPct: row?.risk_pct != null ? Number(row.risk_pct) : null,
+    wikiEnabled: flagOn(row?.wiki_enabled),
+    quantumEnabled: flagOn(row?.quantum_enabled),
     updatedAt: row?.updated_at || null,
   };
 }
 
 async function readRow() {
   const e = await getEngine();
-  return e.get(`SELECT balance, currency, risk_pct, updated_at FROM account_settings WHERE id = 1`);
+  return e.get(
+    `SELECT balance, currency, risk_pct, wiki_enabled, quantum_enabled, updated_at FROM account_settings WHERE id = 1`
+  );
 }
 
 /** @returns {Promise<{ balance: number|null, currency: string, riskPct: number|null, updatedAt: string|null }>} */
@@ -171,15 +217,19 @@ async function get() {
 
 async function write(next) {
   const e = await getEngine();
+  const wikiEnabled = next.wikiEnabled === true ? 1 : 0;
+  const quantumEnabled = next.quantumEnabled === true ? 1 : 0;
   e.run(
-    `INSERT INTO account_settings (id, balance, currency, risk_pct, updated_at)
-     VALUES (1, ?, ?, ?, ?)
+    `INSERT INTO account_settings (id, balance, currency, risk_pct, wiki_enabled, quantum_enabled, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        balance = excluded.balance,
        currency = excluded.currency,
        risk_pct = excluded.risk_pct,
+       wiki_enabled = excluded.wiki_enabled,
+       quantum_enabled = excluded.quantum_enabled,
        updated_at = excluded.updated_at`,
-    [next.balance, next.currency, next.riskPct, new Date().toISOString()]
+    [next.balance, next.currency, next.riskPct, wikiEnabled, quantumEnabled, new Date().toISOString()]
   );
   return get();
 }

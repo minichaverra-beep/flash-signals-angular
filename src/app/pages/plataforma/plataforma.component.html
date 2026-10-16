@@ -10,8 +10,12 @@
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
-      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      @if (navFeatures.quantumEnabled()) {
+        <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
+      }
+      @if (navFeatures.wikiEnabled()) {
+        <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      }
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>

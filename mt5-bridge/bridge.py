@@ -270,21 +270,21 @@ def loss_per_lot(symbol, is_long, price, sl):
     return abs(loss)
 
 
-def calc_volume(symbol, info, is_long, price, sl, equity, volume, risk_pct):
-    """(lotes, aviso). Bajo el lote mínimo del broker se usa el mínimo y el aviso da el riesgo real."""
+def calc_volume(symbol, info, is_long, price, sl, balance, volume, risk_pct):
+    """(lotes, aviso). El lote sale del saldo × riesgo %. Bajo el mínimo del broker se usa el mínimo."""
     if volume:
         raw = volume
     else:
-        raw = (equity * risk_pct / 100.0) / loss_per_lot(symbol, is_long, price, sl)
+        raw = (balance * risk_pct / 100.0) / loss_per_lot(symbol, is_long, price, sl)
 
     step = info.volume_step
-    vol = round(math.floor(raw / step + 1e-9) * step, step_decimals(step))
+    vol = floor_volume(raw, step)
     if vol >= info.volume_min:
         return min(vol, info.volume_max), None
     note = f"Lote calculado {raw:.4f} < mínimo {info.volume_min}: se usa {info.volume_min}"
     if sl:
         risk_usd = loss_per_lot(symbol, is_long, price, sl) * info.volume_min
-        risk_real = risk_usd / equity * 100.0 if equity else 0.0
+        risk_real = risk_usd / balance * 100.0 if balance else 0.0
         note += f" (riesgo real {risk_real:.2f} % = {risk_usd:.2f} {account_currency()}"
         note += f" en vez de {risk_pct:g} %)" if not volume else ")"
     return info.volume_min, note
@@ -329,18 +329,60 @@ def daily_limits_guard(acc, max_trades, max_dd_pct):
             )
 
 
-def require_margin(symbol, is_long, price, volume):
-    """El lote del riesgo configurado nunca se reduce: sin margen libre suficiente la orden no se envía."""
+# Se reserva un 5 % del margen libre: MT5 rechaza la orden si el margen queda justo al límite.
+MARGIN_HEADROOM = 0.95
+
+
+def floor_volume(raw, step):
+    return round(math.floor(raw / step + 1e-9) * step, step_decimals(step))
+
+
+def shrink_to_margin(volume, needed, free, step, volume_min, margin_of):
+    """Mayor lote (en pasos) cuyo margen cabe en el libre. None si ni el mínimo cabe."""
+    budget = free * MARGIN_HEADROOM
+    if not needed or needed <= budget:
+        return volume
+    vol = floor_volume(volume * budget / needed, step)
+    while vol >= volume_min:
+        margin = margin_of(vol)
+        if margin and margin <= free:
+            return vol
+        vol = round(vol - step, step_decimals(step))
+    return None
+
+
+def fit_margin(symbol, info, is_long, price, volume, sl, balance, risk_pct, fixed_volume):
+    """(lotes, aviso). Si el lote del riesgo no cabe, se baja al máximo que el margen libre permite."""
     acc = mt5.account_info()
     order_type = mt5.ORDER_TYPE_BUY if is_long else mt5.ORDER_TYPE_SELL
     needed = mt5.order_calc_margin(order_type, symbol, volume, price)
-    if acc is None or not needed or needed <= acc.margin_free:
-        return
-    raise BridgeError(
-        422,
-        f"Sin margen para {volume} lotes: necesita {needed:.2f} {account_currency()} y hay {acc.margin_free:.2f} libres. "
-        "No se reduce el lote: cierra posiciones/órdenes pendientes o sube el apalancamiento.",
-    )
+    free = getattr(acc, "margin_free", None) or 0
+    if acc is None or not needed or needed <= free * MARGIN_HEADROOM:
+        return volume, None
+
+    def margin_of(vol):
+        return mt5.order_calc_margin(order_type, symbol, vol, price)
+
+    fitted = shrink_to_margin(volume, needed, free, info.volume_step, info.volume_min, margin_of)
+    if fitted is None:
+        raise BridgeError(
+            422,
+            f"Ni el lote mínimo {info.volume_min} cabe en el margen libre "
+            f"({free:.2f} {account_currency()}). Cierra posiciones u órdenes pendientes.",
+        )
+    ccy = account_currency()
+    note = f"Lote {volume:g} no cabe ({needed:.2f} {ccy}, hay {free:.2f} libres): se usa {fitted:g}"
+    if sl and balance:
+        risk_usd = loss_per_lot(symbol, is_long, price, sl) * fitted
+        risk_real = risk_usd / balance * 100.0
+        note += f" (riesgo real {risk_real:.2f} % = {risk_usd:.2f} {ccy}"
+        note += f", por debajo del {risk_pct:g} %)" if risk_pct and not fixed_volume else ")"
+    return fitted, note
+
+
+def join_notes(*parts):
+    text = " · ".join(part for part in parts if part)
+    return text or None
 
 
 def account_currency():
@@ -533,8 +575,11 @@ def place_signal(payload, symbol, side):
         raise BridgeError(422, f"SL/TP demasiado cerca del precio (stops level {info.trade_stops_level} pts).")
 
     digits = info.digits
-    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
-    require_margin(symbol, is_long, price, volume)
+    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.balance, opts["volume"], opts["risk_pct"])
+    volume, margin_note = fit_margin(
+        symbol, info, is_long, price, volume, sl, acc.balance, opts["risk_pct"], bool(opts["volume"])
+    )
+    volume_note = join_notes(volume_note, margin_note)
     request = {
         "symbol": symbol,
         "volume": volume,
@@ -611,8 +656,11 @@ def place_manual(payload, symbol, side, order_mode):
     price = market_price if use_market else entry
 
     digits = info.digits
-    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.equity, opts["volume"], opts["risk_pct"])
-    require_margin(symbol, is_long, price, volume)
+    volume, volume_note = calc_volume(symbol, info, is_long, price, sl, acc.balance, opts["volume"], opts["risk_pct"])
+    volume, margin_note = fit_margin(
+        symbol, info, is_long, price, volume, sl, acc.balance, opts["risk_pct"], bool(opts["volume"])
+    )
+    volume_note = join_notes(volume_note, margin_note)
     request = {
         "symbol": symbol,
         "volume": volume,

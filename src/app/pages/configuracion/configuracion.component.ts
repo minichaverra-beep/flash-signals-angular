@@ -6,6 +6,7 @@ import { Subject, Subscription, forkJoin, of } from 'rxjs';
 import { catchError, debounceTime, switchMap } from 'rxjs/operators';
 import {
   AccountSettings,
+  AccountSettingsPatch,
   Mt5DailyLimit,
   Mt5Health,
   Mt5ProfileId,
@@ -38,6 +39,7 @@ import {
 } from './volatility.helpers';
 import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
 import { DeviceService } from '../../services/device.service';
+import { NavFeaturesService } from '../../services/nav-features.service';
 
 type LotMode = 'risk' | 'fixed';
 type MultKey = 'vixMultLow' | 'vixMultNormal' | 'vixMultHigh' | 'vixMultExtreme';
@@ -54,6 +56,17 @@ interface ProfileDraft {
 
 const PROFILE_IDS: Mt5ProfileId[] = ['principal', 'secundaria'];
 
+/** Misma clave que el diálogo Run del Historial: solo el valor inicial del interruptor. */
+const RUN_STYLE_KEY = 'historial.runStyle';
+
+function readPhoneStyle(): Mt5TradeStyle {
+  try {
+    return localStorage.getItem(RUN_STYLE_KEY) === 'scalping' ? 'scalping' : 'daytrading';
+  } catch {
+    return 'daytrading';
+  }
+}
+
 @Component({
   selector: 'app-configuracion',
   standalone: true,
@@ -63,11 +76,17 @@ const PROFILE_IDS: Mt5ProfileId[] = ['principal', 'secundaria'];
 })
 export class ConfiguracionComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
-  /** APK o pantalla pequeña: sin secciones MT5, solo balance y % de riesgo para el lote recomendado. */
+  /** APK o pantalla pequeña: sin el formulario MT5 de escritorio; sí balance, riesgo y estilos de Run. */
   readonly mt5Hidden = inject(DeviceService).mt5Hidden;
+  readonly navFeatures = inject(NavFeaturesService);
 
   /** Balance y % de riesgo guardados en la BD (/api/account-settings). */
   account: AccountSettings | null = null;
+  /** Menú global. false hasta que la cuenta guardada diga lo contrario (API antigua incluida). */
+  wikiEnabled = false;
+  quantumEnabled = false;
+  /** true solo cuando GET /api/account-settings ya devuelve los booleanos. */
+  private navFlagsSupported = false;
   /** Input del balance (móvil y escritorio); tras guardar se rellena con la respuesta del servidor. */
   accountBalance: number | null = null;
   balanceSaving = false;
@@ -92,6 +111,12 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     { id: 'scalping', label: 'Scalping', hint: 'Stops cortos y objetivo cercano' },
     { id: 'daytrading', label: 'Day trading', hint: 'Más margen y objetivo más amplio' },
   ];
+  /** Interruptor de pantallas pequeñas. No se guarda en el servidor. */
+  readonly phoneStyleToggle: { id: Mt5TradeStyle; label: string }[] = [
+    { id: 'scalping', label: 'Scalper' },
+    { id: 'daytrading', label: 'Day trader' },
+  ];
+  phoneStyle: Mt5TradeStyle = readPhoneStyle();
 
   state: Mt5SettingsState | null = null;
   drafts: Partial<Record<Mt5ProfileId, ProfileDraft>> = {};
@@ -99,6 +124,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
 
   loading = true;
   saving = false;
+  stylesSaving = false;
   switching = false;
   volSaving = false;
   message = '';
@@ -242,6 +268,24 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     this.account = a;
     this.accountBalance = a.balance;
     if (a.riskPct != null) this.mobileRiskPct = a.riskPct;
+    this.applyNavFlags(a);
+  }
+
+  /** Ausente o no booleano (API antigua) → oculto. No pisa el input del balance. */
+  private applyNavFlags(a: AccountSettings): void {
+    this.navFlagsSupported = typeof a.wikiEnabled === 'boolean' && typeof a.quantumEnabled === 'boolean';
+    this.wikiEnabled = a.wikiEnabled === true;
+    this.quantumEnabled = a.quantumEnabled === true;
+    this.navFeatures.apply(a);
+  }
+
+  /** Solo si el servidor ya conoce los campos y el borrador cambió. */
+  private accountNavPatch(): AccountSettingsPatch {
+    if (!this.navFlagsSupported) return {};
+    const serverWiki = this.account?.wikiEnabled === true;
+    const serverQuantum = this.account?.quantumEnabled === true;
+    if (serverWiki === this.wikiEnabled && serverQuantum === this.quantumEnabled) return {};
+    return { wikiEnabled: this.wikiEnabled, quantumEnabled: this.quantumEnabled };
   }
 
   get balanceValid(): boolean {
@@ -249,25 +293,40 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     return b != null && Number.isFinite(Number(b)) && b > 0;
   }
 
-  /** El % de riesgo del perfil activo también alimenta el lote recomendado (BD); no toca el input del balance. */
-  private syncAccountRisk(riskPct: number): void {
-    if (this.account?.riskPct === riskPct) return;
-    this.api.accountSettingsSave({ riskPct }).subscribe({
-      next: (a) => (this.account = a),
-      error: (err: unknown) =>
-        this.showMessage(this.errMsg(err, 'Configuración guardada, pero no se pudo actualizar el % de riesgo del lote recomendado.'), true),
+  /**
+   * Tras Guardar el perfil: % de riesgo del lote (si cambió) y los interruptores del menú.
+   * No toca el input del balance. Sin riskPct, solo persiste el menú.
+   */
+  private syncAccountRisk(riskPct?: number): void {
+    const patch: AccountSettingsPatch = { ...this.accountNavPatch() };
+    if (riskPct != null && this.account?.riskPct !== riskPct) patch.riskPct = riskPct;
+    if (!Object.keys(patch).length) return;
+    const failedNav = patch.wikiEnabled !== undefined || patch.quantumEnabled !== undefined;
+    const failedRisk = patch.riskPct !== undefined;
+    const fallback = failedNav && failedRisk
+      ? 'Configuración guardada, pero no se pudo actualizar el menú ni el % de riesgo.'
+      : failedNav
+        ? 'Configuración guardada, pero no se pudo actualizar el menú.'
+        : 'Configuración guardada, pero no se pudo actualizar el % de riesgo del lote recomendado.';
+    this.api.accountSettingsSave(patch).subscribe({
+      next: (a) => {
+        this.account = a;
+        this.applyNavFlags(a);
+      },
+      error: (err: unknown) => this.showMessage(this.errMsg(err, fallback), true),
     });
   }
 
-  /** Escritorio: guarda solo el balance (el % de riesgo va en «Tamaño de la posición»). */
+  /** Escritorio: guarda el balance y, si cambiaron, los interruptores del menú. */
   saveBalance(): void {
     if (this.balanceSaving || !this.balanceValid) return;
     this.balanceSaving = true;
-    this.api.accountSettingsSave({ balance: Number(this.accountBalance) }).subscribe({
+    this.api.accountSettingsSave({ balance: Number(this.accountBalance), ...this.accountNavPatch() }).subscribe({
       next: (a) => {
         this.balanceSaving = false;
         this.account = a;
         this.accountBalance = a.balance;
+        this.applyNavFlags(a);
         this.showMessage('Balance guardado.', false);
       },
       error: (err: unknown) => {
@@ -408,14 +467,26 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     };
     if (this.mobileTradeLimitEnabled) settings.maxTradesPerDay = this.mobileMaxTrades!;
     forkJoin({
-      account: this.api.accountSettingsSave({ balance: Number(this.accountBalance), riskPct }),
+      account: this.api.accountSettingsSave({
+        balance: Number(this.accountBalance),
+        riskPct,
+        ...this.accountNavPatch(),
+      }),
       mt5: this.api.mt5SettingsSave({ profile, settings }),
     })
       .subscribe({
         next: ({ account, mt5: s }) => {
           this.mobileSaving = false;
+          const pendingStyles = this.drafts[profile]?.form.styles;
           this.state = s;
           this.drafts[profile] = this.toDraft(s.profiles[profile]);
+          const draft = this.drafts[profile];
+          if (draft && pendingStyles) {
+            draft.form.styles = {
+              scalping: { ...pendingStyles.scalping },
+              daytrading: { ...pendingStyles.daytrading },
+            };
+          }
           this.applyAccount(account);
           this.syncMobileRisk(s);
           this.loadDailyLimit();
@@ -424,6 +495,46 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         error: (err: unknown) => {
           this.mobileSaving = false;
           this.showMessage(this.errMsg(err, 'No se pudo guardar el balance.'), true);
+        },
+      });
+  }
+
+  /** En móvil el formulario solo edita estilos; en escritorio guarda el perfil completo. */
+  submitForm(): void {
+    if (this.mt5Hidden()) this.saveStyles();
+    else this.save();
+  }
+
+  /** Guarda los dos estilos aunque en pantalla pequeña solo se vea uno. */
+  saveStyles(): void {
+    const d = this.draft;
+    if (!d || this.stylesSaving) return;
+    const profile = this.editing;
+    const f = d.form;
+    this.stylesSaving = true;
+    this.api
+      .mt5SettingsSave({
+        profile,
+        settings: {
+          styles: { scalping: { ...f.styles.scalping }, daytrading: { ...f.styles.daytrading } },
+        },
+      })
+      .subscribe({
+        next: (s) => {
+          this.stylesSaving = false;
+          this.state = s;
+          const draft = this.drafts[profile];
+          if (draft) {
+            draft.form.styles = {
+              scalping: { ...s.profiles[profile].styles.scalping },
+              daytrading: { ...s.profiles[profile].styles.daytrading },
+            };
+          }
+          this.showMessage('Estilos de operación guardados.', false);
+        },
+        error: (err: unknown) => {
+          this.stylesSaving = false;
+          this.showMessage(this.errMsg(err, 'No se pudieron guardar los estilos.'), true);
         },
       });
   }
@@ -471,10 +582,8 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         this.saving = false;
         this.state = s;
         this.drafts[profile] = this.toDraft(s.profiles[profile]);
-        if (s.active === profile) {
-          this.loadDailyLimit();
-          this.syncAccountRisk(s.profiles[profile].riskPct);
-        }
+        if (s.active === profile) this.loadDailyLimit();
+        this.syncAccountRisk(s.active === profile ? s.profiles[profile].riskPct : undefined);
         const inUse = s.active === profile ? ' Es el perfil activo: se usará en el próximo envío.' : '';
         this.showMessage(`${this.label(profile)} guardada.${inUse}`, false);
       },
@@ -661,17 +770,15 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     return formatNumber(n, maxDecimals);
   }
 
-  /** «Usar estos valores»: copia al borrador el margen extra (pips) y el riesgo %; no guarda. */
+  /** «Usar estos valores»: copia al borrador el riesgo % del saldo; no guarda. */
   useCalcValues(): void {
     const r = this.calcResult;
     const d = this.draft;
     if (!r || !d) return;
-    d.form.extraSlPips = r.plan.extraSlPips;
-    d.form.extraTpPips = r.plan.extraTpPips;
     d.form.riskPct = r.riskPct;
     const fixed = d.lotMode === 'fixed' ? ' Estás en «Lotes fijos»: el riesgo % se usará cuando elijas «Riesgo % de la cuenta».' : '';
     this.showMessage(
-      `Copiado al borrador: margen extra SL ${r.plan.extraSlPips} pips · TP ${r.plan.extraTpPips} pips · riesgo ${r.riskPct} %. Pulsa Guardar para aplicarlo.${fixed}`,
+      `Copiado al borrador: riesgo ${r.riskPct} % del saldo. Pulsa Guardar para aplicarlo.${fixed}`,
       false
     );
   }

@@ -13,19 +13,16 @@ const { resolveVolatilityAdjustment } = require('./volatility');
 const plan = (entry, sl, tp) => ({ verdict: 'ENTRAR', planDetails: { entry, sl, tp } });
 
 describe('buildOrderFromSummary', () => {
-  it('LONG cuando SL < entry < TP, con +30 pips de SL/TP por defecto (XAUUSD pip 0.1)', () => {
+  it('LONG cuando SL < entry < TP: se envían los niveles de la señal', () => {
     const { order } = buildOrderFromSummary('xauusd', plan('4165.57', '4159.57', '4177.57'));
-    assert.deepEqual(order, { symbol: 'XAUUSD', side: 'LONG', entry: 4165.57, sl: 4156.57, tp: 4180.57 });
+    assert.deepEqual(order, { symbol: 'XAUUSD', side: 'LONG', entry: 4165.57, sl: 4159.57, tp: 4177.57 });
   });
 
-  it('SHORT aleja SL hacia arriba y TP hacia abajo; 0 pips = niveles exactos', () => {
+  it('SHORT mantiene los niveles de la señal; el margen extra del perfil ya no los mueve', () => {
     const settings = { symbols: { us30: 'US30m' }, pipSize: { us30: 1 }, extraSlPips: 30, extraTpPips: 30 };
     const { order } = buildOrderFromSummary('us30', plan('51572', '51632', '51452'), settings);
-    assert.equal(order.sl, 51662);
-    assert.equal(order.tp, 51422);
-    const exact = buildOrderFromSummary('us30', plan('51572', '51632', '51452'), { ...settings, extraSlPips: 0, extraTpPips: 0 });
-    assert.equal(exact.order.sl, 51632);
-    assert.equal(exact.order.tp, 51452);
+    assert.equal(order.sl, 51632);
+    assert.equal(order.tp, 51452);
   });
 
   it('SHORT cuando TP < entry < SL', () => {
@@ -119,12 +116,12 @@ describe('ajuste de SL/TP por volatilidad (VIX)', () => {
     assert.equal(order.tp, 51200);
   });
 
-  it('el multiplicador escala las distancias de la señal y después se suma el margen extra en pips', () => {
+  it('el multiplicador escala las distancias de la señal; el margen extra del perfil no se suma', () => {
     const settings = { ...base, volatilityAdjustEnabled: true, extraSlPips: 10, extraTpPips: 20 };
     const { order } = build(settings, 35, long);
-    // extrema ×1,6: SL 160 pts, TP 320 pts; luego +10 / +20 pips (1 pip = 1)
-    assert.equal(order.sl, 51000 - 160 - 10);
-    assert.equal(order.tp, 51000 + 320 + 20);
+    // extrema ×1,6: SL 160 pts, TP 320 pts
+    assert.equal(order.sl, 51000 - 160);
+    assert.equal(order.tp, 51000 + 320);
   });
 
   it('sin dato de VIX la orden no se bloquea: ×1 y aviso', () => {

@@ -30,6 +30,7 @@ import {
   displayScoreLabel,
   isCombinedScoreLabel,
   biasTone,
+  localizeBiasWords,
   volMarkerPct,
   type RapidaScoreGroup,
 } from './signal-report.helpers';
@@ -99,6 +100,8 @@ export class SignalReportViewerComponent {
   readonly volMarkerPct = volMarkerPct;
   readonly enginePanel = enginePanel;
   readonly engineBarLevel = engineBarLevel;
+  /** Bullish/Bearish (cualquier capitalización) → Alcista/Bajista en celdas del reporte. */
+  readonly biasEs = localizeBiasWords;
 
   biasClass(campoOrValue: string | null | undefined, valor?: string | null): string {
     const isDireccion = valor !== undefined && /direcci[oó]n/i.test(campoOrValue || '');

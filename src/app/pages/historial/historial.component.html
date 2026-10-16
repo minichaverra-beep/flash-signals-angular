@@ -6,13 +6,13 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Señales de trading</h1>
         <p class="sub hide-on-phone">Creado por: Danilo Chaverra</p>
-        <app-admin-login class="hero-admin" />
+        <app-admin-login class="hero-admin hide-on-phone" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
-      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a *ngIf="navFeatures.quantumEnabled()" routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
+      <a *ngIf="navFeatures.wikiEnabled()" routerLink="/wiki" routerLinkActive="active">Wiki</a>
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
@@ -1149,7 +1149,7 @@
     <p class="muted" *ngIf="detailLoading">Cargando detalle…</p>
 
     <ng-container *ngIf="!detailLoading && detail as d">
-      <div class="mode-tabs" role="tablist" aria-label="Modo de vista del detalle">
+      <div class="mode-tabs" role="tablist" aria-label="Modo de vista del detalle" *ngIf="isAdmin()">
         <button
           type="button"
           role="tab"
@@ -1185,34 +1185,6 @@
       <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
 
       <div class="detail-annotate" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
-        <label class="annotate-label annotate-span">
-          Motivo de entrada/salida
-          <textarea
-            class="hist-input hist-textarea"
-            rows="1"
-            [value]="d.motivoEntradaSalida || ''"
-            [disabled]="isSaving(d.id)"
-            [readonly]="isLocked(d)"
-            placeholder="Por qué entraste / saliste…"
-            maxlength="2000"
-            (input)="onAnnotateTextareaInput($event)"
-            (blur)="onMotivoBlur(d, $event)"
-          ></textarea>
-        </label>
-        <label class="annotate-label annotate-span">
-          Comentarios
-          <textarea
-            class="hist-input hist-textarea"
-            rows="1"
-            [value]="d.comment || ''"
-            [disabled]="isSaving(d.id)"
-            [readonly]="isLocked(d)"
-            placeholder="Nota del trade…"
-            maxlength="2000"
-            (input)="onAnnotateTextareaInput($event)"
-            (blur)="onCommentBlur(d, $event)"
-          ></textarea>
-        </label>
         <label class="annotate-label">
           Resultado
           <select
@@ -1328,6 +1300,37 @@
       <p class="muted" *ngIf="!d.summary">
         Esta entrada no tiene summary estructurado (p.ej. job en error sin reporte).
       </p>
+
+      <div class="detail-annotate" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
+        <label class="annotate-label annotate-span">
+          Motivo de entrada/salida
+          <textarea
+            class="hist-input hist-textarea"
+            rows="1"
+            [value]="d.motivoEntradaSalida || ''"
+            [disabled]="isSaving(d.id)"
+            [readonly]="isLocked(d)"
+            placeholder="Por qué entraste / saliste…"
+            maxlength="2000"
+            (input)="onAnnotateTextareaInput($event)"
+            (blur)="onMotivoBlur(d, $event)"
+          ></textarea>
+        </label>
+        <label class="annotate-label annotate-span">
+          Comentarios
+          <textarea
+            class="hist-input hist-textarea"
+            rows="1"
+            [value]="d.comment || ''"
+            [disabled]="isSaving(d.id)"
+            [readonly]="isLocked(d)"
+            placeholder="Nota del trade…"
+            maxlength="2000"
+            (input)="onAnnotateTextareaInput($event)"
+            (blur)="onCommentBlur(d, $event)"
+          ></textarea>
+        </label>
+      </div>
     </ng-container>
   </aside>
 

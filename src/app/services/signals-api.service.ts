@@ -396,15 +396,23 @@ export interface Mt5SentState {
 
 export type Mt5SignalMarket = 'btc' | 'us30' | 'xauusd';
 
-/** Balance y % de riesgo de la cuenta (SQLite, /api/account-settings): lote recomendado en Señales. */
+/** Balance, % de riesgo y visibilidad del menú (SQLite, /api/account-settings). Una sola fila para toda la app. */
 export interface AccountSettings {
   balance: number | null;
   currency: string;
   riskPct: number | null;
+  /**
+   * Enlaces Wiki y Quantum del menú. Si la API en marcha aún no los envía, quedan undefined
+   * y la interfaz los trata como false.
+   */
+  wikiEnabled?: boolean;
+  quantumEnabled?: boolean;
   updatedAt: string | null;
 }
 
-export type AccountSettingsPatch = Partial<Pick<AccountSettings, 'balance' | 'riskPct' | 'currency'>>;
+export type AccountSettingsPatch = Partial<
+  Pick<AccountSettings, 'balance' | 'riskPct' | 'currency' | 'wikiEnabled' | 'quantumEnabled'>
+>;
 
 /** Configuración MT5 (pantalla Configuración). El token nunca vuelve del servidor: solo hasToken. */
 export type DataSourceMode = 'auto' | 'yahoo' | 'mt5';

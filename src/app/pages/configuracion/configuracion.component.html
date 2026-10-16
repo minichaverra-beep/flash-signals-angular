@@ -6,18 +6,57 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Configuración</h1>
         <p class="sub hide-on-phone">Variables para ejecutar señales en MetaTrader 5</p>
-        <app-admin-login class="hero-admin" />
+        <app-admin-login class="hero-admin hide-on-phone" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
-      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a *ngIf="navFeatures.quantumEnabled()" routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
+      <a *ngIf="navFeatures.wikiEnabled()" routerLink="/wiki" routerLinkActive="active">Wiki</a>
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>
 
   <p class="muted" *ngIf="loading"><span class="spinner" aria-hidden="true"></span> Cargando configuración…</p>
+
+  <section class="panel">
+    <h2>Menú</h2>
+    <div class="switch-row">
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        [class.on]="wikiEnabled"
+        [attr.aria-checked]="wikiEnabled"
+        aria-labelledby="cfg-wiki-label"
+        (click)="wikiEnabled = !wikiEnabled"
+      >
+        <span class="switch-thumb" aria-hidden="true"></span>
+      </button>
+      <span id="cfg-wiki-label">Activar wiki</span>
+      <small class="switch-state" [class.on]="wikiEnabled" aria-hidden="true">
+        {{ wikiEnabled ? 'Activado' : 'Desactivado' }}
+      </small>
+    </div>
+    <div class="switch-row">
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        [class.on]="quantumEnabled"
+        [attr.aria-checked]="quantumEnabled"
+        aria-labelledby="cfg-quantum-label"
+        (click)="quantumEnabled = !quantumEnabled"
+      >
+        <span class="switch-thumb" aria-hidden="true"></span>
+      </button>
+      <span id="cfg-quantum-label">Activar quantum</span>
+      <small class="switch-state" [class.on]="quantumEnabled" aria-hidden="true">
+        {{ quantumEnabled ? 'Activado' : 'Desactivado' }}
+      </small>
+    </div>
+    <p class="muted tiny">Pulsa Guardar para aplicarlos.</p>
+  </section>
 
   <ng-container *ngIf="state as st">
     <section class="panel mobile-risk-panel" *ngIf="mt5Hidden()">
@@ -195,9 +234,11 @@
         <span class="badge" *ngIf="st.active === id">en uso</span>
       </button>
     </div>
+    </ng-container>
 
-    <form *ngIf="draft as d" (ngSubmit)="save()">
-      <section class="panel">
+    <form *ngIf="draft as d" (ngSubmit)="submitForm()">
+      <ng-container *ngIf="!mt5Hidden()">
+      <section class="panel" hidden>
         <h2>Conexión con MT5 · {{ label(editing) }}</h2>
         <p class="muted tiny hide-on-phone">
           Puente local <code>mt5-bridge/bridge.py</code> (<code>.\run-mt5-bridge.ps1</code>) con el terminal MT5 abierto y
@@ -299,11 +340,11 @@
         </div>
         <div class="grid">
           <div class="field" *ngIf="d.lotMode === 'risk'">
-            <label for="cfg-risk">Riesgo por operación (% equity)</label>
+            <label for="cfg-risk">Riesgo por operación (% del saldo)</label>
             <input id="cfg-risk" name="riskPct" type="number" min="0.01" max="5" step="0.05" [(ngModel)]="d.form.riskPct" />
             <small class="muted hide-on-phone">
-              Lotes = equity × riesgo % ÷ pérdida hasta el SL (con el margen extra). Si sale menos que el lote
-              mínimo del broker se envía el mínimo y se avisa el riesgo real.
+              Lotes = saldo × riesgo % ÷ pérdida hasta el SL de la señal. Si no cabe en el margen libre, el lote se
+              reduce y el riesgo real queda por debajo de ese %. Si sale bajo el mínimo del broker, se envía el mínimo y se avisa.
             </small>
           </div>
           <div class="field" *ngIf="d.lotMode === 'fixed'">
@@ -314,52 +355,31 @@
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Margen extra de SL / TP</h2>
-        <p class="muted tiny hide-on-phone">
-          Se suma a los niveles de la señal al enviar: el SL se aleja de la entrada y el TP también. 0 = niveles exactos.
-        </p>
-        <div class="grid">
-          <div class="field">
-            <label for="cfg-xsl">SL extra (pips)</label>
-            <input id="cfg-xsl" name="extraSlPips" type="number" min="0" max="10000" step="1" [(ngModel)]="d.form.extraSlPips" />
-          </div>
-          <div class="field">
-            <label for="cfg-xtp">TP extra (pips)</label>
-            <input id="cfg-xtp" name="extraTpPips" type="number" min="0" max="10000" step="1" [(ngModel)]="d.form.extraTpPips" />
-          </div>
-        </div>
-        <div class="grid">
-          <div class="field" *ngFor="let m of markets">
-            <label [for]="'cfg-pip-' + m.id">1 pip en {{ m.label }} (precio)</label>
-            <input
-              [id]="'cfg-pip-' + m.id"
-              [name]="'pip-' + m.id"
-              type="number"
-              min="0.00001"
-              step="any"
-              [(ngModel)]="d.form.pipSize[m.id]"
-            />
-            <small class="muted">
-              {{ d.form.extraSlPips || 0 }} pips SL = {{ ((d.form.extraSlPips || 0) * (d.form.pipSize[m.id] || 0)) | number:'1.0-5' }} ·
-              {{ d.form.extraTpPips || 0 }} pips TP = {{ ((d.form.extraTpPips || 0) * (d.form.pipSize[m.id] || 0)) | number:'1.0-5' }}
-            </small>
-          </div>
-        </div>
-      </section>
+      </ng-container>
 
       <section class="panel">
         <h2>Estilos de operación (Run)</h2>
         <p class="muted tiny hide-on-phone">
-          Al pulsar ▶ Run en el Historial eliges Scalping o Day trading y la orden se recalcula con estos valores (en lugar del margen extra de
-          arriba): SL = SL de la señal + SL extra; TP = entrada ± R:R × distancia al SL; lote = equity × riesgo % ÷ pérdida hasta el SL.
+          Al pulsar ▶ Run en el Historial eliges Scalping o Day trading y la orden se recalcula con estos valores:
+          SL = SL de la señal + SL extra; TP = entrada ± R:R × distancia al SL; lote = saldo × riesgo % ÷ pérdida hasta el SL.
+          Si el lote no cabe en el margen libre, se reduce.
         </p>
         <p class="vol-note" *ngIf="d.lotMode === 'fixed'">
           Estás en «Lotes fijos»: el riesgo % de los estilos no se usa, se envían {{ d.fixedVolume }} lotes.
         </p>
+        <fieldset class="seg phone-style-seg" *ngIf="mt5Hidden()" aria-label="Estilo de operación">
+          <button
+            type="button"
+            *ngFor="let opt of phoneStyleToggle"
+            [class.active]="phoneStyle === opt.id"
+            [attr.aria-pressed]="phoneStyle === opt.id"
+            (click)="phoneStyle = opt.id"
+          >{{ opt.label }}</button>
+        </fieldset>
         <div class="grid style-grid">
-          <div class="style-col" *ngFor="let st of tradeStyles">
-            <h3 class="sub-title">{{ st.label }}</h3>
+          <ng-container *ngFor="let st of tradeStyles">
+          <div class="style-col" *ngIf="!mt5Hidden() || st.id === phoneStyle">
+            <h3 class="sub-title" *ngIf="!mt5Hidden()">{{ st.label }}</h3>
             <small class="muted">{{ st.hint }}</small>
             <div class="field">
               <label [for]="'cfg-style-sl-' + st.id">SL extra (pips)</label>
@@ -372,10 +392,10 @@
                 step="1"
                 [(ngModel)]="d.form.styles[st.id].extraSlPips"
               />
-              <small class="muted hide-on-phone">Aleja el SL de la señal; 0 = SL exacto de la señal.</small>
+              <small class="muted">Aleja el SL de la señal; 0 = SL exacto de la señal.</small>
             </div>
             <div class="field">
-              <label [for]="'cfg-style-risk-' + st.id">Riesgo por operación (% equity)</label>
+              <label [for]="'cfg-style-risk-' + st.id">Riesgo por operación (% del saldo)</label>
               <input
                 [id]="'cfg-style-risk-' + st.id"
                 [name]="'style-risk-' + st.id"
@@ -385,7 +405,7 @@
                 step="0.05"
                 [(ngModel)]="d.form.styles[st.id].riskPct"
               />
-              <small class="muted hide-on-phone">El lote se calcula con este % y la distancia al SL final (máx. 5 %).</small>
+              <small class="muted">El lote se calcula con este % del saldo y la distancia al SL final (máx. 5 %). Si no cabe, se reduce.</small>
             </div>
             <div class="field">
               <label [for]="'cfg-style-rr-' + st.id">TP por R:R (1:x)</label>
@@ -398,7 +418,7 @@
                 step="0.1"
                 [(ngModel)]="d.form.styles[st.id].tpRr"
               />
-              <small class="muted hide-on-phone">2 = el TP está al doble de distancia que el SL. Vacío o 0 = TP de la señal + TP extra.</small>
+              <small class="muted">2 = el TP está al doble de distancia que el SL. Vacío o 0 = TP de la señal + TP extra.</small>
             </div>
             <div class="field" *ngIf="!d.form.styles[st.id].tpRr">
               <label [for]="'cfg-style-tp-' + st.id">TP extra sin R:R (pips)</label>
@@ -413,9 +433,17 @@
               />
             </div>
           </div>
+          </ng-container>
+        </div>
+        <div class="actions phone-style-actions" *ngIf="mt5Hidden()">
+          <button type="button" class="primary" (click)="saveStyles()" [disabled]="stylesSaving">
+            <span class="spinner" *ngIf="stylesSaving" aria-hidden="true"></span>
+            {{ stylesSaving ? 'Guardando…' : 'Guardar' }}
+          </button>
         </div>
       </section>
 
+      <ng-container *ngIf="!mt5Hidden()">
       <section class="panel vol-panel">
         <h2>Volatilidad (VIX) · {{ label(editing) }}</h2>
         <p class="muted tiny hide-on-phone">
@@ -452,8 +480,7 @@
         </div>
         <p class="muted tiny hide-on-phone">
           Si está activo, con VIX alto el SL/TP se ensanchan y con VIX bajo se estrechan. Se multiplica la distancia de
-          la señal (entrada → SL y entrada → TP) y después se suma el margen extra en pips. Desactivado no se consulta
-          el VIX al enviar.
+          la señal (entrada → SL y entrada → TP). Desactivado no se consulta el VIX al enviar.
         </p>
         <p class="vol-note hide-on-phone" *ngIf="d.form.volatilityAdjustEnabled" role="note">
           Cada envío lee el VIX (se reutiliza durante 60 s). Si no se puede leer, la orden se envía igual con ×1 y un
@@ -496,6 +523,7 @@
           </div>
         </div>
 
+        <div hidden>
         <h3 class="sub-title">Niveles y multiplicadores</h3>
         <div class="level-table-wrap">
           <table class="level-table">
@@ -556,6 +584,7 @@
             <input id="cfg-vix-symbol" name="vixSymbol" type="text" [(ngModel)]="d.form.vixSymbol" placeholder="vacío = buscarlo solo" />
             <small class="muted hide-on-phone">Muchos brokers (p. ej. Exness) no lo ofrecen; entonces se usa Yahoo Finance.</small>
           </div>
+        </div>
         </div>
 
         <!-- Calculadora de volatilidad (sin matemáticas) -->
@@ -681,8 +710,7 @@
               <div class="actions use-row">
                 <button type="button" class="primary" (click)="useCalcValues()">Usar estos valores</button>
                 <small class="muted hide-on-phone">
-                  Copia al formulario (sin guardar) un margen extra de <strong>SL +{{ r.plan.extraSlPips }} pips</strong> y
-                  <strong>TP +{{ r.plan.extraTpPips }} pips</strong>, y el riesgo de <strong>{{ num(r.riskPct, 1) }} %</strong>.
+                  Copia al formulario (sin guardar) el riesgo de <strong>{{ num(r.riskPct, 1) }} %</strong> del saldo.
                 </small>
               </div>
 
@@ -702,12 +730,8 @@
                     El dinero que pierdes por cada lote sale del valor del punto que informa tu broker ({{ r.symbol }}).
                   </li>
                   <li>
-                    Lotes = (saldo × % que aceptas perder) ÷ lo que pierdes por lote, redondeado hacia abajo. Si saliera
-                    menos que el lote mínimo del broker, se usa el mínimo y se avisa.
-                  </li>
-                  <li>
-                    El margen extra sugerido es <strong>1 movimiento típico</strong> × el multiplicador para el SL y el doble
-                    para el TP: es el colchón que se suma al SL/TP de cada señal.
+                    Lotes = (saldo × % que aceptas perder) ÷ lo que pierdes por lote, redondeado hacia abajo. Si no cabe en el
+                    margen libre, el lote se reduce. Si saliera menos que el mínimo del broker, se usa el mínimo y se avisa.
                   </li>
                 </ol>
               </details>
@@ -716,7 +740,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" hidden>
         <h2>Ejecución</h2>
         <div class="grid">
           <div class="field">
@@ -818,7 +842,7 @@
             <input id="cfg-max-dd" name="maxDailyDrawdownPct" type="number" min="0" max="100" step="0.5" [(ngModel)]="d.form.maxDailyDrawdownPct" />
             <small class="muted hide-on-phone">0 = sin límite. Pérdida de hoy (cerrada + flotante) sobre el balance al inicio del día.</small>
           </div>
-          <div class="field">
+          <div class="field" hidden>
             <label for="cfg-min-prob">Probabilidad mínima para Run (%)</label>
             <input id="cfg-min-prob" name="minProbabilityPct" type="number" min="0" max="100" step="1" [(ngModel)]="d.form.minProbabilityPct" />
             <small class="muted">Run no se ejecuta si la Probabilidad de la señal es menor que este valor (0 = sin mínimo)</small>
@@ -841,8 +865,8 @@
           <code>MT5_MAGIC</code>, <code>MT5_TERMINAL_PATH</code>, <code>MT5_LOGIN</code>/<code>MT5_PASSWORD</code>/<code>MT5_SERVER</code>.
         </p>
       </section>
+      </ng-container>
     </form>
-    </ng-container>
   </ng-container>
 
   <!-- Confirmación al activar reversiones -->

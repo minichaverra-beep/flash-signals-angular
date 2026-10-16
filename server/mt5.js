@@ -90,26 +90,17 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { 
   else if (tp < entry && entry < sl) side = 'SHORT';
   if (!side) return { skip: `Plan incoherente: entry=${entry} sl=${sl} tp=${tp}` };
 
-  // 1) El multiplicador de volatilidad escala las distancias de la señal; 2) después se suma el margen extra en pips.
+  // El multiplicador de volatilidad escala las distancias de la señal. Sin estilo, SL/TP quedan los de la señal.
   const scaled = applyVolatilityToStops({ entry, side, sl, tp, multiplier: volatility?.multiplier });
   const stops = style
     ? styleStops(market, side, { entry, sl: scaled.sl, tp: scaled.tp }, style, settings)
-    : padStops(market, side, scaled.sl, scaled.tp, settings);
+    : { sl: roundPrice(scaled.sl), tp: roundPrice(scaled.tp) };
   const coherent = side === 'LONG' ? stops.sl < entry && entry < stops.tp : stops.tp < entry && entry < stops.sl;
   if (!coherent) return { skip: `Plan incoherente tras el ajuste: entry=${entry} sl=${stops.sl} tp=${stops.tp}` };
   return { order: { symbol, side, entry, ...stops }, volatility };
 }
 
 const roundPrice = (n) => Math.round(n * 1e6) / 1e6;
-
-/** Aleja SL y TP de la entrada extraSlPips / extraTpPips × pipSize del mercado. */
-function padStops(market, side, sl, tp, settings = {}) {
-  const pip = Number(settings.pipSize?.[market]) || 0;
-  const slPad = (Number(settings.extraSlPips) || 0) * pip;
-  const tpPad = (Number(settings.extraTpPips) || 0) * pip;
-  const dir = side === 'LONG' ? 1 : -1;
-  return { sl: roundPrice(sl - dir * slPad), tp: roundPrice(tp + dir * tpPad) };
-}
 
 const MANUAL_ORDER_MODES = ['market', 'limit', 'stop', 'auto'];
 const SYMBOL_RE = /^[A-Za-z0-9._#+-]{1,32}$/;
@@ -366,7 +357,6 @@ module.exports = {
   historyDeals,
   marketRates,
   orderStatus,
-  padStops,
   pushDuplicateOrder,
   pushOrder,
   reconcileOrder,

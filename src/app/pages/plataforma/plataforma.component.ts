@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { NavFeaturesService } from '../../services/nav-features.service';
 
 @Component({
   selector: 'app-plataforma',
@@ -9,6 +10,8 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   styleUrl: './plataforma.component.scss',
 })
 export class PlataformaComponent {
+  readonly navFeatures = inject(NavFeaturesService);
+
   readonly tiers = [
     {
       id: 'Context',

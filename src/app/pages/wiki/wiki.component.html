@@ -6,13 +6,13 @@
         <p class="eyebrow hide-on-phone">Flash Signals · fuego y sombra</p>
         <h1>Wiki</h1>
         <p class="sub hide-on-phone">Artefactos Cursor AI en <code>docs/Artifacts</code> · meta local SQLite</p>
-        <app-admin-login class="hero-admin" />
+        <app-admin-login class="hero-admin hide-on-phone" />
       </div>
     </div>
     <nav class="top-nav" aria-label="Navegación principal">
       <a routerLink="/senales" routerLinkActive="active">Señales</a>
-      <a routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
-      <a routerLink="/wiki" routerLinkActive="active">Wiki</a>
+      <a *ngIf="navFeatures.quantumEnabled()" routerLink="/macd-quant" routerLinkActive="active">Quantum</a>
+      <a *ngIf="navFeatures.wikiEnabled()" routerLink="/wiki" routerLinkActive="active">Wiki</a>
       <a routerLink="/configuracion" routerLinkActive="active"><span class="nav-long">Configuración</span><span class="nav-short">Config</span></a>
     </nav>
   </header>

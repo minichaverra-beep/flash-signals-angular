@@ -416,6 +416,7 @@ app.use(
 );
 // 8mb: permite adjuntar captura del resultado en base64 (~5 MB binario).
 app.use(express.json({ limit: '8mb' }));
+app.use(dataSource.clientContextMiddleware);
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // Wiki embebe HTML/PDF en iframe same-origin vía /api/artifacts/raw (proxy :4400→:3847).

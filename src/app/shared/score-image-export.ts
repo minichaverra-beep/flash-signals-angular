@@ -19,15 +19,15 @@ export interface ScoreImageMeta {
 }
 
 const COLORS = {
-  bg: '#140c0c',
-  panel: '#1e1414',
-  border: '#3a2a1c',
-  gold: '#f5c542',
-  text: '#f2e9e4',
-  muted: '#a8968a',
-  ok: '#4ade80',
-  bad: '#f87171',
-  info: '#8a7a70',
+  bg: '#101110',
+  panel: '#181a19',
+  border: '#343a36',
+  gold: '#f075c0',
+  text: '#f4fbf6',
+  muted: '#8e9992',
+  ok: '#3ecf8e',
+  bad: '#f07171',
+  info: '#8e9992',
 };
 
 const FONT = '"Segoe UI", Roboto, Helvetica, Arial, sans-serif';

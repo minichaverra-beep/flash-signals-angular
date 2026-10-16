@@ -258,7 +258,7 @@
   border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
   border-radius: 12px;
   padding: 0;
-  background: color-mix(in srgb, var(--panel-deep) 70%, #1a1010);
+  background: color-mix(in srgb, var(--panel-deep) 70%, var(--bg));
   margin-top: 0.85rem;
   box-shadow: 0 4px 16px color-mix(in srgb, black 22%, transparent);
 }
@@ -337,7 +337,7 @@
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #160e0e;
+  background: var(--bg);
 }
 
 .matrix {
@@ -424,7 +424,7 @@
   flex-direction: column;
   gap: 0.7rem;
   padding: 0.85rem 1rem;
-  background: #160e0e;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
@@ -477,7 +477,7 @@
 }
 
 .matrix tr.emphasis td {
-  background: color-mix(in srgb, var(--fire) 12%, #160e0e);
+  background: color-mix(in srgb, var(--fire) 12%, var(--bg));
   font-weight: 600;
 }
 
@@ -509,7 +509,7 @@
 .vol-chart {
   margin-top: 0.75rem;
   padding: 0.85rem 1rem;
-  background: #160e0e;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
 }
@@ -535,10 +535,10 @@
   opacity: 0.55;
 }
 
-.vol-zone.band-vl { left: 0; background: #5a4a4a; }
+.vol-zone.band-vl { left: 0; background: #343a36; }
 .vol-zone.band-lo { background: #3a5a6a; }
 .vol-zone.band-mid { background: #2a6a55; }
-.vol-zone.band-hi { background: #8a5a20; }
+.vol-zone.band-hi { background: color-mix(in srgb, var(--warning) 70%, var(--bg)); }
 .vol-zone.band-ex { background: #8a2828; right: 0; }
 
 .vol-needle {
@@ -579,7 +579,7 @@ code {
 }
 
 pre {
-  background: #0e0808;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem;
@@ -615,7 +615,7 @@ pre {
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #0e0808;
+  background: var(--bg);
 }
 
 .rapida-chart {
@@ -624,7 +624,7 @@ pre {
   height: auto;
   max-height: 420px;
   object-fit: contain;
-  background: #0e0808;
+  background: var(--bg);
 }
 
 /* —— Riesgo en claro: track por zonas + marcador —— */
@@ -634,7 +634,7 @@ pre {
   padding: 0.85rem 1rem;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
-  background: color-mix(in srgb, var(--panel-deep) 85%, #1a1010);
+  background: color-mix(in srgb, var(--panel-deep) 85%, var(--bg));
   box-shadow: 0 4px 16px color-mix(in srgb, black 22%, transparent);
   cursor: help;
   outline: none;
@@ -711,7 +711,7 @@ pre {
   border-radius: 999px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
-  background: #120c0c;
+  background: var(--bg);
 }
 
 .risk-hot-zones {
@@ -723,15 +723,15 @@ pre {
 }
 
 .risk-hot-zones .z-cool {
-  background: color-mix(in srgb, var(--teal) 72%, #1a3030);
+  background: color-mix(in srgb, var(--teal) 72%, var(--bg));
 }
 
 .risk-hot-zones .z-warm {
-  background: color-mix(in srgb, var(--fire) 78%, #3a2010);
+  background: color-mix(in srgb, var(--fire) 78%, var(--bg));
 }
 
 .risk-hot-zones .z-hot {
-  background: color-mix(in srgb, var(--red) 78%, #301010);
+  background: color-mix(in srgb, var(--red) 78%, var(--bg));
 }
 
 .risk-hot-marker {

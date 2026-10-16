@@ -1,28 +1,38 @@
 :root {
-  /* Color Hunt — fuego y sombra */
-  --teal: #116d6e;
-  --brown: #321e1e;
-  --charcoal: #4e3636;
-  --red: #cd1818;
-  --fire: #ff8c00;
-  --gold: #ffd700;
+  /* Paleta de senales-de-trading.html */
+  --bg: #101110;
+  --surface: #181a19;
+  --control: #1e2220;
+  --text: #f4fbf6;
+  --muted: #8e9992;
+  --accent: #4a33af;
+  --accent-2: #f075c0;
+  --on-accent: #101110;
+  --warning-bg: #221e14;
+  --warning: #e7c56a;
 
-  --bg: #1a1010;
-  --bg-deep: #321e1e;
-  --panel: #4e3636;
-  --panel-deep: #2a1a1a;
-  --border: color-mix(in srgb, var(--gold) 28%, transparent);
-  --border-strong: color-mix(in srgb, var(--gold) 45%, var(--charcoal));
-  --text: #ffffff;
-  --muted: #d3d3d3;
-  --accent: #116d6e;
-  --accent-fire: linear-gradient(135deg, #ff8c00 0%, #cd1818 55%, #e60000 100%);
+  /* Superficies que ya consume la app */
+  --bg-deep: #101110;
+  --panel: #181a19;
+  --panel-deep: #1e2220;
+  --bg-elev: #1e2220;
+  --border: #343a36;
+  --border-strong: color-mix(in srgb, var(--text) 18%, #343a36);
+
+  /* Nombres del tema anterior, ahora sobre esta paleta */
+  --teal: #4a33af;
+  --brown: #101110;
+  --charcoal: #181a19;
+  --gold: #f075c0;
+  --red: #cd1818;
+  --fire: #f07171;
+  --accent-fire: #f075c0;
   --ok: #3ecf8e;
-  --warn: #ffb020;
+  --warn: #e7c56a;
   --err: #cd1818;
   --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
   --font-display: "Oswald", "Montserrat", sans-serif;
-  --glow-fire: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+  --glow-fire: 0 0 18px color-mix(in srgb, var(--accent-2) 45%, transparent);
 
   /* Límites de modales/menús en teléfono (APK WebView): nunca más anchos/altos que la pantalla. */
   --phone-gutter: 0.75rem;
@@ -44,10 +54,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
-    radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--red) 16%, transparent) 0%, transparent 50%),
-    linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   max-width: 100%;
@@ -189,12 +196,12 @@ select.bias-auto {
 .logo {
   width: 72px;
   height: 72px;
-  object-fit: cover;
-  border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--gold) 55%, transparent);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--fire) 28%, transparent);
+  object-fit: contain;
+  border-radius: 0;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 32%, transparent);
   flex-shrink: 0;
-  background: #000;
+  background: var(--bg);
 }
 
 .logo-link {
@@ -204,7 +211,7 @@ select.bias-auto {
 }
 
 .logo-link:hover .logo {
-  box-shadow: 0 0 26px color-mix(in srgb, var(--fire) 50%, transparent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .eyebrow {
@@ -236,7 +243,7 @@ select.bias-auto {
 }
 
 .top-nav a:hover {
-  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  border-color: var(--accent);
   color: var(--text);
 }
 

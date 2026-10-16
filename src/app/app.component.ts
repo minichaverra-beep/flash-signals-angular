@@ -24,14 +24,14 @@ import { DownloadService } from './services/download.service';
        max-width: min(92vw, 28rem);
        padding: 0.7rem 1rem;
        border-radius: 10px;
-       background: #1e9e63;
-       color: #fff;
+       background: #3ecf8e;
+       color: #101110;
        font: 600 0.92rem/1.3 var(--font, sans-serif);
        text-align: center;
        box-shadow: 0 6px 20px rgb(0 0 0 / 0.45);
        cursor: pointer;
      }
-     .download-notice.is-error { background: #cd1818; }`,
+     .download-notice.is-error { background: #cd1818; color: #f4fbf6; }`,
   ],
 })
 export class AppComponent {

@@ -17,7 +17,7 @@
 }
 
 .panel {
-  background: color-mix(in srgb, var(--panel) 82%, #1a1010);
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.25rem 1.35rem;
@@ -56,7 +56,7 @@
 .field input[type='number'] {
   width: 100%;
   border: 1px solid var(--border);
-  background: #1a1010;
+  background: var(--bg);
   color: var(--text);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
@@ -65,7 +65,7 @@
 .field select {
   width: 100%;
   border: 1px solid var(--border);
-  background: #1a1010;
+  background: var(--bg);
   color: var(--text);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
@@ -150,14 +150,14 @@
 }
 
 .switch.on {
-  border-color: color-mix(in srgb, var(--gold) 70%, transparent);
-  background: color-mix(in srgb, var(--gold) 30%, var(--panel-deep));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 30%, transparent);
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .switch.on .switch-thumb {
   left: calc(100% - 1.05rem - 0.18rem);
-  background: var(--gold);
+  background: var(--text);
 }
 
 .switch-state {
@@ -183,7 +183,8 @@
   border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
   border-left: 4px solid var(--warn);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  background: var(--warning-bg);
+  color: var(--warning);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -250,7 +251,7 @@
   padding: 1.25rem 1.35rem 1.35rem;
   border-radius: 16px;
   border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
-  background: linear-gradient(180deg, #221414 0%, #1a1010 100%);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
   box-shadow: 0 24px 64px color-mix(in srgb, black 55%, transparent);
 }
 
@@ -326,7 +327,7 @@
   padding: 0.6rem 0.75rem;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
-  background: color-mix(in srgb, #1a1210 92%, black);
+  background: color-mix(in srgb, var(--bg) 92%, black);
   color: color-mix(in srgb, var(--text) 92%, white);
   font-size: 0.75rem;
   line-height: 1.4;
@@ -417,7 +418,7 @@
 .primary {
   background: var(--accent-fire) !important;
   border-color: transparent !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
   font-weight: 700;
   letter-spacing: 0.03em;
   box-shadow: var(--glow-fire);
@@ -580,7 +581,7 @@ code {
   padding: 0.65rem 1rem;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent);
-  background: #1a1010;
+  background: var(--bg);
   box-shadow: 0 10px 30px color-mix(in srgb, black 50%, transparent);
 }
 
@@ -619,6 +620,34 @@ code {
 
 .style-col .sub-title {
   margin: 0;
+}
+
+.phone-style-seg {
+  width: 100%;
+  margin: 0 0 0.85rem;
+  border: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.phone-style-seg button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.phone-style-actions {
+  margin-top: 0.85rem;
+}
+
+.phone-style-actions .primary {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+@media (max-width: 768px) {
+  .style-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sub-title {
@@ -723,8 +752,8 @@ code {
   white-space: nowrap;
   font-size: 0.68rem;
   font-weight: 700;
-  color: #120a0a;
-  background: color-mix(in srgb, var(--lv) 75%, #1a1010);
+  color: var(--bg);
+  background: color-mix(in srgb, var(--lv) 75%, var(--bg));
 }
 
 .thermo-marker {
@@ -822,7 +851,7 @@ code {
 .level-table input[type='number'] {
   width: 5.5rem;
   border: 1px solid var(--border);
-  background: #1a1010;
+  background: var(--bg);
   color: var(--text);
   border-radius: 8px;
   padding: 0.35rem 0.5rem;
@@ -934,7 +963,7 @@ code {
 .balance-field input {
   width: 100%;
   border: 1px solid var(--border);
-  background: #1a1010;
+  background: var(--bg);
   color: var(--text);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
@@ -1034,7 +1063,7 @@ code {
   overflow: hidden;
   font-size: 0.7rem;
   font-weight: 700;
-  color: #120a0a;
+  color: var(--bg);
 }
 
 .rr-bar span {

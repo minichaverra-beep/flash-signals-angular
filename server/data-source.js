@@ -3,10 +3,12 @@
  *
  * Modos (`dataSource`): 'auto' | 'yahoo' | 'mt5'.
  *   - env FS_DATA_SOURCE (yahoo|mt5|auto) manda sobre el ajuste guardado en data/mt5-settings.json.
- *   - 'auto': Yahoo en Android/Termux (no hay MT5 en el móvil) o si no hay puente configurado;
- *     MT5 en el escritorio (si el puente no responde, Python cae solo a Yahoo con rótulo «sin MT5»).
+ *   - 'auto': Yahoo en Android/Termux o si no hay puente; MT5 en el escritorio.
+ *   - 'mt5': siempre el puente, salvo en pantalla pequeña (cabecera X-FS-Client: small) → solo Yahoo.
  * `android/start.sh` exporta FS_DATA_SOURCE=yahoo, así que en el APK no depende de la detección.
  */
+
+const { AsyncLocalStorage } = require('node:async_hooks');
 
 const MODES = ['auto', 'yahoo', 'mt5'];
 const MODE_LABELS = { auto: 'Automática', yahoo: 'Solo Yahoo', mt5: 'MT5' };
@@ -16,6 +18,18 @@ function normalizeMode(raw) {
   const v = String(raw ?? '').trim().toLowerCase();
   if (v === 'yfinance' || v === 'yahoo-only') return 'yahoo';
   return MODES.includes(v) ? v : null;
+}
+
+/** Cabecera X-FS-Client: small (navegador ≤768 px o APK). El ajuste «MT5» pasa a solo Yahoo. */
+const clientContext = new AsyncLocalStorage();
+
+function clientContextMiddleware(req, _res, next) {
+  const smallScreen = String(req.headers['x-fs-client'] || '') === 'small';
+  clientContext.run({ smallScreen }, () => next());
+}
+
+function isSmallScreen() {
+  return clientContext.getStore()?.smallScreen === true;
 }
 
 /** True dentro de Termux o del proot de Ubuntu lanzado desde Termux. */
@@ -39,6 +53,9 @@ function resolveDataSource(settings = {}, env = process.env) {
   const forced = normalizeMode(env.FS_DATA_SOURCE);
   const requested = forced ?? normalizeMode(settings.dataSource) ?? 'auto';
   if (requested === 'yahoo') return { mode: 'yahoo', requested, reason: forced ? 'FS_DATA_SOURCE=yahoo' : 'ajuste: solo Yahoo' };
+  if (requested === 'mt5' && isSmallScreen()) {
+    return { mode: 'yahoo', requested, reason: 'pantalla pequeña: solo Yahoo' };
+  }
   if (requested === 'mt5') return { mode: 'mt5', requested, reason: forced ? 'FS_DATA_SOURCE=mt5' : 'ajuste: MT5' };
   if (isAndroid(env)) return { mode: 'yahoo', requested, reason: 'Android/Termux: sin MT5' };
   if (!String(settings.bridgeUrl || '').trim()) return { mode: 'yahoo', requested, reason: 'puente MT5 sin configurar' };
@@ -58,4 +75,7 @@ function describeDataSource(settings, env = process.env) {
     : `[datos] Fuente: MT5 con respaldo Yahoo (${reason})`;
 }
 
-module.exports = { MODES, MODE_LABELS, normalizeMode, isAndroid, resolveDataSource, isYahooOnly, describeDataSource };
+module.exports = {
+  MODES, MODE_LABELS, normalizeMode, isAndroid, isSmallScreen, clientContextMiddleware,
+  resolveDataSource, isYahooOnly, describeDataSource,
+};

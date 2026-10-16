@@ -10,6 +10,7 @@ import {
   SignalsApiService,
 } from '../../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../../services/signal-job.service';
+import { NavFeaturesService } from '../../services/nav-features.service';
 import { ZoomImageDirective } from '../../shared/image-viewer/zoom-image.directive';
 
 @Component({
@@ -22,6 +23,7 @@ import { ZoomImageDirective } from '../../shared/image-viewer/zoom-image.directi
 export class MacdQuantComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
   readonly jobs = inject(SignalJobService);
+  readonly navFeatures = inject(NavFeaturesService);
   private finishedSub?: Subscription;
   /** Job cuyo mercado ya se adoptó al reconectar. */
   private adoptedJobId: string | null = null;

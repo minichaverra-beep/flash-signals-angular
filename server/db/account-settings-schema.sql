@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS account_settings (
   balance REAL,
   currency TEXT NOT NULL DEFAULT 'USD',
   risk_pct REAL,
+  wiki_enabled INTEGER NOT NULL DEFAULT 0,
+  quantum_enabled INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL
 );
 
