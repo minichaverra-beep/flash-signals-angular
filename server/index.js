@@ -430,6 +430,10 @@ app.use((req, res, next) => {
 /** Login solo para administración: lectura y análisis siguen públicos. */
 const adminAuth = createAdminAuth();
 const { requireAdmin } = adminAuth;
+dataSource.setAdminChecker((req) => {
+  const match = /^Bearer\s+(\S+)/i.exec(String(req.headers?.authorization || ''));
+  return !!(match && adminAuth.verifyToken(match[1]));
+});
 adminAuth.registerRoutes(app);
 
 function livePath(...parts) {
@@ -1911,6 +1915,57 @@ app.post('/api/history/:id/mt5-pnl', async (req, res) => {
   } catch (err) {
     console.error('[history] mt5-pnl:', err);
     res.status(500).json({ error: 'No se pudo obtener el PnL de MT5' });
+  }
+});
+
+app.post('/api/history/:id/poster-image', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) return res.status(400).json({ error: 'id inválido' });
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  let raw = body.imageBase64 ?? body.base64 ?? body.data ?? '';
+  let mime = body.mime || body.contentType || '';
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return res.status(400).json({ error: 'Envía imageBase64 (PNG/JPG/WebP/GIF)' });
+  }
+  raw = raw.trim();
+  const dataUrl = /^data:([^;]+);base64,(.+)$/i.exec(raw);
+  if (dataUrl) {
+    mime = mime || dataUrl[1];
+    raw = dataUrl[2];
+  }
+  let buffer;
+  try {
+    buffer = Buffer.from(raw, 'base64');
+  } catch {
+    return res.status(400).json({ error: 'imageBase64 inválido' });
+  }
+  try {
+    const result = await historyStore.savePosterImage(id, buffer, mime || 'image/png');
+    if (!result.ok && result.error === 'not_found') {
+      return res.status(404).json({ error: 'Entrada no encontrada' });
+    }
+    if (result.error === historyStore.LOCKED_ERROR) return sendHistoryLocked(res);
+    if (!result.ok) return res.status(400).json({ error: result.error || 'No se pudo guardar el póster' });
+    res.json({ ok: true, item: result.item });
+  } catch (err) {
+    console.error('[history] poster-image post:', err);
+    res.status(500).json({ error: 'No se pudo guardar el póster' });
+  }
+});
+
+app.get('/api/history/:id/poster-image', async (req, res) => {
+  const id = parseHistoryId(req.params.id);
+  if (id == null) return res.status(400).json({ error: 'id inválido' });
+  try {
+    const file = await historyStore.getPosterImageFile(id);
+    if (!file) return res.status(404).json({ error: 'Sin póster' });
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    applyDownloadHeaders(req, res, `poster-${id}${path.extname(file.absPath) || '.png'}`);
+    res.sendFile(file.absPath);
+  } catch (err) {
+    console.error('[history] poster-image get:', err);
+    res.status(500).json({ error: 'No se pudo leer el póster' });
   }
 });
 

@@ -1400,6 +1400,12 @@ export class HistorialComponent implements OnInit, OnDestroy {
     });
   }
 
+  posterImageUrl(item: HistoryListItem | HistoryDetail): string | null {
+    if (!item.hasPosterImage) return null;
+    const bust = this.imageBust.get(item.id) ?? item.id;
+    return this.api.historyPosterImageUrl(item.id, bust);
+  }
+
   resultImageUrl(item: HistoryListItem | HistoryDetail): string | null {
     if (!item.hasResultImage) return null;
     const bust = this.imageBust.get(item.id) ?? item.id;
@@ -1731,6 +1737,18 @@ export class HistorialComponent implements OnInit, OnDestroy {
         this.error = this.errMsg(err, 'No se pudo borrar la captura');
       },
     });
+  }
+
+  openPoster(src: string, ev?: Event): void {
+    ev?.stopPropagation();
+    ev?.preventDefault();
+    this.imageViewer.open(src, 'Póster de la señal');
+  }
+
+  onPosterFrameClick(src: string, ev: MouseEvent): void {
+    if (ev.detail > 1) return;
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    this.openPoster(src, ev);
   }
 
   openLightbox(item: HistoryListItem, ev?: Event): void {

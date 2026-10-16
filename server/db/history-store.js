@@ -330,6 +330,11 @@ function applyHistoryMigrations(e) {
     ['unlock_override', 'INTEGER NOT NULL DEFAULT 0'],
     ['unlock_override_at', 'TEXT'],
   ]);
+  // 013: póster final de la señal (un archivo por fila; no es la captura de resultado).
+  applyAddColumnsMigration(e, '013_history_poster_image', now, [
+    ['poster_image_name', 'TEXT'],
+    ['poster_image_mime', 'TEXT'],
+  ]);
   applyConfluenciasCatalogMigration(e, now);
   seedDefaultHistoryTags(e, now);
   seedDefaultHistoryConfluencias(e, now);
@@ -911,6 +916,8 @@ function rowToListItem(row) {
     real: readMt5Real(row),
     hasResultImage: trimOrNull(row.result_image_name) != null,
     resultImageMime: trimOrNull(row.result_image_mime),
+    hasPosterImage: trimOrNull(row.poster_image_name) != null,
+    posterImageMime: trimOrNull(row.poster_image_mime),
     /** Ruta del chart anotado del detalle (si la corrida lo generó). */
     chartPath: trimOrNull(row.chart_path),
     tags: Array.isArray(row._tags) ? row._tags : [],
@@ -1094,6 +1101,7 @@ async function listHistory(opts = {}) {
     `SELECT id, created_at, started_at, finished_at, market, tier, status,
             flags_json, entry, verdict, score_combined, error, comment, resultado,
             pnl_usd, motivo_entrada_salida, result_image_name, result_image_mime,
+            poster_image_name, poster_image_mime,
             chart_path, locked, locked_at, unlock_override, ${MT5_REAL_SELECT},
             json_extract(summary_json, '$.bias') AS summary_bias,
             json_extract(summary_json, '$.winrate') AS summary_winrate,
@@ -1546,6 +1554,66 @@ async function deleteResultImage(id) {
   return { ok: true, item };
 }
 
+/**
+ * Póster final de la señal (PNG compuesto). Un archivo por fila; no toca la captura de resultado.
+ * @param {number} id
+ * @returns {Promise<{ absPath: string, mime: string } | null>}
+ */
+async function getPosterImageFile(id) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return null;
+  const row = e.get(
+    `SELECT poster_image_name, poster_image_mime FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (!row?.poster_image_name) return null;
+  const name = String(row.poster_image_name);
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) return null;
+  const absPath = path.join(getAttachmentsDir(), name);
+  if (!fs.existsSync(absPath)) return null;
+  return { absPath, mime: row.poster_image_mime || 'image/png' };
+}
+
+/**
+ * @param {number} id
+ * @param {Buffer} buffer
+ * @param {string} mime
+ */
+async function savePosterImage(id, buffer, mime) {
+  const e = await getEngine();
+  const n = Number(id);
+  if (!Number.isInteger(n) || n < 1) return { ok: false, error: 'id inválido' };
+  const existing = e.get(
+    `SELECT id, poster_image_name, ${LOCK_COLUMNS} FROM signal_history WHERE id = ?`,
+    [n]
+  );
+  if (!existing) return { ok: false, error: 'not_found' };
+  if (isRowLocked(existing)) return { ok: false, error: LOCKED_ERROR };
+  const mimeNorm = String(mime || '').trim().toLowerCase().split(';')[0];
+  const ext = IMAGE_MIME[mimeNorm];
+  if (!ext) return { ok: false, error: 'formato no soportado (usa PNG, JPG, WebP o GIF)' };
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24) return { ok: false, error: 'imagen vacía o inválida' };
+  if (buffer.length > MAX_RESULT_IMAGE_BYTES) return { ok: false, error: 'imagen demasiado grande (máx 5 MB)' };
+
+  const dir = ensureAttachmentsDir();
+  const fileName = `poster-${n}.${ext}`;
+  if (existing.poster_image_name) {
+    const prev = path.join(dir, String(existing.poster_image_name));
+    try {
+      if (fs.existsSync(prev) && path.basename(prev) !== fileName) fs.unlinkSync(prev);
+    } catch {
+      /* ignore */
+    }
+  }
+  fs.writeFileSync(path.join(dir, fileName), buffer);
+  e.run(
+    `UPDATE signal_history SET poster_image_name = ?, poster_image_mime = ? WHERE id = ?`,
+    [fileName, mimeNorm === 'image/jpg' ? 'image/jpeg' : mimeNorm, n]
+  );
+  return { ok: true, item: await getById(n) };
+}
+
 async function clearAll() {
   const e = await getEngine();
   // Limpia adjuntos en disco
@@ -1805,6 +1873,8 @@ module.exports = {
   saveResultImage,
   deleteResultImage,
   getResultImageFile,
+  savePosterImage,
+  getPosterImageFile,
   clearAll,
   getBackendKind,
   _resetForTests,

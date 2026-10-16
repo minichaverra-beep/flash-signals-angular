@@ -19,7 +19,7 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 4. API pensada para **localhost** (`BIND_HOST=127.0.0.1` por defecto). No publicar a Internet.
 5. **No commit** de secretos (`.env`, tokens, credenciales).
 6. Branding: *Flash Signals · fuego y sombra*, crédito **Danilo Chaverra**, `src/assets/logo.png`.
-7. **Fuente de datos:** `server/data-source.js` resuelve `auto|yahoo|mt5` (env `FS_DATA_SOURCE` > ajuste `dataSource` > detección Android/Termux). En modo Yahoo (APK: `android/start.sh` lo exporta) `mt5.brokerFeedEnv()` devuelve solo `FS_DATA_SOURCE=yahoo`, Python (`broker_feed.yahoo_only()`) ignora MT5 y Binance, y ATR/VIX del servidor usan Yahoo (`yahoo-candles.js`). Todo código nuevo que lea velas debe respetar el modo; el móvil corre su **propia copia** del código (reempaquetar con `pack-for-android.ps1`).
+7. **Fuente de datos:** `server/data-source.js` resuelve `yahoo|mt5|auto`. Defecto `yahoo`. Android/Termux, cabecera `X-FS-Client: small` y peticiones sin admin quedan siempre en Yahoo (aunque `data/mt5-settings.json` diga `mt5`). El desplegable de `/configuracion` solo lo ve un admin (`AuthService.isAdmin()`): Solo Yahoo o MT5; MT5 aplica en el escritorio de esa sesión. APK: `android/start.sh` fija `FS_DATA_SOURCE=yahoo`. En modo Yahoo `mt5.brokerFeedEnv()` devuelve solo `FS_DATA_SOURCE=yahoo`, Python (`broker_feed.yahoo_only()`) ignora MT5 y Binance, y ATR/VIX del servidor usan Yahoo (`yahoo-candles.js`). Todo código nuevo que lea velas debe respetar el modo; el móvil corre su **propia copia** del código (reempaquetar con `pack-for-android.ps1`).
 
 ## Stack técnico
 

@@ -262,19 +262,7 @@ select.bias-auto {
   display: none;
 }
 
-@media (max-width: 768px) {
-  /* Sin scroll horizontal de página: `clip` no crea contenedor de scroll (no rompe position: sticky). */
-  html {
-    overflow-x: hidden;
-  }
-
-  @supports (overflow: clip) {
-    html,
-    body {
-      overflow-x: clip;
-    }
-  }
-
+@mixin phone-shell {
   img,
   video,
   canvas,
@@ -481,6 +469,32 @@ select.bias-auto {
   .muted.tiny {
     font-size: 0.72rem;
   }
+}
+
+/* Sin scroll horizontal de página: `clip` no crea contenedor de scroll (no rompe position: sticky). */
+@mixin phone-root-clip {
+  overflow-x: hidden;
+
+  @supports (overflow: clip) {
+    &,
+    body {
+      overflow-x: clip;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    @include phone-root-clip;
+  }
+
+  @include phone-shell;
+}
+
+/* Modo móvil del admin: el mismo layout de teléfono aunque la ventana sea ancha. */
+html.fs-mobile-sim {
+  @include phone-root-clip;
+  @include phone-shell;
 }
 
 /* Teléfono estrecho (≤ 480px, p.ej. 412px): cabecera/nav sin desbordes y tap targets ≥ 40px. */

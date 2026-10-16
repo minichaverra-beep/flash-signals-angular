@@ -194,9 +194,9 @@ En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de
 |----------|-----|
 | `SIGNAL_RUNNER` | `powershell` (default Windows) · `bash` (Android/Linux) · `none` (default resto: 503 en `/run`) |
 | `SERVE_WEB=1` | La API sirve `dist/` en el mismo puerto (sin `ng serve`) |
-| `FS_DATA_SOURCE` | `yahoo` · `mt5` · `auto`. `android/start.sh` exporta `yahoo` por defecto: **en el móvil no hay MT5**, así que gráficos, capturas de resultado (WIN/LOSS), tendencia H1, ATR y VIX usan solo velas de Yahoo (BTC-USD, YM=F/^DJI, GC=F) y ni se intenta el puente |
+| `FS_DATA_SOURCE` | `yahoo` · `mt5` · `auto`. `android/start.sh` fija `yahoo` (no hereda otro valor): **en el APK no hay MT5**, así que gráficos, capturas de resultado (WIN/LOSS), tendencia H1, ATR y VIX usan solo velas de Yahoo (BTC-USD, YM=F/^DJI, GC=F) y ni se intenta el puente. Android/Termux y la cabecera `X-FS-Client: small` resuelven siempre a Yahoo aunque el ajuste diga `mt5` |
 
-**Fuente de datos (`/configuracion` → «Fuente de datos para gráficos»; `dataSource` en `data/mt5-settings.json`):** *Automática* (por defecto: solo Yahoo en Android/Termux o sin puente configurado; MT5 en el PC, con respaldo Yahoo rotulado «sin MT5» si el puente no responde), *Solo Yahoo* o *MT5*. El entorno `FS_DATA_SOURCE` manda sobre el ajuste. Con Yahoo solo, `brokerFeedEnv()` no pasa `FS_MT5_*` a Python (`FS_DATA_SOURCE=yahoo`) y el log del job indica la fuente (`[datos] Fuente: …`). El cálculo de lotes de la calculadora de volatilidad sigue necesitando MT5 (ficha del símbolo).
+**Fuente de datos (`/configuracion` → «Fuente de datos para gráficos», solo admin; `dataSource` en `data/mt5-settings.json`):** defecto **Solo Yahoo**. El admin puede elegir *Solo Yahoo* o *MT5* (el escritorio de un admin usa el puente si elige MT5). El APK y la pantalla pequeña siguen en Yahoo. Sin sesión admin, gráficos y capturas usan Yahoo aunque el JSON guardado diga `mt5`. Con Yahoo solo, `brokerFeedEnv()` no pasa `FS_MT5_*` a Python (`FS_DATA_SOURCE=yahoo`) y el log del job indica la fuente (`[datos] Fuente: …`). El cálculo de lotes de la calculadora de volatilidad sigue necesitando MT5 (ficha del símbolo).
 
 ## Contexto para agentes (Cursor / Claude)
 

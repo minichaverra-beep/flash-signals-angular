@@ -420,7 +420,7 @@ export type DataSourceMode = 'auto' | 'yahoo' | 'mt5';
 export interface Mt5Settings {
   bridgeUrl: string;
   hasToken: boolean;
-  /** Fuente de velas de gráficos/análisis: Automática (Yahoo en Android), solo Yahoo o MT5. */
+  /** Fuente de velas de gráficos/análisis. Defecto y valor ausente: solo Yahoo. MT5 lo elige un admin en escritorio. */
   dataSource: DataSourceMode;
   symbols: Record<Mt5SignalMarket, string>;
   riskPct: number;
@@ -857,6 +857,22 @@ export class SignalsApiService {
   }
 
   /** URL de la captura del resultado (cache-bust con updatedAt opcional). */
+  historyPosterImageUrl(id: number, bust?: number | string): string {
+    const q = bust != null ? `?v=${encodeURIComponent(String(bust))}` : '';
+    return `${this.base}/history/${id}/poster-image${q}`;
+  }
+
+  historyUploadPosterImage(
+    id: number,
+    imageBase64: string,
+    mime?: string
+  ): Observable<{ ok: boolean; item: HistoryDetail }> {
+    return this.http.post<{ ok: boolean; item: HistoryDetail }>(
+      `${this.base}/history/${id}/poster-image`,
+      { imageBase64, mime }
+    );
+  }
+
   historyResultImageUrl(id: number, bust?: number | string): string {
     const q = bust != null ? `?v=${encodeURIComponent(String(bust))}` : '';
     return `${this.base}/history/${id}/result-image${q}`;
@@ -1062,6 +1078,9 @@ export interface HistoryListItem {
   /** Hay captura de resultado adjunta. */
   hasResultImage?: boolean;
   resultImageMime?: string | null;
+  /** Póster final de la señal (imagen compuesta, una por fila). */
+  hasPosterImage?: boolean;
+  posterImageMime?: string | null;
   /** Chart anotado del detalle de la señal (si la corrida lo generó). */
   chartPath?: string | null;
   /** Etiquetas de Dirección (single-select; catálogo history_tags). */

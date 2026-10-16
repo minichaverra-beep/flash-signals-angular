@@ -206,6 +206,21 @@ button:disabled {
   }
 }
 
+.estado-layout {
+  margin-bottom: 1rem;
+}
+
+.estado-layout > .panel {
+  margin-bottom: 0;
+}
+
+.estado-layout.has-poster {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 34%);
+  gap: 1rem;
+  align-items: start;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 2.4s;
@@ -213,6 +228,7 @@ button:disabled {
 }
 
 pre.job-tail {
+  display: none !important;
   margin: 0.6rem 0 0;
   max-height: 9rem;
   overflow: auto;
@@ -228,6 +244,10 @@ pre.job-tail {
 }
 
 @media (max-width: 768px) {
+  .estado-layout.has-poster {
+    grid-template-columns: 1fr;
+  }
+
   .panel {
     padding: 0.95rem 0.9rem;
     margin-bottom: 0.75rem;

@@ -205,6 +205,7 @@ describe('brokerFeedEnv', () => {
     const env = brokerFeedEnv({
       bridgeUrl: 'http://127.0.0.1:8765',
       bridgeToken: 'secreto',
+      dataSource: 'mt5',
       symbols: { us30: 'US30m', xauusd: 'XAUUSDm', btc: 'BTCUSDm' },
     }, {});
     assert.deepEqual(env, {
@@ -218,7 +219,7 @@ describe('brokerFeedEnv', () => {
   });
 
   it('sin token ni símbolo no inventa variables', () => {
-    const env = brokerFeedEnv({ bridgeUrl: 'http://127.0.0.1:8766', symbols: { us30: 'US30' } }, {});
+    const env = brokerFeedEnv({ bridgeUrl: 'http://127.0.0.1:8766', dataSource: 'mt5', symbols: { us30: 'US30' } }, {});
     assert.deepEqual(env, {
       FS_DATA_SOURCE: 'mt5',
       FS_MT5_BRIDGE_URL: 'http://127.0.0.1:8766',
@@ -244,7 +245,6 @@ describe('brokerFeedEnv', () => {
   it('FS_DATA_SOURCE del entorno manda sobre el ajuste guardado', () => {
     assert.deepEqual(brokerFeedEnv({ ...full, dataSource: 'mt5' }, { FS_DATA_SOURCE: 'yahoo' }), { FS_DATA_SOURCE: 'yahoo' });
     const env = brokerFeedEnv({ ...full, dataSource: 'yahoo' }, { FS_DATA_SOURCE: 'mt5', TERMUX_VERSION: '1' });
-    assert.equal(env.FS_DATA_SOURCE, 'mt5');
-    assert.equal(env.FS_MT5_BRIDGE_TOKEN, 'secreto');
+    assert.deepEqual(env, { FS_DATA_SOURCE: 'yahoo' });
   });
 });

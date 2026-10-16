@@ -1,11 +1,14 @@
 /**
  * Fuente de datos de gráficos/análisis: MT5 (puente) o solo Yahoo.
  *
- * Modos (`dataSource`): 'auto' | 'yahoo' | 'mt5'.
- *   - env FS_DATA_SOURCE (yahoo|mt5|auto) manda sobre el ajuste guardado en data/mt5-settings.json.
- *   - 'auto': Yahoo en Android/Termux o si no hay puente; MT5 en el escritorio.
- *   - 'mt5': siempre el puente, salvo en pantalla pequeña (cabecera X-FS-Client: small) → solo Yahoo.
- * `android/start.sh` exporta FS_DATA_SOURCE=yahoo, así que en el APK no depende de la detección.
+ * Modos (`dataSource`): 'yahoo' | 'mt5' | 'auto' (legado).
+ *   - Por defecto, y si el ajuste falta: solo Yahoo.
+ *   - Android/Termux y pantalla pequeña (cabecera X-FS-Client: small) siempre Yahoo,
+ *     aunque el ajuste guardado o FS_DATA_SOURCE digan mt5 o auto.
+ *   - Una petición HTTP sin sesión admin también queda en Yahoo (el JSON puede seguir diciendo mt5).
+ *   - 'mt5' usa el puente en el escritorio si la petición es de un admin, o si no hay petición HTTP.
+ *   - 'auto' (legado, ya no es el defecto): Yahoo sin puente; MT5 en el escritorio con puente, con las mismas excepciones.
+ * `android/start.sh` fija FS_DATA_SOURCE=yahoo; el APK no depende de que el entorno sobreviva al empaquetado.
  */
 
 const { AsyncLocalStorage } = require('node:async_hooks');
@@ -20,16 +23,30 @@ function normalizeMode(raw) {
   return MODES.includes(v) ? v : null;
 }
 
-/** Cabecera X-FS-Client: small (navegador ≤768 px o APK). El ajuste «MT5» pasa a solo Yahoo. */
+/** Cabecera X-FS-Client: small (navegador ≤768 px o APK). Siempre solo Yahoo. */
 const clientContext = new AsyncLocalStorage();
+
+/** (req) => boolean. index.js lo enlaza con el token admin; sin enlace toda petición HTTP es no-admin. */
+let adminChecker = () => false;
+
+function setAdminChecker(fn) {
+  adminChecker = typeof fn === 'function' ? fn : () => false;
+}
 
 function clientContextMiddleware(req, _res, next) {
   const smallScreen = String(req.headers['x-fs-client'] || '') === 'small';
-  clientContext.run({ smallScreen }, () => next());
+  const admin = adminChecker(req) === true;
+  clientContext.run({ smallScreen, admin }, () => next());
 }
 
 function isSmallScreen() {
   return clientContext.getStore()?.smallScreen === true;
+}
+
+/** Petición HTTP presente y sin sesión admin. Sin store (scripts, tests, arranque) no aplica. */
+function isNonAdminClient() {
+  const store = clientContext.getStore();
+  return !!store && store.admin !== true;
 }
 
 /** True dentro de Termux o del proot de Ubuntu lanzado desde Termux. */
@@ -51,15 +68,14 @@ function resolveDataSource(settings = {}, env = process.env) {
     return { mode: 'yahoo', requested: 'yahoo', reason: 'FS_DISABLE_MT5=1' };
   }
   const forced = normalizeMode(env.FS_DATA_SOURCE);
-  const requested = forced ?? normalizeMode(settings.dataSource) ?? 'auto';
+  const requested = forced ?? normalizeMode(settings.dataSource) ?? 'yahoo';
+  if (isAndroid(env)) return { mode: 'yahoo', requested, reason: 'Android/Termux: solo Yahoo' };
+  if (isSmallScreen()) return { mode: 'yahoo', requested, reason: 'pantalla pequeña: solo Yahoo' };
   if (requested === 'yahoo') return { mode: 'yahoo', requested, reason: forced ? 'FS_DATA_SOURCE=yahoo' : 'ajuste: solo Yahoo' };
-  if (requested === 'mt5' && isSmallScreen()) {
-    return { mode: 'yahoo', requested, reason: 'pantalla pequeña: solo Yahoo' };
-  }
+  if (isNonAdminClient()) return { mode: 'yahoo', requested, reason: 'sin admin: solo Yahoo' };
   if (requested === 'mt5') return { mode: 'mt5', requested, reason: forced ? 'FS_DATA_SOURCE=mt5' : 'ajuste: MT5' };
-  if (isAndroid(env)) return { mode: 'yahoo', requested, reason: 'Android/Termux: sin MT5' };
   if (!String(settings.bridgeUrl || '').trim()) return { mode: 'yahoo', requested, reason: 'puente MT5 sin configurar' };
-  return { mode: 'mt5', requested, reason: 'escritorio con puente MT5' };
+  return { mode: 'mt5', requested, reason: forced ? 'FS_DATA_SOURCE=auto' : 'escritorio con puente MT5' };
 }
 
 /** True si MT5 debe ignorarse del todo (ni puente ni velas del broker). */
@@ -76,6 +92,6 @@ function describeDataSource(settings, env = process.env) {
 }
 
 module.exports = {
-  MODES, MODE_LABELS, normalizeMode, isAndroid, isSmallScreen, clientContextMiddleware,
+  MODES, MODE_LABELS, normalizeMode, isAndroid, isSmallScreen, setAdminChecker, clientContextMiddleware,
   resolveDataSource, isYahooOnly, describeDataSource,
 };

@@ -7,6 +7,8 @@ import { AuthService } from '../services/auth.service';
 import { JobStatus, Market, SignalsApiService, Tier } from '../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../services/signal-job.service';
 import { localizeBiasWords } from './signal-report.helpers';
+import { SignalShareCardComponent } from './signal-share-card.component';
+import { buildShareCard } from './signal-share-card.model';
 
 /** Nota de estado a partir del log `[bias]` (`… → -Bullish|-Bearish`). Vacío si no aplica. */
 function trendNote(j: JobStatus): string {
@@ -24,7 +26,7 @@ function trendNote(j: JobStatus): string {
 @Component({
   selector: 'app-signal-run-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, SignalShareCardComponent],
   templateUrl: './signal-run-form.component.html',
   styleUrl: './signal-run-form.component.scss',
 })
@@ -90,6 +92,12 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
   get job(): JobStatus | null {
     const j = this.jobs.job();
     return jobKind(j) === 'signal' && isRecentJob(j) ? j : null;
+  }
+
+  /** Corrida terminada con summary legible: alimenta la tarjeta de compartir. */
+  get shareJob(): JobStatus | null {
+    const j = this.job;
+    return j && buildShareCard(j) ? j : null;
   }
 
   get busy(): boolean {

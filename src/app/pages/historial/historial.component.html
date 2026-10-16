@@ -741,25 +741,13 @@
             *ngIf="autoCaptureNote(item.id) as note"
             [ngClass]="'tone-' + note.tone"
           >{{ note.text }}</p>
-          <label
-            class="btn-attach"
-            [class.busy]="isImageBusy(item.id)"
+          <div
+            class="signal-poster-frame"
+            *ngIf="item.hasPosterImage && posterImageUrl(item) as poster"
+            (dblclick)="openPoster(poster, $event)"
+            (click)="onPosterFrameClick(poster, $event)"
           >
-            {{ isImageBusy(item.id) ? 'Subiendo…' : (item.hasResultImage ? 'Reemplazar captura' : 'Adjuntar archivo') }}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              hidden
-              [disabled]="isImageBlocked(item)"
-              (change)="onFilePicked(item, $event)"
-            />
-          </label>
-          <div class="card-shot" *ngIf="detailImageUrl(item) as detailThumb">
-            <button type="button" class="shot-thumb" (click)="openDetailImageLightbox(item, $event)">
-              <img [src]="detailThumb" alt="Captura detalle" />
-            </button>
-            <span class="muted tiny hide-on-phone">Captura detalle</span>
-            <span class="shot-caption tiny" *ngIf="shotCaption(item) as cap" [ngClass]="'tone-' + cap.tone">{{ cap.text }}</span>
+            <img [src]="poster" alt="Póster de la señal" />
           </div>
           <div class="tag-picker" [class.open]="tagPickerOpenId === item.id">
             <div class="tag-chips">
@@ -1181,6 +1169,15 @@
       <p class="mode-hint muted hide-on-phone" *ngIf="detailMode === 'inversor'">
         En lenguaje simple: qué hacer, el plan, el riesgo y qué tan fuerte es la idea.
       </p>
+
+      <div
+        class="signal-poster-frame detail-poster"
+        *ngIf="d.hasPosterImage && posterImageUrl(d) as poster"
+        (dblclick)="openPoster(poster, $event)"
+        (click)="onPosterFrameClick(poster, $event)"
+      >
+        <img [src]="poster" alt="Póster de la señal" />
+      </div>
 
       <p class="msg err" *ngIf="d.error">{{ d.error }}</p>
 

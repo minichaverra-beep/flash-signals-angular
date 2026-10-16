@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, effect, inject, untracked } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { Subject, Subscription, forkJoin, of } from 'rxjs';
@@ -38,6 +38,7 @@ import {
   thermometer,
 } from './volatility.helpers';
 import { AdminLoginComponent } from '../../shared/admin-login/admin-login.component';
+import { AuthService } from '../../services/auth.service';
 import { DeviceService } from '../../services/device.service';
 import { NavFeaturesService } from '../../services/nav-features.service';
 
@@ -76,8 +77,19 @@ function readPhoneStyle(): Mt5TradeStyle {
 })
 export class ConfiguracionComponent implements OnInit, OnDestroy {
   private readonly api = inject(SignalsApiService);
-  /** APK o pantalla pequeña: sin el formulario MT5 de escritorio; sí balance, riesgo y estilos de Run. */
-  readonly mt5Hidden = inject(DeviceService).mt5Hidden;
+  private readonly device = inject(DeviceService);
+  /** APK, pantalla pequeña o «Modo móvil» del admin: sin el formulario MT5 de escritorio. */
+  readonly mt5Hidden = this.device.mt5Hidden;
+  readonly isAdmin = inject(AuthService).isAdmin;
+  /** Preferencia local (localStorage). Solo la ve y la cambia un admin. */
+  readonly simulateMobile = this.device.simulateMobile;
+  /**
+   * true mientras el interruptor «Modo móvil» del panel Menú entra en pantalla.
+   * La barra fija solo aparece si este interruptor ya no se ve.
+   */
+  readonly menuSwitchInView = signal(true);
+  private menuSwitchEl: HTMLElement | null = null;
+  private menuSwitchObserver: IntersectionObserver | null = null;
   readonly navFeatures = inject(NavFeaturesService);
 
   /** Balance y % de riesgo guardados en la BD (/api/account-settings). */
@@ -117,6 +129,31 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     { id: 'daytrading', label: 'Day trader' },
   ];
   phoneStyle: Mt5TradeStyle = readPhoneStyle();
+
+  toggleSimulateMobile(): void {
+    this.device.setSimulateMobile(!this.simulateMobile());
+    this.refreshDataSourceLabel();
+  }
+
+  /** El panel Menú sigue en el DOM; la barra no debe duplicarlo mientras se vea. */
+  @ViewChild('menuMobileSwitch')
+  set menuMobileSwitchRef(ref: ElementRef<HTMLElement> | undefined) {
+    const el = ref?.nativeElement ?? null;
+    if (el === this.menuSwitchEl) return;
+    this.menuSwitchEl = el;
+    this.watchMenuSwitch(el);
+  }
+
+  /** La cabecera X-FS-Client cambia al instante; esto solo actualiza el texto «En uso». No guarda ajustes. */
+  private refreshDataSourceLabel(): void {
+    this.api.mt5Settings().subscribe({
+      next: (s) => {
+        if (!this.state || !s.dataSourceEffective) return;
+        this.state = { ...this.state, dataSourceEffective: s.dataSourceEffective };
+      },
+      error: () => undefined,
+    });
+  }
 
   state: Mt5SettingsState | null = null;
   drafts: Partial<Record<Mt5ProfileId, ProfileDraft>> = {};
@@ -216,6 +253,24 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.messageTimer) clearTimeout(this.messageTimer);
     this.calcSub?.unsubscribe();
+    this.menuSwitchObserver?.disconnect();
+    this.menuSwitchObserver = null;
+  }
+
+  private watchMenuSwitch(el: HTMLElement | null): void {
+    this.menuSwitchObserver?.disconnect();
+    this.menuSwitchObserver = null;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      this.menuSwitchInView.set(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      const hit = entries.find((entry) => entry.target === el);
+      if (!hit) return;
+      this.menuSwitchInView.set(hit.isIntersecting);
+    });
+    observer.observe(el);
+    this.menuSwitchObserver = observer;
   }
 
   get draft(): ProfileDraft | null {
@@ -517,6 +572,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
         profile,
         settings: {
           styles: { scalping: { ...f.styles.scalping }, daytrading: { ...f.styles.daytrading } },
+          ...(this.isAdmin() ? { dataSource: f.dataSource === 'mt5' ? 'mt5' as const : 'yahoo' as const } : {}),
         },
       })
       .subscribe({
@@ -545,7 +601,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     const f = d.form;
     const settings: Mt5SettingsPatch = {
       bridgeUrl: f.bridgeUrl.trim(),
-      dataSource: f.dataSource ?? 'auto',
+      ...(this.isAdmin() ? { dataSource: f.dataSource === 'mt5' ? 'mt5' as const : 'yahoo' as const } : {}),
       symbols: { ...f.symbols },
       riskPct: f.riskPct,
       volume: d.lotMode === 'fixed' ? d.fixedVolume : null,
@@ -787,6 +843,7 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     return {
       form: {
         ...s,
+        dataSource: s.dataSource === 'mt5' ? 'mt5' : 'yahoo',
         symbols: { ...s.symbols },
         pipSize: { ...s.pipSize },
         styles: { scalping: { ...s.styles.scalping }, daytrading: { ...s.styles.daytrading } },

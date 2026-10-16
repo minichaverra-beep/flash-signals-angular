@@ -111,6 +111,35 @@
   cursor: pointer;
 }
 
+.mobile-sim-sticky {
+  position: fixed;
+  top: 0.65rem;
+  left: 50%;
+  z-index: 40;
+  width: min(930px, calc(100% - 2.5rem));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.45rem 0.75rem 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 94%, black);
+  box-shadow: 0 8px 24px color-mix(in srgb, black 35%, transparent);
+}
+
+@media (max-width: 768px) {
+  .mobile-sim-sticky {
+    width: calc(100% - 1.4rem);
+  }
+}
+
+:host-context(html.fs-mobile-sim) .mobile-sim-sticky {
+  width: calc(100% - 1.4rem);
+}
+
+.mobile-sim-sticky .switch-row {
+  margin-bottom: 0.45rem;
+}
+
 .switch-row {
   display: flex;
   align-items: center;

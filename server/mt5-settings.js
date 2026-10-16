@@ -34,8 +34,8 @@ function baseDefaults() {
   return {
     bridgeUrl: process.env.MT5_BRIDGE_URL || 'http://127.0.0.1:8765',
     bridgeToken: process.env.MT5_BRIDGE_TOKEN || '',
-    /** Fuente de velas para gráficos/análisis: 'auto' | 'yahoo' | 'mt5' (env FS_DATA_SOURCE manda). */
-    dataSource: 'auto',
+    /** Fuente de velas para gráficos/análisis: 'yahoo' (defecto) | 'mt5'. 'auto' es legado. */
+    dataSource: 'yahoo',
     symbols: {
       btc: process.env.MT5_SYMBOL_BTC || 'BTCUSD',
       us30: process.env.MT5_SYMBOL_US30 || 'US30',

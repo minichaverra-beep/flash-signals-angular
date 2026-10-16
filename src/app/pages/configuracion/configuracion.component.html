@@ -19,8 +19,45 @@
 
   <p class="muted" *ngIf="loading"><span class="spinner" aria-hidden="true"></span> Cargando configuración…</p>
 
+  <div class="mobile-sim-sticky" *ngIf="isAdmin() && simulateMobile() && !menuSwitchInView()">
+    <div class="switch-row">
+      <button
+        type="button"
+        class="switch on"
+        role="switch"
+        aria-checked="true"
+        aria-labelledby="cfg-mobile-sim-sticky-label"
+        (click)="toggleSimulateMobile()"
+      >
+        <span class="switch-thumb" aria-hidden="true"></span>
+      </button>
+      <span id="cfg-mobile-sim-sticky-label">Modo móvil</span>
+      <small class="switch-state on" aria-hidden="true">Activado</small>
+    </div>
+  </div>
+
   <section class="panel">
     <h2>Menú</h2>
+    <ng-container *ngIf="isAdmin()">
+      <div class="switch-row" #menuMobileSwitch>
+        <button
+          type="button"
+          class="switch"
+          role="switch"
+          [class.on]="simulateMobile()"
+          [attr.aria-checked]="simulateMobile()"
+          aria-labelledby="cfg-mobile-sim-label"
+          (click)="toggleSimulateMobile()"
+        >
+          <span class="switch-thumb" aria-hidden="true"></span>
+        </button>
+        <span id="cfg-mobile-sim-label">Modo móvil</span>
+        <small class="switch-state" [class.on]="simulateMobile()" aria-hidden="true">
+          {{ simulateMobile() ? 'Activado' : 'Desactivado' }}
+        </small>
+      </div>
+      <p class="muted tiny">Simula la app como en el APK. Se aplica al momento y solo en este navegador.</p>
+    </ng-container>
     <div class="switch-row">
       <button
         type="button"
@@ -237,6 +274,28 @@
     </ng-container>
 
     <form *ngIf="draft as d" (ngSubmit)="submitForm()">
+      <section class="panel" *ngIf="isAdmin()">
+        <h2>Fuente de datos para gráficos</h2>
+        <div class="field">
+          <label for="cfg-data-source">Fuente de datos para gráficos</label>
+          <select
+            id="cfg-data-source"
+            name="dataSource"
+            [(ngModel)]="d.form.dataSource"
+            title="Solo Yahoo ignora MT5 en gráficos y capturas. MT5 usa el puente en el escritorio. El APK y la pantalla pequeña siguen en Yahoo."
+          >
+            <option value="yahoo">Solo Yahoo</option>
+            <option value="mt5">MT5</option>
+          </select>
+          <small class="muted">
+            Velas de gráficos, capturas y análisis. En el APK y en pantalla pequeña se usa siempre Yahoo.
+            <ng-container *ngIf="st.dataSourceEffective as eff">
+              En uso: <strong>{{ eff.mode === 'yahoo' ? 'solo Yahoo' : 'MT5' }}</strong> ({{ eff.reason }}).
+            </ng-container>
+          </small>
+        </div>
+      </section>
+
       <ng-container *ngIf="!mt5Hidden()">
       <section class="panel" hidden>
         <h2>Conexión con MT5 · {{ label(editing) }}</h2>
@@ -263,25 +322,6 @@
             <label class="check" *ngIf="d.form.hasToken">
               <input type="checkbox" name="clearToken" [(ngModel)]="d.clearToken" /> Quitar token
             </label>
-          </div>
-          <div class="field">
-            <label for="cfg-data-source">Fuente de datos para gráficos</label>
-            <select
-              id="cfg-data-source"
-              name="dataSource"
-              [(ngModel)]="d.form.dataSource"
-              title="Automática: MT5 en el PC (con respaldo Yahoo) y solo Yahoo en el móvil. Solo Yahoo ignora MT5 por completo. MT5 usa siempre el puente."
-            >
-              <option value="auto">Automática</option>
-              <option value="yahoo">Solo Yahoo</option>
-              <option value="mt5">MT5</option>
-            </select>
-            <small class="muted">
-              Velas de gráficos, capturas y análisis.
-              <ng-container *ngIf="st.dataSourceEffective as eff">
-                En uso: <strong>{{ eff.mode === 'yahoo' ? 'solo Yahoo' : 'MT5' }}</strong> ({{ eff.reason }}).
-              </ng-container>
-            </small>
           </div>
         </div>
 

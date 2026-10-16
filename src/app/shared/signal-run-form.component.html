@@ -70,14 +70,18 @@
   <p class="msg" *ngIf="statusMessage" [class.err]="job?.status === 'error'" aria-live="polite">{{ statusMessage }}</p>
 </section>
 
-<section id="sec-estado" class="panel result" *ngIf="job as j">
-  <h2>
-    <span class="spinner" *ngIf="j.status === 'running'" aria-hidden="true"></span>
-    Estado: {{ j.status }}
-    <small class="muted">· {{ (j.market || '') | uppercase }} {{ j.tier }} · {{ jobs.elapsed() }}</small>
-  </h2>
-  <p class="muted tiny" *ngIf="j.status === 'running' && !jobs.connected()">
-    Reconectando con la API para seguir la corrida…
-  </p>
-  <pre class="job-tail" *ngIf="j.status === 'running' && j.logs.length">{{ j.logs.slice(-6).join('\n') }}</pre>
-</section>
+<div class="estado-layout" [class.has-poster]="!!shareJob" *ngIf="job as j">
+  <section id="sec-estado" class="panel result">
+    <h2>
+      <span class="spinner" *ngIf="j.status === 'running'" aria-hidden="true"></span>
+      Estado: {{ j.status }}
+      <small class="muted">· {{ (j.market || '') | uppercase }} {{ j.tier }} · {{ jobs.elapsed() }}</small>
+    </h2>
+    <p class="muted tiny" *ngIf="j.status === 'running' && !jobs.connected()">
+      Reconectando con la API para seguir la corrida…
+    </p>
+    <pre class="job-tail" hidden *ngIf="j.status === 'running' && j.logs.length">{{ j.logs.slice(-6).join('\n') }}</pre>
+  </section>
+
+  <app-signal-share-card *ngIf="shareJob as share" [job]="share" />
+</div>
