@@ -77,6 +77,19 @@ describe('pushDuplicateOrder: exento de los límites diarios', () => {
     assert.equal(calls[0].max_daily_dd_pct, 4);
   });
 
+  it('con MT5 desactivado no llama al puente', async () => {
+    let called = false;
+    globalThis.fetch = async () => {
+      called = true;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+    await assert.rejects(
+      () => pushOrder({ symbol: 'BTCUSDm', side: 'LONG' }, {}, { ...settings, dataSource: 'yahoo' }),
+      /métricas salen solo de Yahoo/,
+    );
+    assert.equal(called, false);
+  });
+
   it('con el límite diario desactivado no se envía max_trades_per_day', async () => {
     const calls = captureBody();
     const off = { ...settings, dailyTradeLimitEnabled: false };

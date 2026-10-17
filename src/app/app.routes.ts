@@ -4,6 +4,7 @@ import { WikiComponent } from './pages/wiki/wiki.component';
 import { PlataformaComponent } from './pages/plataforma/plataforma.component';
 import { MacdQuantComponent } from './pages/macd-quant/macd-quant.component';
 import { ConfiguracionComponent } from './pages/configuracion/configuracion.component';
+import { quantumEnabledGuard, wikiEnabledGuard } from './services/nav-feature.guard';
 
 export const routes: Routes = [
   { path: '', component: PlataformaComponent },
@@ -11,11 +12,11 @@ export const routes: Routes = [
   { path: 'senales', component: HistorialComponent },
   { path: 'historial', redirectTo: 'senales' },
   { path: 'plataforma', redirectTo: '' },
-  { path: 'macd-quant', component: MacdQuantComponent },
+  { path: 'macd-quant', canActivate: [quantumEnabledGuard], component: MacdQuantComponent },
   { path: 'quantum', redirectTo: 'macd-quant' },
   { path: 'colombia', redirectTo: '' },
   { path: 'mercado', redirectTo: '' },
-  { path: 'wiki', component: WikiComponent },
+  { path: 'wiki', canActivate: [wikiEnabledGuard], component: WikiComponent },
   { path: 'artefactos', redirectTo: 'wiki' },
   { path: 'configuracion', component: ConfiguracionComponent },
   { path: '**', redirectTo: '' },

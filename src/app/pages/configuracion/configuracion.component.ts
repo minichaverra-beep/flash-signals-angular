@@ -99,6 +99,9 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
   quantumEnabled = false;
   /** true solo cuando GET /api/account-settings ya devuelve los booleanos. */
   private navFlagsSupported = false;
+  /** Evita que dos clics seguidos pisen la fila de la BD. */
+  navSaving = false;
+  private navWrite = 0;
   /** Input del balance (móvil y escritorio); tras guardar se rellena con la respuesta del servidor. */
   accountBalance: number | null = null;
   balanceSaving = false;
@@ -313,7 +316,10 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
 
   private loadAccount(): void {
     this.api.accountSettings().subscribe({
-      next: (a) => this.applyAccount(a),
+      next: (a) => {
+        if (this.navWrite > 0) return;
+        this.applyAccount(a);
+      },
       error: (err: unknown) =>
         this.showMessage(this.errMsg(err, 'No se pudo leer el balance guardado (¿API reiniciada?).'), true),
     });
@@ -332,6 +338,50 @@ export class ConfiguracionComponent implements OnInit, OnDestroy {
     this.wikiEnabled = a.wikiEnabled === true;
     this.quantumEnabled = a.quantumEnabled === true;
     this.navFeatures.apply(a);
+  }
+
+  toggleWiki(): void {
+    this.persistNavFlag('wiki', !this.wikiEnabled);
+  }
+
+  toggleQuantum(): void {
+    this.persistNavFlag('quantum', !this.quantumEnabled);
+  }
+
+  /** Guarda el interruptor en account-settings y muestra la ruta en el menú al instante. */
+  private persistNavFlag(which: 'wiki' | 'quantum', next: boolean): void {
+    const prevWiki = this.wikiEnabled;
+    const prevQuantum = this.quantumEnabled;
+    if (which === 'wiki') this.wikiEnabled = next;
+    else this.quantumEnabled = next;
+    this.navFeatures.show({ wikiEnabled: this.wikiEnabled, quantumEnabled: this.quantumEnabled });
+    const seq = ++this.navWrite;
+    this.navSaving = true;
+    this.navFeatures.beginWrite();
+    const patch: AccountSettingsPatch =
+      which === 'wiki' ? { wikiEnabled: next } : { quantumEnabled: next };
+    this.api.accountSettingsSave(patch).subscribe({
+      next: (a) => {
+        this.navFeatures.endWrite();
+        if (seq !== this.navWrite) return;
+        this.navSaving = false;
+        this.account = a;
+        this.navFlagsSupported = true;
+        this.navFeatures.show({
+          wikiEnabled: a.wikiEnabled === true,
+          quantumEnabled: a.quantumEnabled === true,
+        });
+      },
+      error: (err: unknown) => {
+        this.navFeatures.endWrite();
+        if (seq !== this.navWrite) return;
+        this.navSaving = false;
+        this.wikiEnabled = prevWiki;
+        this.quantumEnabled = prevQuantum;
+        this.navFeatures.show({ wikiEnabled: prevWiki, quantumEnabled: prevQuantum });
+        this.showMessage(this.errMsg(err, 'No se pudo guardar el menú.'), true);
+      },
+    });
   }
 
   /** Solo si el servidor ya conoce los campos y el borrador cambió. */

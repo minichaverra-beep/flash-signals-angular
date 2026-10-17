@@ -23,7 +23,16 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $OutDir = Join-Path $ScriptDir 'out'
 $Launcher = Join-Path $ScriptDir 'app-launcher'
 $Assets = Join-Path $Launcher 'app\src\main\assets'
+# Doble clic o powershell -File: la ventana no se cierra sola. Si lo llama otro script, sigue.
+$keepWindow = $MyInvocation.CommandOrigin -eq 'Runspace'
+function Wait-ToClose {
+  if (-not $keepWindow) { return }
+  Write-Host ''
+  Write-Host 'Pulsa Enter para cerrar esta ventana...' -ForegroundColor Yellow
+  Read-Host | Out-Null
+}
 
+try {
 if (-not $SkipPack) {
   & (Join-Path $ScriptDir 'pack-for-android.ps1') -SkipBuild:$SkipBuild
 }
@@ -66,3 +75,11 @@ $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
 Write-Host ''
 Write-Host "Listo ($mb MB): $dest" -ForegroundColor Green
 Write-Host 'Copialo al telefono e instalalo (permite "instalar apps desconocidas").' -ForegroundColor Yellow
+} catch {
+  Write-Host ''
+  Write-Host $_.Exception.Message -ForegroundColor Red
+  if (-not $keepWindow) { throw }
+  Wait-ToClose
+  exit 1
+}
+Wait-ToClose

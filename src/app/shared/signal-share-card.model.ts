@@ -52,8 +52,12 @@ export interface ShareCardModel {
   primary: ShareScenario | null;
   pullback: ShareScenario | null;
   footer: string | null;
-  /** `planDetails.risk` en escala 0–100. Null si el reporte no trae número. */
+  /** Puntos de stop de la librería (`plan.risk` = risk_pts). Null si no hay número. */
   risk: number | null;
+  /** Posición 0–100 de la barra, la misma escala que «Riesgo en claro». Null si no hay R:R ni % del precio. */
+  riskFill: number | null;
+  /** Nota al pie de la sección Riesgo. Null si no hay puntos de stop. */
+  riskNote: string | null;
   caption: string;
 }
 
@@ -141,6 +145,13 @@ export function buildShareCard(job: JobStatus | null | undefined): ShareCardMode
   const levels = buildLevels(s);
   const pills = buildPills(s, direction);
   const action = resolveShareAction(s);
+  if (action?.state === 'ESPERAR') {
+    pills.push({
+      kicker: 'Si es Esperar',
+      title: '2 velas M5 a favor',
+      detail: 'Hay que esperar a que salgan',
+    });
+  }
   const primary = buildPrimary(s, direction);
   const pullback = buildPullback(s);
   const footer = s.dataStale && clean(s.staleMessage) ? clean(s.staleMessage) : null;
@@ -156,6 +167,12 @@ export function buildShareCard(job: JobStatus | null | undefined): ShareCardMode
   );
   if (!hasBody) return null;
 
+  const risk = shareRisk(s);
+  const slMove = risk ? expandSlIfHighRisk(symbol, s, risk.fill) : null;
+  if (slMove) {
+    const slLevel = levels.find((level) => level.label === 'SL');
+    if (slLevel) slLevel.value = slMove.slText;
+  }
   const card: ShareCardModel = {
     symbol,
     timeframe,
@@ -170,22 +187,170 @@ export function buildShareCard(job: JobStatus | null | undefined): ShareCardMode
     primary,
     pullback,
     footer,
-    risk: parseRiskPercent(s.planDetails?.risk),
+    risk: risk?.points ?? null,
+    riskFill: risk?.fill ?? null,
+    riskNote: riskNoteText(risk, slMove),
     caption: '',
   };
   card.caption = buildShareCaption(card);
   return card;
 }
 
-/** Número de riesgo del plan (el mismo que la ficha «Riesgo»). Fuera de 0–100 no se inventa una escala. */
-export function parseRiskPercent(raw: string | null | undefined): number | null {
+/**
+ * Puntos de stop que publica la librería (`plan.risk` = risk_pts).
+ * 60 pts de BTC no es un 60 %: no se recorta a 0–100.
+ */
+export function parseRiskPoints(raw: string | null | undefined): number | null {
   const text = String(raw ?? '').trim();
   if (!text) return null;
   const match = /(-?\d+(?:[.,]\d+)?)/.exec(text);
   if (!match) return null;
   const n = Number(match[1].replace(',', '.'));
-  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  if (!Number.isFinite(n) || n < 0) return null;
   return Math.round(n * 10) / 10;
+}
+
+/** Zona caliente de la barra (igual que «Riesgo en claro»). */
+export const HIGH_RISK_FILL = 66;
+/** Pips reales más allá del nivel, para que un deslizamiento no saque el stop. Oro: 20 × 0,10 = 2. */
+export const SLIPPAGE_PIPS = 20;
+
+/** 1 pip en precio, el de la librería. Oro 0,10; BTC y US30, 1 punto. */
+export function realPipSize(market: string | null | undefined): number {
+  const key = String(market || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  if (key.startsWith('XAU') || key === 'GOLD') return 0.1;
+  return 1;
+}
+
+function riskNoteText(
+  risk: { fill: number | null } | null,
+  slMove: { kind: 'soporte' | 'resistencia' } | null,
+): string | null {
+  if (!risk) return null;
+  if (slMove) {
+    const place = slMove.kind === 'soporte' ? 'el soporte' : 'la resistencia';
+    return `Riesgo alto: el SL pasa ${place} para cubrir el slippage`;
+  }
+  if (risk.fill != null && risk.fill >= HIGH_RISK_FILL) {
+    return 'Riesgo alto: no hay soporte o resistencia más allá del SL';
+  }
+  return 'Si el riesgo es alto, el SL pasa el soporte o la resistencia para cubrir el slippage';
+}
+
+/**
+ * Compra → pasado el soporte. Venta → pasada la resistencia.
+ * El nivel es el de la señal; 20 pips reales más allá cubren el slippage.
+ */
+export function expandSlIfHighRisk(
+  market: string | null | undefined,
+  s: SignalSummary,
+  fill: number | null,
+): { sl: number; slText: string; kind: 'soporte' | 'resistencia' } | null {
+  if (fill == null || fill < HIGH_RISK_FILL) return null;
+  const entryText = clean(s.planDetails?.entry) || clean(s.entryOptima);
+  const slText = clean(s.planDetails?.sl);
+  const entry = firstNumber(entryText);
+  const sl = firstNumber(slText);
+  if (entry == null || sl == null || entry === sl || !slText) return null;
+  const buy = sl < entry;
+  const levels = structureLevels(s);
+  const beyond = (buy ? levels.support : levels.resistance).filter((level) =>
+    buy ? level < sl : level > sl,
+  );
+  if (!beyond.length) return null;
+  const level = buy ? Math.max(...beyond) : Math.min(...beyond);
+  const pad = SLIPPAGE_PIPS * realPipSize(market);
+  const widened = buy ? level - pad : level + pad;
+  if (!(widened > 0) || (buy ? widened >= sl : widened <= sl)) return null;
+  const decimals = (slText.split('.')[1] || '').length;
+  return {
+    sl: widened,
+    slText: widened.toFixed(decimals),
+    kind: buy ? 'soporte' : 'resistencia',
+  };
+}
+
+/** Rango H1 (mínimo = soporte, máximo = resistencia) y la zona ICT si dice soporte o resistencia. */
+function structureLevels(s: SignalSummary): { support: number[]; resistance: number[] } {
+  const support: number[] = [];
+  const resistance: number[] = [];
+  const detail = engineText(s.engine, 'h1_detail') || '';
+  const range = /rango\s+h1\s+([0-9]+(?:[.,][0-9]+)?)\s*[-–]\s*([0-9]+(?:[.,][0-9]+)?)/i.exec(detail);
+  if (range) {
+    const a = firstNumber(range[1]);
+    const b = firstNumber(range[2]);
+    if (a != null && b != null && a !== b) {
+      support.push(Math.min(a, b));
+      resistance.push(Math.max(a, b));
+    }
+  }
+  const scan = ictScan(s);
+  const level = firstNumber(scan?.zone_level);
+  const kind = String(scan?.zone_type || '').toLowerCase();
+  if (level != null && kind.includes('soport')) support.push(level);
+  else if (level != null && kind.includes('resist')) resistance.push(level);
+  return { support, resistance };
+}
+
+function ictScan(s: SignalSummary): { zone_level?: string | number | null; zone_type?: string | number | null } | null {
+  const ict = s.engine?.ict as
+    | { scan?: { zone_level?: string | number | null; zone_type?: string | number | null } | null }
+    | null
+    | undefined;
+  return ict?.scan ?? null;
+}
+
+/**
+ * Número de la ficha (puntos) y posición de la barra.
+ * La barra usa la misma escala que «Riesgo en claro»: R:R, o si no hay, los puntos frente al precio.
+ * Sin esa escala no hay relleno: 60 pts no llenan el 60 %.
+ */
+export function shareRisk(s: SignalSummary): { points: number; fill: number | null } | null {
+  const points = parseRiskPoints(s.planDetails?.risk);
+  if (points == null) return null;
+  const reward = parseRewardMultiple(s.planDetails?.rr);
+  if (reward != null) return { points, fill: heatFromRewardMultiple(reward) };
+  const entry = firstNumber(s.planDetails?.entry || s.entryOptima || s.price);
+  if (entry != null && entry !== 0) return { points, fill: heatFromPricePct(Math.abs((points / entry) * 100)) };
+  return { points, fill: null };
+}
+
+/** «1:2», «1/3», «2.5» → múltiplo de recompensa. Misma lectura que la ficha de riesgo. */
+function parseRewardMultiple(rr: string | null | undefined): number | null {
+  if (!rr) return null;
+  const t = String(rr).trim().toLowerCase().replace(',', '.');
+  const parts = t.split(/[:/]|(?<=\d)\s*a\s*(?=\d)/);
+  if (parts.length >= 2) {
+    const a = firstNumber(parts[0]);
+    const b = firstNumber(parts[1]);
+    if (a != null && b != null && a !== 0) return b >= a ? b / a : a / b;
+  }
+  const n = firstNumber(t);
+  return n != null && n > 0 ? n : null;
+}
+
+function firstNumber(raw: string | number | null | undefined): number | null {
+  const match = /(-?\d+(?:[.,]\d+)?)/.exec(String(raw ?? ''));
+  if (!match) return null;
+  const n = Number(match[1].replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Fresco 0–33 · Templado 33–66 · Caliente 66–100. Más premio → más a la izquierda. */
+function heatFromRewardMultiple(mult: number): number {
+  if (mult >= 2.2) return Math.round(33 - Math.min(1, Math.max(0, (mult - 2.2) / 0.5)) * 25);
+  if (mult >= 1.4) return Math.round(33 + ((2.2 - mult) / 0.8) * 33);
+  return Math.round(66 + Math.min(1, Math.max(0, (1.4 - mult) / 0.6)) * 34);
+}
+
+/** % del precio entre entrada y stop. Más % → más a la derecha. */
+function heatFromPricePct(pct: number): number {
+  if (pct < 0.35) return Math.round(8 + (Math.max(0, pct) / 0.35) * 25);
+  if (pct < 0.9) return Math.round(33 + ((pct - 0.35) / 0.55) * 33);
+  return Math.round(66 + Math.min(1, (pct - 0.9) / 0.9) * 34);
 }
 
 /** Ancho de la barra: el valor real, recortado a 0–100. */
@@ -376,6 +541,38 @@ function actionableVerdict(raw: string): boolean {
   return ACTIONABLE_VERDICT.test(t);
 }
 
+/** Sesiones de liquidez en hora local (con horario de verano). */
+const MARKET_SESSIONS: { label: string; tz: string; start: number; end: number }[] = [
+  { label: 'Sídney', tz: 'Australia/Sydney', start: 8, end: 17 },
+  { label: 'Tokio', tz: 'Asia/Tokyo', start: 9, end: 18 },
+  { label: 'Londres', tz: 'Europe/London', start: 8, end: 17 },
+  { label: 'Nueva York', tz: 'America/New_York', start: 8, end: 17 },
+];
+
+function localHour(now: Date, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+  return hour + minute / 60;
+}
+
+/** Sesiones abiertas ahora, la que acaba de empezar primero. */
+export function runningSessionLabel(now = new Date()): string {
+  const open = MARKET_SESSIONS.map((session) => ({
+    label: session.label,
+    since: localHour(now, session.tz) - session.start,
+    length: session.end - session.start,
+  }))
+    .filter((session) => session.since >= 0 && session.since < session.length)
+    .sort((a, b) => a.since - b.since);
+  return open.map((session) => session.label).join(' · ');
+}
+
 function actionReason(raw: string): string | null {
   const text = localizeBiasWords(raw).replaceAll(/\s+/g, ' ').trim();
   if (!text) return null;
@@ -383,6 +580,7 @@ function actionReason(raw: string): string | null {
   if (/^(esperar|espera|wait|waiting|tomar|operar|entrar|go|long|short|buy|sell|largo|corto)$/i.test(bare)) {
     return null;
   }
+  if (/^FUERA_NY\b/i.test(text)) return runningSessionLabel() || text;
   return text.length > 78 ? `${text.slice(0, 75).trimEnd()}…` : text;
 }
 

@@ -2259,18 +2259,22 @@ app.get('/api/mt5/settings', (_req, res) => {
  */
 app.patch('/api/mt5/settings', (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
-  if (body.active !== undefined && !mt5Settings.PROFILES.includes(body.active)) {
-    return res.status(400).json({ error: `active debe ser ${mt5Settings.PROFILES.join(' | ')}` });
-  }
-  try {
-    if (body.settings !== undefined) mt5Settings.update(body.settings, body.profile ?? mt5Settings.getActive());
-    if (body.active !== undefined) mt5Settings.setActive(body.active);
-    res.json(mt5SettingsResponse());
-  } catch (err) {
-    if (err.status === 400) return res.status(400).json({ error: err.message, errors: err.errors });
-    console.error('[mt5] settings:', err);
-    res.status(500).json({ error: 'No se pudo guardar la configuración MT5' });
-  }
+  const save = () => {
+    if (body.active !== undefined && !mt5Settings.PROFILES.includes(body.active)) {
+      return res.status(400).json({ error: `active debe ser ${mt5Settings.PROFILES.join(' | ')}` });
+    }
+    try {
+      if (body.settings !== undefined) mt5Settings.update(body.settings, body.profile ?? mt5Settings.getActive());
+      if (body.active !== undefined) mt5Settings.setActive(body.active);
+      res.json(mt5SettingsResponse());
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message, errors: err.errors });
+      console.error('[mt5] settings:', err);
+      res.status(500).json({ error: 'No se pudo guardar la configuración MT5' });
+    }
+  };
+  if (body.settings && body.settings.dataSource !== undefined) return requireAdmin(req, res, save);
+  return save();
 });
 
 /**

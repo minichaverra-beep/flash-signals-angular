@@ -66,7 +66,8 @@
         [class.on]="wikiEnabled"
         [attr.aria-checked]="wikiEnabled"
         aria-labelledby="cfg-wiki-label"
-        (click)="wikiEnabled = !wikiEnabled"
+        [disabled]="navSaving"
+        (click)="toggleWiki()"
       >
         <span class="switch-thumb" aria-hidden="true"></span>
       </button>
@@ -83,7 +84,8 @@
         [class.on]="quantumEnabled"
         [attr.aria-checked]="quantumEnabled"
         aria-labelledby="cfg-quantum-label"
-        (click)="quantumEnabled = !quantumEnabled"
+        [disabled]="navSaving"
+        (click)="toggleQuantum()"
       >
         <span class="switch-thumb" aria-hidden="true"></span>
       </button>
@@ -92,7 +94,7 @@
         {{ quantumEnabled ? 'Activado' : 'Desactivado' }}
       </small>
     </div>
-    <p class="muted tiny">Pulsa Guardar para aplicarlos.</p>
+    <p class="muted tiny">Se guarda en la base al momento. Si queda activado, el botón aparece ya en el menú, junto a Señales y Config.</p>
   </section>
 
   <ng-container *ngIf="state as st">
@@ -275,25 +277,31 @@
 
     <form *ngIf="draft as d" (ngSubmit)="submitForm()">
       <section class="panel" *ngIf="isAdmin()">
-        <h2>Fuente de datos para gráficos</h2>
-        <div class="field">
-          <label for="cfg-data-source">Fuente de datos para gráficos</label>
-          <select
-            id="cfg-data-source"
-            name="dataSource"
-            [(ngModel)]="d.form.dataSource"
-            title="Solo Yahoo ignora MT5 en gráficos y capturas. MT5 usa el puente en el escritorio. El APK y la pantalla pequeña siguen en Yahoo."
+        <h2>MT5</h2>
+        <div class="switch-row">
+          <button
+            type="button"
+            class="switch"
+            role="switch"
+            [class.on]="d.form.dataSource !== 'mt5'"
+            [attr.aria-checked]="d.form.dataSource !== 'mt5'"
+            aria-labelledby="cfg-mt5-off-label"
+            (click)="d.form.dataSource = d.form.dataSource === 'mt5' ? 'yahoo' : 'mt5'"
           >
-            <option value="yahoo">Solo Yahoo</option>
-            <option value="mt5">MT5</option>
-          </select>
-          <small class="muted">
-            Velas de gráficos, capturas y análisis. En el APK y en pantalla pequeña se usa siempre Yahoo.
-            <ng-container *ngIf="st.dataSourceEffective as eff">
-              En uso: <strong>{{ eff.mode === 'yahoo' ? 'solo Yahoo' : 'MT5' }}</strong> ({{ eff.reason }}).
-            </ng-container>
+            <span class="switch-thumb" aria-hidden="true"></span>
+          </button>
+          <span id="cfg-mt5-off-label">Desactivar MT5</span>
+          <small class="switch-state" [class.on]="d.form.dataSource !== 'mt5'" aria-hidden="true">
+            {{ d.form.dataSource === 'mt5' ? 'Desactivado' : 'Activado' }}
           </small>
         </div>
+        <p class="muted tiny">
+          Con MT5 desactivado no se usa el puente ni se envían órdenes. Gráficos, capturas y análisis salen solo de Yahoo.
+          Pulsa Guardar para aplicarlo.
+          <ng-container *ngIf="st.dataSourceEffective as eff">
+            En uso: <strong>{{ eff.mode === 'yahoo' ? 'solo Yahoo' : 'MT5' }}</strong> ({{ eff.reason }}).
+          </ng-container>
+        </p>
       </section>
 
       <ng-container *ngIf="!mt5Hidden()">

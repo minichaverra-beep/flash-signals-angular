@@ -12,9 +12,10 @@ import {
   facebookShareUrl,
   formatRiskNumber,
   jobChartSrc,
-  parseRiskPercent,
+  parseRiskPoints,
   posterShareData,
   resolveShareAction,
+  runningSessionLabel,
   posterShareFileName,
   realPublicUrl,
   riskFillPercent,
@@ -194,11 +195,24 @@ describe('buildShareCard', () => {
       resolveShareAction({ plan: 'Niveles planificados (no es entrada activa)' })?.reason ?? '',
       /no es entrada activa/i,
     );
+    assert.equal(
+      resolveShareAction({ zentinel: { kzOn: false, killzone: 'FUERA_NY' } })?.reason,
+      runningSessionLabel(),
+    );
+    assert.equal(runningSessionLabel(new Date('2026-10-17T01:07:00Z')), 'Tokio · Sídney');
+    assert.equal(runningSessionLabel(new Date('2026-10-16T14:00:00Z')), 'Nueva York · Londres');
     assert.deepEqual(resolveShareAction({ zentinel: { kzOn: false, killzone: 'NY AM 08-10' } }), {
       state: 'ESPERAR',
       reason: 'NY AM 08-10',
     });
     assert.equal(resolveShareAction({ verdict: 'OPERAR', zentinel: { kzOn: false } })?.state, 'ESPERAR');
+    const waiting = buildShareCard(job({ summary: { verdict: 'ESPERAR', bias: 'bullish' } }));
+    assert.deepEqual(
+      waiting?.pills.find((p) => p.kicker === 'Si es Esperar'),
+      { kicker: 'Si es Esperar', title: '2 velas M5 a favor', detail: 'Hay que esperar a que salgan' },
+    );
+    const taking = buildShareCard(job({ summary: { verdict: 'OPERAR_LONG', bias: 'bullish' } }));
+    assert.equal(taking?.pills.some((p) => p.kicker === 'Si es Esperar'), false);
     assert.equal(resolveShareAction({ setup: 'BREAK (breakout)' }), null);
     assert.equal(resolveShareAction({ planDetails: { confirmation: 'Entrada activa en zona' } })?.state, 'TOMAR');
     assert.equal(resolveShareAction({ verdict: 'OPERAR_LONG' })?.state, 'TOMAR');
@@ -206,24 +220,67 @@ describe('buildShareCard', () => {
     assert.equal(JSON.stringify(resolveShareAction({ verdict: 'OPERAR' })).includes('Retesteo'), false);
   });
 
-  it('la barra de riesgo usa el número del plan y 60 llena el 60%', () => {
-    assert.equal(parseRiskPercent('60.0'), 60);
-    assert.equal(parseRiskPercent(''), null);
-    assert.equal(parseRiskPercent('no'), null);
+  it('la barra de riesgo lee los puntos de la librería y no los usa como porcentaje', () => {
+    assert.equal(parseRiskPoints('60.0'), 60);
+    assert.equal(parseRiskPoints('232.1'), 232.1);
+    assert.equal(parseRiskPoints(''), null);
+    assert.equal(parseRiskPoints('no'), null);
     assert.equal(riskFillPercent(60), 60);
     assert.equal(riskFillPercent(140), 100);
     assert.equal(formatRiskNumber(60), '60');
-    const card = buildShareCard(
+    const summary = {
+      market: 'btc',
+      bias: 'bullish',
+      price: '81530.17',
+      planDetails: { entry: '81530.17', rr: '1:2', risk: '60.0' },
+    };
+    const card = buildShareCard(job({ market: 'btc', summary }));
+    assert.equal(card?.risk, 60);
+    assert.equal(card?.riskFill, 41);
+    assert.equal(card?.riskNote, 'Si el riesgo es alto, el SL pasa el soporte o la resistencia para cubrir el slippage');
+    assert.notEqual(card?.riskFill, card?.risk);
+    const hot = buildShareCard(
       job({
-        market: 'btc',
-        summary: { market: 'btc', bias: 'bullish', price: '1', planDetails: { entry: '2', risk: '60.0' } },
+        market: 'xauusd',
+        summary: {
+          market: 'xauusd',
+          bias: 'bearish',
+          price: '4169.90',
+          planDetails: { entry: '4169.90', sl: '4175.90', tp: '4163.90', rr: '1:1', risk: '6' },
+          engine: { schemaVersion: 1, asset: 'XAUUSD', crt: { h1_detail: 'Rango H1 4164-4182' } },
+        },
       }),
     );
-    assert.equal(card?.risk, 60);
+    assert.equal(hot?.riskNote, 'Riesgo alto: el SL pasa la resistencia para cubrir el slippage');
+    assert.equal(hot?.levels.find((level) => level.label === 'SL')?.value, '4184.00');
+    const hotBtc = buildShareCard(
+      job({
+        market: 'btc',
+        summary: {
+          market: 'btc',
+          bias: 'bullish',
+          price: '81530',
+          planDetails: { entry: '81530.00', sl: '81470.00', tp: '81590.00', rr: '1:1', risk: '60' },
+          engine: {
+            schemaVersion: 1,
+            asset: 'BTC',
+            crt: { h1_detail: 'Rango H1 81434-81674' },
+            ict: { scan: { zone_level: 81400, zone_type: 'soporte_debil' } },
+          },
+        },
+      }),
+    );
+    assert.equal(hotBtc?.riskNote, 'Riesgo alto: el SL pasa el soporte para cubrir el slippage');
+    assert.equal(hotBtc?.levels.find((level) => level.label === 'SL')?.value, '81414.00');
+    const wide = buildShareCard(
+      job({ summary: { market: 'btc', bias: 'bullish', planDetails: { risk: '232.1' } } }),
+    );
+    assert.equal(wide?.risk, 232.1);
+    assert.equal(wide?.riskFill, null);
     assert.equal(card?.levels.some((l) => l.label === 'Riesgo'), false);
     assert.equal(card?.caption.includes('₿ BTC'), true);
     assert.equal(card?.caption.includes('↗️ ALCISTA'), true);
-    assert.equal(card?.caption.includes('ENTRADA BUY: 2'), true);
+    assert.equal(card?.caption.includes('ENTRADA BUY: 81530.17'), true);
     assert.equal(card?.caption.includes('STOP LOSS'), false);
     assert.equal(card?.caption.includes('81607'), false);
   });

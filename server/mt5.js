@@ -6,8 +6,9 @@
 const mt5Settings = require('./mt5-settings');
 const { applyVolatilityToStops } = require('./volatility');
 const { effectiveTradeLimit } = require('./mt5-daily-limit');
-const { resolveDataSource } = require('./data-source');
+const { resolveDataSource, normalizeMode } = require('./data-source');
 const { styleStops } = require('./mt5-style');
+const { expandSlIfHighRisk } = require('./high-risk-sl');
 
 const TIMEOUT_MS = 15000;
 
@@ -95,6 +96,15 @@ function buildOrderFromSummary(market, summary, settings = mt5Settings.get(), { 
   const stops = style
     ? styleStops(market, side, { entry, sl: scaled.sl, tp: scaled.tp }, style, settings)
     : { sl: roundPrice(scaled.sl), tp: roundPrice(scaled.tp) };
+  const widenedSl = expandSlIfHighRisk({
+    market,
+    entry,
+    sl: stops.sl,
+    plan,
+    price: summary.price,
+    engine: summary.engine,
+  });
+  if (widenedSl) stops.sl = widenedSl;
   const coherent = side === 'LONG' ? stops.sl < entry && entry < stops.tp : stops.tp < entry && entry < stops.sl;
   if (!coherent) return { skip: `Plan incoherente tras el ajuste: entry=${entry} sl=${stops.sl} tp=${stops.tp}` };
   return { order: { symbol, side, entry, ...stops }, volatility };
@@ -252,6 +262,11 @@ function reconcileOrder(sent = {}, status = {}) {
 }
 
 async function callBridge(method, path, body, settings = mt5Settings.get()) {
+  if (normalizeMode(settings.dataSource) === 'yahoo') {
+    const error = new Error('MT5 está desactivado. Las métricas salen solo de Yahoo.');
+    error.status = 409;
+    throw error;
+  }
   const { bridgeUrl, bridgeToken } = settings;
   const headers = { 'Content-Type': 'application/json' };
   if (bridgeToken) headers['X-Bridge-Token'] = bridgeToken;

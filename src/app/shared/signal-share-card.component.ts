@@ -169,7 +169,9 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
     const card = this.card;
     if (!card) return '';
     const odds = card.odds ? `${card.odds.compra}/${card.odds.venta}` : '';
-    return `${this.historyId()}|${card.caption}|${card.risk ?? ''}|${odds}|${jobChartSrc(this.job) ?? this.extraChart ?? ''}`;
+    const action = card.action ? `${card.action.state}|${card.action.reason ?? ''}` : '';
+    const risk = card.risk != null ? `${card.risk}|${card.riskFill ?? ''}|${card.riskNote ?? ''}` : '';
+    return `${this.historyId()}|${action}|${card.caption}|${risk}|${odds}|${jobChartSrc(this.job) ?? this.extraChart ?? ''}`;
   }
 
   private historyId(): number {

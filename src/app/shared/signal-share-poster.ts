@@ -142,7 +142,7 @@ function planPoster(ctx: CanvasRenderingContext2D, card: ShareCardModel, chart: 
   if (card.odds) y += 156 + GAP;
 
   const riskY = card.risk != null ? y : 0;
-  if (card.risk != null) y += 118 + GAP;
+  if (card.risk != null) y += (card.riskNote ? 168 : 118) + GAP;
 
   const levels: LevelBox[] = [];
   let levelsLabelY = 0;
@@ -231,7 +231,7 @@ function drawPoster(
   if (plan.action && card.action) drawAction(ctx, card.action, plan.action);
   if (plan.chart && chart) drawChart(ctx, chart, PAD, plan.chart.y, INNER, plan.chart.h);
   if (card.odds) drawOdds(ctx, card, plan.oddsY);
-  if (card.risk != null) drawRiskBar(ctx, card.risk, plan.riskY);
+  if (card.risk != null) drawRiskBar(ctx, card.risk, card.riskFill, card.riskNote, plan.riskY);
   if (plan.levels.length) {
     ctx.fillStyle = C.pink;
     ctx.font = KICKER;
@@ -578,11 +578,17 @@ function drawOddsRow(
   ctx.textBaseline = 'top';
 }
 
-function drawRiskBar(ctx: CanvasRenderingContext2D, risk: number, y: number): void {
-  const box = { x: PAD, y, w: INNER, h: 118 };
+function drawRiskBar(
+  ctx: CanvasRenderingContext2D,
+  points: number,
+  fillPct: number | null,
+  note: string | null,
+  y: number,
+): void {
+  const box = { x: PAD, y, w: INNER, h: note ? 168 : 118 };
   panel(ctx, box, C.border);
-  const fill = riskFillPercent(risk);
-  const value = formatRiskNumber(risk);
+  const fill = fillPct == null ? 0 : riskFillPercent(fillPct);
+  const value = `${formatRiskNumber(points)} pts`;
   const x = PAD + 18;
   const width = INNER - 36;
   const rowY = y + 28;
@@ -615,17 +621,26 @@ function drawRiskBar(ctx: CanvasRenderingContext2D, risk: number, y: number): vo
     ctx.fillRect(barX, barY, fillW, barH);
     ctx.restore();
   }
-  const markerX = barX + Math.max(14, Math.min(barW - 14, fillW));
-  ctx.beginPath();
-  ctx.arc(markerX, barY + barH / 2, 12, 0, Math.PI * 2);
-  ctx.fillStyle = '#f4fbf6';
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = riskTone(fill);
-  ctx.stroke();
+  if (fillPct != null) {
+    const markerX = barX + Math.max(14, Math.min(barW - 14, fillW));
+    ctx.beginPath();
+    ctx.arc(markerX, barY + barH / 2, 12, 0, Math.PI * 2);
+    ctx.fillStyle = '#f4fbf6';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = riskTone(fill);
+    ctx.stroke();
+  }
   ctx.fillStyle = riskTone(fill);
   ctx.textAlign = 'right';
   ctx.fillText(value, x + width, rowY + 22);
+  if (note) {
+    ctx.font = `500 20px ${BODY}`;
+    ctx.fillStyle = C.muted;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(note, x, y + 132);
+  }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 }
