@@ -6,7 +6,7 @@
 const mt5Settings = require('./mt5-settings');
 const { applyVolatilityToStops } = require('./volatility');
 const { effectiveTradeLimit } = require('./mt5-daily-limit');
-const { resolveDataSource, normalizeMode } = require('./data-source');
+const { resolveDataSource, normalizeMode, isAndroid } = require('./data-source');
 const { styleStops } = require('./mt5-style');
 const { expandSlIfHighRisk } = require('./high-risk-sl');
 
@@ -261,8 +261,17 @@ function reconcileOrder(sent = {}, status = {}) {
   };
 }
 
+/** Android, FS_DATA_SOURCE=yahoo o el ajuste explícito: no hay puente del que sacar capturas. */
+function mt5ReadsDisabled(settings = mt5Settings.get(), env = process.env) {
+  if (normalizeMode(settings?.dataSource) === 'yahoo') return true;
+  if (isAndroid(env)) return true;
+  if (/^(1|true|yes|on)$/i.test(String(env.FS_DISABLE_MT5 ?? '').trim())) return true;
+  if (normalizeMode(env.FS_DATA_SOURCE) === 'yahoo') return true;
+  return false;
+}
+
 async function callBridge(method, path, body, settings = mt5Settings.get()) {
-  if (normalizeMode(settings.dataSource) === 'yahoo') {
+  if (mt5ReadsDisabled(settings)) {
     const error = new Error('MT5 está desactivado. Las métricas salen solo de Yahoo.');
     error.status = 409;
     throw error;

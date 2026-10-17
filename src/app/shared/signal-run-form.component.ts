@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 import { JobStatus, Market, SignalsApiService, Tier } from '../services/signals-api.service';
 import { SignalJobService, isRecentJob, jobKind } from '../services/signal-job.service';
@@ -76,7 +76,7 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.refreshHealth();
+    void this.refreshHealth();
     this.loadReversalsSetting();
     // El historial de la misma página recarga la lista al terminar (nueva fila con Run operation).
     this.finishedSub = this.jobs.finished$.subscribe((j) => {
@@ -102,6 +102,20 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
 
   get busy(): boolean {
     return this.starting || this.jobs.running();
+  }
+
+  /** Qué va a hacer el runner con la selección actual. */
+  get runGuide(): string {
+    if (this.apiOk === false) {
+      return 'La API no responde. En el teléfono, Actualizar y abrir deja la interfaz sola al terminar. En el PC: npm run api (puerto 3847).';
+    }
+    const market = this.markets.find((m) => m.id === this.market)?.label ?? this.market.toUpperCase();
+    const bias = this.bias === 'trend' ? 'la tendencia de la hora' : this.bias === 'bullish' ? 'alcista' : 'bajista';
+    const setup = this.setup === 'reverse' ? 'reversión' : 'ruptura';
+    if (this.busy) {
+      return `${market} en curso, sesgo ${bias}. Si Yahoo no conecta, el runner pide las velas a otro sitio. Si ese precio no se mueve, prueba el siguiente.`;
+    }
+    return `${market}, sesgo ${bias}, ${setup}. Un toque en Ejecutar señal. Si Yahoo no conecta, pide otro sitio; si ese precio está clavado, pasa al siguiente.`;
   }
 
   get runLabel(): string {
@@ -163,19 +177,17 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
     return this.tier !== 'high';
   }
 
-  refreshHealth(): void {
-    this.api.health().subscribe({
-      next: () => {
-        this.apiOk = true;
-      },
-      error: () => {
-        this.apiOk = false;
-        this.message = 'API no disponible. Arranca: npm run api (puerto 3847).';
-      },
-    });
+  async refreshHealth(): Promise<void> {
+    try {
+      await firstValueFrom(this.api.health());
+      this.apiOk = true;
+    } catch {
+      this.apiOk = false;
+      this.message = 'API no disponible. Arranca: npm run api (puerto 3847).';
+    }
   }
 
-  run(): void {
+  async run(): Promise<void> {
     if (this.busy) return;
     this.starting = true;
     this.message = '';
@@ -199,19 +211,17 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
       entry: this.entry.trim() || undefined,
     };
 
-    this.jobs.run(body).subscribe({
-      next: (r) => {
-        this.starting = false;
-        this.adoptedJobId = r.job.id ?? null;
-      },
-      error: (err: unknown) => {
-        this.starting = false;
-        // 409: el job en curso ya se refleja vía SignalJobService.
-        this.message = this.jobs.running()
-          ? ''
-          : this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
-      },
-    });
+    try {
+      const started = await firstValueFrom(this.jobs.run(body));
+      this.adoptedJobId = started.job.id ?? null;
+    } catch (err: unknown) {
+      // 409: el job en curso ya se refleja vía SignalJobService.
+      this.message = this.jobs.running()
+        ? ''
+        : this.errMsg(err, 'Error al iniciar la señal (revisa la API).');
+    } finally {
+      this.starting = false;
+    }
   }
 
   private errMsg(err: unknown, fallback: string): string {

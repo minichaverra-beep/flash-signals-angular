@@ -37,6 +37,12 @@ describe('pickLatestChart', () => {
     assert.equal(pickLatestChart(dir, 'xauusd_m5_chart.png').name, 'xauusd_m5_chart.png');
     assert.equal(pickLatestChart(dir, ['nope.png']), null);
   });
+
+  it('usa el PNG _new cuando el reemplazo atómico no pudo dejar el nombre normal', () => {
+    const alt = path.join(dir, 'btc_m5_chart_annotated_new.png');
+    fs.writeFileSync(alt, 'alt');
+    assert.equal(pickLatestChart(dir, ['btc_m5_chart_annotated.png']).name, 'btc_m5_chart_annotated_new.png');
+  });
 });
 
 describe('isChartStale', () => {

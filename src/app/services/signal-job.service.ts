@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
-import { Observable, Subject, tap } from 'rxjs';
+import { Observable, Subject, firstValueFrom, tap } from 'rxjs';
 import { JobStatus, Market, RunRequest, SignalsApiService } from './signals-api.service';
 
 const EVENTS_URL = '/api/signals/events';
@@ -9,6 +9,10 @@ const RECONNECT_MAX_MS = 30000;
 /** Sin mensajes (el servidor hace ping cada 15 s) → conexión muerta aunque el proxy no la cierre. */
 const STALE_MS = 35000;
 const WATCHDOG_MS = 5000;
+/** Mientras hay corrida, el APK no puede fiarse solo del SSE: pregunta el estado. */
+const POLL_RUNNING_MS = 2000;
+const POLL_IDLE_MS = 8000;
+const POLL_HIDDEN_MS = 15000;
 /** Tras terminar, el resultado se sigue mostrando al volver a la página (F5 / cambio de ruta). */
 const RESULT_TTL_MS = 15 * 60 * 1000;
 const LOST_JOB_ERROR =
@@ -47,8 +51,8 @@ function parseEventData<T>(ev: Event): T | null {
 
 /**
  * Estado del job en curso, compartido por toda la app (singleton).
- * Se alimenta del SSE /api/signals/events: al recargar o cambiar de ruta
- * el snapshot inicial restaura la corrida y luego llegan progreso y resultado.
+ * El SSE avisa al momento. En el WebView del APK ese canal a veces no entrega
+ * el «terminó», así que además se pregunta el estado con async/await.
  */
 @Injectable({ providedIn: 'root' })
 export class SignalJobService implements OnDestroy {
@@ -59,8 +63,14 @@ export class SignalJobService implements OnDestroy {
   private reconnectDelay = RECONNECT_MIN_MS;
   private clockTimer: ReturnType<typeof setInterval> | null = null;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private lastMessageAt = 0;
+  private refreshSeq = 0;
+  private polling = false;
   private readonly now = signal(Date.now());
+  private readonly onVisible = () => {
+    if (typeof document !== 'undefined' && !document.hidden) void this.wake();
+  };
 
   readonly job = signal<JobStatus | null>(null);
   /** Canal SSE abierto. */
@@ -78,23 +88,50 @@ export class SignalJobService implements OnDestroy {
   readonly finished$: Observable<JobStatus> = this.finishedSubject.asObservable();
 
   constructor() {
-    this.refresh();
+    void this.refresh();
     this.connect();
+    this.armPoll();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.onVisible);
+    }
+    if (typeof window !== 'undefined') {
+      (window as FlashWindow).__flashWake = () => {
+        void this.wake();
+      };
+    }
   }
 
   ngOnDestroy(): void {
     this.clearReconnect();
+    if (this.pollTimer) clearTimeout(this.pollTimer);
     this.source?.close();
     this.stopClock();
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisible);
+    }
+    if (typeof window !== 'undefined' && (window as FlashWindow).__flashWake) {
+      delete (window as FlashWindow).__flashWake;
+    }
   }
 
-  /** Fallback HTTP: GET /api/signals/status. */
-  refresh(): void {
-    this.api.status().subscribe({
-      next: (j) => this.apply(j),
-      error: () => undefined,
-    });
+  /** GET /api/signals/status. Una respuesta vieja no pisa una más nueva. */
+  async refresh(): Promise<void> {
+    const seq = ++this.refreshSeq;
+    try {
+      const job = await firstValueFrom(this.api.status());
+      if (seq !== this.refreshSeq) return;
+      this.apply(job);
+    } catch {
+      // La API no respondió: el siguiente poll reintenta.
+    }
+  }
+
+  /** Al volver a la app: estado ya, y el SSE se abre de nuevo. */
+  async wake(): Promise<void> {
+    this.reconnectNow();
+    await this.refresh();
+    this.armPoll();
   }
 
   run(body: RunRequest): Observable<{ message: string; job: JobStatus }> {
@@ -157,10 +194,36 @@ export class SignalJobService implements OnDestroy {
     }, WATCHDOG_MS);
   }
 
+  private reconnectNow(): void {
+    this.clearReconnect();
+    this.reconnectDelay = RECONNECT_MIN_MS;
+    this.source?.close();
+    this.source = null;
+    this.connect();
+  }
+
   private dropConnection(): void {
     this.source?.close();
     this.source = null;
     this.scheduleReconnect();
+  }
+
+  private armPoll(): void {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const delay = hidden ? POLL_HIDDEN_MS : this.job()?.status === 'running' ? POLL_RUNNING_MS : POLL_IDLE_MS;
+    this.pollTimer = setTimeout(() => void this.poll(), delay);
+  }
+
+  private async poll(): Promise<void> {
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      await this.refresh();
+    } finally {
+      this.polling = false;
+      this.armPoll();
+    }
   }
 
   private scheduleReconnect(): void {
@@ -188,6 +251,7 @@ export class SignalJobService implements OnDestroy {
     if (sameJob && prev.status !== 'running' && next.status === 'running') return;
 
     const wasRunning = prev?.status === 'running';
+    const replaced = !!prev?.id && prev.id !== next.id && next.status !== 'running' && next.status !== 'idle';
     if (wasRunning && next.status === 'idle') {
       const lost: JobStatus = {
         ...prev,
@@ -208,7 +272,7 @@ export class SignalJobService implements OnDestroy {
       logs: sameJob && prev.logs.length > logs.length ? prev.logs : logs,
     };
     this.setJob(job);
-    if (wasRunning && job.status !== 'running') this.finishedSubject.next(job);
+    if ((wasRunning && job.status !== 'running') || replaced) this.finishedSubject.next(job);
   }
 
   private appendLogs(payload: { id?: string; lines?: string[] } | null): void {
@@ -236,4 +300,8 @@ export class SignalJobService implements OnDestroy {
     this.clockTimer = null;
     this.now.set(Date.now());
   }
+}
+
+interface FlashWindow extends Window {
+  __flashWake?: () => void;
 }

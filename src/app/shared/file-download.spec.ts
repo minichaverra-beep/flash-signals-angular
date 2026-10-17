@@ -97,6 +97,33 @@ describe('saveBlob', () => {
     assert.equal(r.message, 'Imagen guardada en Descargas');
   });
 
+  it('APK: parte un PNG grande para que el puente de Android lo acepte', async () => {
+    const parts: string[] = [];
+    let began = '';
+    const bytes = new Uint8Array(200_000);
+    bytes[0] = 0x89;
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const bridge: NativeDownloader = {
+      saveBase64: () => {
+        throw new Error('no debe ir de una pieza');
+      },
+      beginSave: (n) => {
+        began = n;
+      },
+      appendBase64: (p) => {
+        parts.push(p);
+      },
+      finishSave: () => true,
+    };
+    const r = await saveBlob(blob, 'grafico-btc.png', { bridge });
+    assert.equal(r.ok, true);
+    assert.equal(r.via, 'native');
+    assert.equal(began, 'grafico-btc.png');
+    assert.ok(parts.length >= 2);
+    assert.equal(parts.join(''), await blobToBase64(blob));
+    assert.equal(r.message, 'Imagen guardada en Descargas');
+  });
+
   it('APK: si el puente devuelve false, informa del fallo', async () => {
     const r = await saveBlob(png(), 'a.png', { bridge: { saveBase64: () => false } });
     assert.equal(r.ok, false);

@@ -116,12 +116,14 @@ public class MainActivity extends Activity {
     private static final long PROBE_TIMEOUT_MS = 10_000;
     private static final long COPY_TIMEOUT_MS = 20 * 60_000;
 
-    private static final int BG = Color.parseColor("#1A1010");
-    private static final int PANEL = Color.parseColor("#2A1C1C");
-    private static final int GOLD = Color.parseColor("#FFD700");
-    private static final int MUTED = Color.parseColor("#D3D3D3");
-    private static final int OK_GREEN = Color.parseColor("#7CD67C");
-    private static final int WARN = Color.parseColor("#FFB347");
+    private static final int BG = Color.parseColor("#101110");
+    private static final int PANEL = Color.parseColor("#181A19");
+    private static final int GOLD = Color.parseColor("#F075C0");
+    private static final int PURPLE = Color.parseColor("#4A33AF");
+    private static final int TEXT = Color.parseColor("#F4FBF6");
+    private static final int MUTED = Color.parseColor("#8E9992");
+    private static final int OK_GREEN = Color.parseColor("#3ECF8E");
+    private static final int WARN = Color.parseColor("#E7C56A");
 
     private enum State {
         CHECKING, NEED_TERMUX, TERMUX_INCOMPATIBLE, NEED_PERMISSION, TERMUX_NOT_READY, NEED_ENABLE,
@@ -139,6 +141,9 @@ public class MainActivity extends Activity {
     private boolean probing;
     private boolean autoStarted;
     private boolean userStopped;
+    /** Un toque en Actualizar: el paquete corre en segundo plano y la interfaz se abre sola. */
+    private boolean openUiAfterInstall;
+    private int installWatch;
     private boolean resumedOnce;
     private Boolean bundlePresent;
     private String detail = "";
@@ -155,6 +160,7 @@ public class MainActivity extends Activity {
     private TextView chkBattery;
     private Button btnPrimary;
     private TextView help;
+    private TextView cmdView;
     private TextView status;
     private TextView logView;
     private Button btnAlt;
@@ -189,6 +195,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (web != null) {
+            web.onResume();
+            web.resumeTimers();
+            if (webVisible()) {
+                web.evaluateJavascript(
+                        "(function(){if(window.__flashWake)window.__flashWake();})()",
+                        null);
+            }
+        }
         if (resumedOnce && !webVisible() && state != State.COPYING && state != State.STARTING) {
             refresh();
         }
@@ -263,8 +278,13 @@ public class MainActivity extends Activity {
         log = r.log();
 
         if ("1".equals(kv.get("installing"))) {
-            setState(State.INSTALLING, "");
+            setState(State.INSTALLING, openUiAfterInstall
+                    ? "Actualizando en Termux. La interfaz se abre sola al terminar."
+                    : "");
+            if (openUiAfterInstall) scheduleInstallWatch();
         } else if (install.startsWith("failed") || "running".equals(install)) {
+            openUiAfterInstall = false;
+            installWatch++;
             String where = install.startsWith("failed:") ? install.substring(7) : "";
             setState(State.INSTALL_FAILED, "running".equals(install)
                     ? "La instalación se interrumpió (¿se cerró Termux?)."
@@ -280,10 +300,14 @@ public class MainActivity extends Activity {
                 });
             });
         } else if (updateAvailable()) {
+            if (openUiAfterInstall) scheduleInstallWatch();
             setState(State.NEED_UPDATE, "");
         } else {
+            boolean open = openUiAfterInstall;
+            openUiAfterInstall = false;
+            installWatch++;
             setState(State.READY, "");
-            if (!autoStarted && !userStopped) {
+            if (open || (!autoStarted && !userStopped)) {
                 autoStarted = true;
                 startServer();
             }
@@ -317,10 +341,12 @@ public class MainActivity extends Activity {
                 openTermux();
                 break;
             case NEED_INSTALL:
-            case NEED_UPDATE:
             case INSTALL_FAILED:
                 if (hasBundle()) installFromApk();
                 else askPcUrl();
+                break;
+            case NEED_UPDATE:
+                upgradeAndOpen();
                 break;
             case INSTALLING:
                 openTermux();
@@ -369,8 +395,25 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_PERMISSION) refresh();
     }
 
+    /**
+     * Un toque: copia el paquete, lo instala sin abrir Termux y, al terminar, arranca el servidor
+     * y muestra la interfaz.
+     */
+    private void upgradeAndOpen() {
+        if (!hasBundle()) {
+            askPcUrl();
+            return;
+        }
+        openUiAfterInstall = true;
+        installFromApk(false);
+    }
+
     /** Pasa el paquete del APK a Termux por 127.0.0.1 (sin Download/ ni permiso de almacenamiento) y lanza el instalador. */
     private void installFromApk() {
+        installFromApk(true);
+    }
+
+    private void installFromApk(boolean showTermux) {
         Map<String, String> routes = new HashMap<>();
         routes.put("bundle", BUNDLE_ASSET);
         routes.put("installer", INSTALLER_ASSET);
@@ -378,6 +421,7 @@ public class MainActivity extends Activity {
         try {
             server = new AssetServer(getAssets(), routes);
         } catch (IOException e) {
+            openUiAfterInstall = false;
             setState(State.INSTALL_FAILED, "No se pudo preparar la copia: " + e.getMessage());
             return;
         }
@@ -408,22 +452,41 @@ public class MainActivity extends Activity {
             ui.removeCallbacks(progress);
             long got = parseLong(r.values().get("size"));
             if (r.ok() && (total < 0 || got == total)) {
-                launchInstaller("cd ~; BUNDLE=\"$HOME/flash-pkg/flash-android.tar.gz\" bash \"$HOME/flash-pkg/termux-install.sh\"; "
-                        + BACK_TO_APP);
+                String command = "cd ~; BUNDLE=\"$HOME/flash-pkg/flash-android.tar.gz\" bash \"$HOME/flash-pkg/termux-install.sh\"";
+                if (showTermux) command += "; " + BACK_TO_APP;
+                launchInstaller(command, showTermux);
             } else {
                 log = r.ok() ? "Copiados " + (got >> 20) + " de " + (total >> 20) + " MB" : r.describe();
+                openUiAfterInstall = false;
                 setState(State.INSTALL_FAILED, "No se pudo pasar el paquete a Termux (¿hay ~2 GB libres?).");
             }
         });
     }
 
     private void launchInstaller(String command) {
+        launchInstaller(command, true);
+    }
+
+    private void launchInstaller(String command, boolean showTermux) {
         userStopped = false;
         autoStarted = false;
-        if (runInTermux(command, false)) {
-            setState(State.INSTALLING, "");
-            openTermux();
+        if (runInTermux(command, !showTermux)) {
+            setState(State.INSTALLING, openUiAfterInstall
+                    ? "Actualizando en Termux. La interfaz se abre sola al terminar."
+                    : "");
+            if (showTermux) openTermux();
+            else scheduleInstallWatch();
         }
+    }
+
+    /** Mientras la actualización va en segundo plano, pregunta el estado y abre la interfaz al acabar. */
+    private void scheduleInstallWatch() {
+        final int token = ++installWatch;
+        ui.postDelayed(() -> {
+            if (token != installWatch || (state != State.INSTALLING && state != State.NEED_UPDATE)) return;
+            if (!openUiAfterInstall) return;
+            termux(STATUS_CMD, PROBE_TIMEOUT_MS, this::onStatus);
+        }, 5000);
     }
 
     private void askPcUrl() {
@@ -893,7 +956,7 @@ public class MainActivity extends Activity {
         TextView title = text("FLASH SIGNALS", 26, GOLD);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         col.addView(title);
-        col.addView(text("Cursor Trading en tu Android · servidor local en Termux", 14, MUTED));
+        col.addView(text("Asistente · un toque actualiza y abre la interfaz", 14, MUTED));
 
         LinearLayout checks = new LinearLayout(this);
         checks.setOrientation(LinearLayout.VERTICAL);
@@ -919,10 +982,19 @@ public class MainActivity extends Activity {
         btnPrimary.setOnClickListener(v -> onPrimary());
         col.addView(btnPrimary, margins(dp(20)));
 
-        help = text("", 13, MUTED);
-        col.addView(help);
+        help = text("", 14, TEXT);
+        help.setBackground(rounded(PANEL));
+        help.setPadding(dp(14), dp(12), dp(14), dp(12));
+        col.addView(help, margins(dp(8)));
 
-        status = text("", 14, Color.WHITE);
+        cmdView = text("", 12, GOLD);
+        cmdView.setTypeface(Typeface.MONOSPACE);
+        cmdView.setTextIsSelectable(true);
+        cmdView.setBackground(stroke(PANEL, PURPLE));
+        cmdView.setPadding(dp(12), dp(10), dp(12), dp(10));
+        col.addView(cmdView, margins(dp(8)));
+
+        status = text("", 14, TEXT);
         status.setPadding(0, dp(12), 0, 0);
         col.addView(status);
 
@@ -991,7 +1063,8 @@ public class MainActivity extends Activity {
                 break;
             case NEED_ENABLE:
                 primary = "Copiar comando y abrir Termux";
-                hint = "Solo una vez: en Termux mantén pulsado → Pegar → Enter. Al volver aquí se comprueba solo.";
+                hint = "Solo una vez. El comando de abajo ya está en pantalla: el botón lo copia y abre Termux. "
+                        + "Allí mantén pulsado → Pegar → Enter. Al volver, esta pantalla sigue sola.";
                 break;
             case NEED_INSTALL:
                 primary = !hasBundle() ? "Instalar desde el PC (Wi-Fi)"
@@ -1000,9 +1073,9 @@ public class MainActivity extends Activity {
                         + "al terminar vuelve aquí y arrancará solo.";
                 break;
             case NEED_UPDATE:
-                primary = "Actualizar a " + label(bundledVersion);
-                hint = "Instalada: " + label(installedVersion) + ". Actualizar conserva historial y live/; solo descarga "
-                        + "dependencias si cambiaron.";
+                primary = "Actualizar y abrir";
+                hint = "Un toque instala " + label(bundledVersion) + " (ahora " + label(installedVersion)
+                        + ") y abre la interfaz sola al terminar. No hace falta pegar el comando ni desinstalar.";
                 alt = "Abrir sin actualizar";
                 break;
             case COPYING:
@@ -1011,8 +1084,15 @@ public class MainActivity extends Activity {
                 enabled = false;
                 break;
             case INSTALLING:
-                primary = "Ver progreso en Termux";
-                hint = "La instalación sigue en Termux. Al terminar vuelve aquí: se comprobará y arrancará solo.";
+                if (openUiAfterInstall) {
+                    primary = "Actualizando…";
+                    hint = "Va en segundo plano. Cuando acabe, se abre la interfaz sin otro toque.";
+                    enabled = false;
+                    alt = "Ver progreso en Termux";
+                } else {
+                    primary = "Ver progreso en Termux";
+                    hint = "La instalación sigue en Termux. Al terminar vuelve aquí: se comprobará y arrancará solo.";
+                }
                 break;
             case INSTALL_FAILED:
                 primary = hasBundle() ? "Reintentar instalación" : "Reintentar desde el PC";
@@ -1046,6 +1126,10 @@ public class MainActivity extends Activity {
         btnPrimary.setEnabled(enabled);
         btnPrimary.setAlpha(enabled ? 1f : 0.6f);
         help.setText(detail.isEmpty() ? hint : detail + "\n" + hint);
+        help.setVisibility(detail.isEmpty() && hint.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean showCmd = state == State.NEED_ENABLE;
+        cmdView.setText(ENABLE_CMD);
+        cmdView.setVisibility(showCmd ? View.VISIBLE : View.GONE);
         help.setTextColor(state == State.INSTALL_FAILED || state == State.START_FAILED ? WARN : MUTED);
 
         boolean showLog = !log.isEmpty() && (state == State.INSTALL_FAILED || state == State.START_FAILED
@@ -1083,7 +1167,7 @@ public class MainActivity extends Activity {
 
     private void check(TextView t, boolean ok, String label) {
         t.setText((ok ? "✓ " : "○ ") + label);
-        t.setTextColor(ok ? OK_GREEN : Color.WHITE);
+        t.setTextColor(ok ? OK_GREEN : TEXT);
     }
 
     private static void show(View v, boolean visible) {
@@ -1095,6 +1179,8 @@ public class MainActivity extends Activity {
         b.setText(label);
         b.setAllCaps(false);
         b.setGravity(Gravity.CENTER);
+        b.setTextColor(TEXT);
+        b.setBackground(stroke(PANEL, PURPLE));
         b.setOnClickListener(onClick);
         col.addView(b, margins(dp(8)));
         return b;
@@ -1110,7 +1196,13 @@ public class MainActivity extends Activity {
     private GradientDrawable rounded(int color) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(color);
-        d.setCornerRadius(dp(10));
+        d.setCornerRadius(dp(12));
+        return d;
+    }
+
+    private GradientDrawable stroke(int fill, int border) {
+        GradientDrawable d = rounded(fill);
+        d.setStroke(dp(1), border);
         return d;
     }
 

@@ -13,7 +13,14 @@
 export interface NativeDownloader {
   /** Guarda en Descargas. Devuelve true si se escribió el archivo. */
   saveBase64(filename: string, mime: string, base64: string): boolean | string | undefined | null;
+  /** Guardado en trozos: el puente de Android no acepta un PNG grande de una sola vez. */
+  beginSave?(filename: string, mime: string): void;
+  appendBase64?(part: string): void;
+  finishSave?(): boolean | string | undefined | null;
 }
+
+/** Trozo de base64 que cabe en el puente (límite real ~1 MB). Múltiplo de 4. */
+const NATIVE_CHUNK = 256 * 1024;
 
 export interface DownloadResult {
   ok: boolean;
@@ -137,6 +144,24 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function bridgeChunks(bridge: NativeDownloader): boolean {
+  return typeof bridge.beginSave === 'function'
+    && typeof bridge.appendBase64 === 'function'
+    && typeof bridge.finishSave === 'function';
+}
+
+/** Un PNG de Yahoo o el póster no caben en una sola llamada al puente. */
+function saveNative(bridge: NativeDownloader, name: string, mime: string, base64: string): boolean | string | undefined | null {
+  if (bridgeChunks(bridge) && base64.length > NATIVE_CHUNK) {
+    bridge.beginSave!(name, mime);
+    for (let i = 0; i < base64.length; i += NATIVE_CHUNK) {
+      bridge.appendBase64!(base64.slice(i, i + NATIVE_CHUNK));
+    }
+    return bridge.finishSave!();
+  }
+  return bridge.saveBase64(name, mime || 'application/octet-stream', base64);
+}
+
 function browserSaveDom(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -169,7 +194,7 @@ export async function saveBlob(blob: Blob, filename: string, env: DownloadEnv = 
   try {
     if (bridge) {
       const base64 = await blobToBase64(blob);
-      const res = bridge.saveBase64(name, blob.type || 'application/octet-stream', base64);
+      const res = saveNative(bridge, name, blob.type || 'application/octet-stream', base64);
       const ok = res === true || res === 'true' || res === undefined;
       return ok
         ? { ok: true, via: 'native', filename: name, message: `${kind} guardada en Descargas` }

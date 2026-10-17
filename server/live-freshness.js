@@ -12,9 +12,16 @@ const CHART_MAX_LAG_MS = 5 * 60 * 1000;
  * PNG existente más reciente entre candidatos (string o array de nombres).
  * @returns {{ name: string, full: string, mtimeMs: number } | null}
  */
+/** El motor, si no puede reemplazar el PNG, lo deja como `nombre_new.png`. */
+function chartNameVariants(name) {
+  const ext = path.extname(name);
+  const stem = ext ? name.slice(0, -ext.length) : name;
+  return [name, `${stem}_new${ext || '.png'}`];
+}
+
 function pickLatestChart(liveDir, names) {
   let best = null;
-  for (const name of [names || []].flat()) {
+  for (const name of [names || []].flat().flatMap(chartNameVariants)) {
     const full = path.join(liveDir, name);
     let st;
     try {

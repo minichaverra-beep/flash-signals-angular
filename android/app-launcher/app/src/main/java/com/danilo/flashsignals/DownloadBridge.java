@@ -18,6 +18,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,8 +33,8 @@ import java.util.concurrent.Executors;
  * falta permiso de almacenamiento) y avisa con un Toast.
  *
  * <ul>
- *   <li>La página llama a {@code AndroidDownloader.saveBase64(nombre, mime, base64)} (ver
- *       src/app/shared/file-download.ts): es el camino normal para PNG/Excel/PDF generados en el cliente.</li>
+ *   <li>La página llama a {@code beginSave} + {@code appendBase64} + {@code finishSave} para PNG grandes
+ *       (el gráfico de Yahoo y el póster). Un solo {@code saveBase64} no cabe en el límite de 1 MB del puente.</li>
  *   <li>{@link #handle} es el DownloadListener del WebView: http(s) de la propia app (p. ej.
  *       {@code /api/...?download=1} con Content-Disposition: attachment), data: y blob:.</li>
  * </ul>
@@ -49,6 +50,11 @@ final class DownloadBridge {
     private final WebView web;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    /** PNG grande: la página lo manda en trozos porque el puente no acepta más de ~1 MB de una vez. */
+    private final Object chunkLock = new Object();
+    private String chunkName;
+    private String chunkMime;
+    private ByteArrayOutputStream chunkBuf;
 
     DownloadBridge(Activity activity, WebView web) {
         this.activity = activity;
@@ -61,7 +67,50 @@ final class DownloadBridge {
 
     // ---------------------------------------------------------------- API para JavaScript
 
-    /** Guarda en Descargas. Se ejecuta en un hilo de WebView (no el principal). */
+    /** Empieza un guardado en trozos. El siguiente es {@link #appendBase64}. */
+    @JavascriptInterface
+    public void beginSave(String filename, String mime) {
+        synchronized (chunkLock) {
+            chunkName = filename;
+            chunkMime = mime;
+            chunkBuf = new ByteArrayOutputStream();
+        }
+    }
+
+    /** Añade un trozo de base64 (sin prefijo data:). Cada trozo cabe en el puente. */
+    @JavascriptInterface
+    public void appendBase64(String part) throws IOException {
+        synchronized (chunkLock) {
+            if (chunkBuf == null) throw new IOException("guardado no iniciado");
+            if (part == null || part.isEmpty()) return;
+            byte[] data = Base64.decode(part, Base64.DEFAULT);
+            if ((long) chunkBuf.size() + data.length > MAX_BYTES) {
+                chunkBuf = null;
+                throw new IOException("archivo demasiado grande");
+            }
+            chunkBuf.write(data);
+        }
+    }
+
+    /** Cierra el guardado en trozos y escribe el archivo en Descargas. */
+    @JavascriptInterface
+    public boolean finishSave() {
+        synchronized (chunkLock) {
+            try {
+                if (chunkBuf == null) throw new IOException("guardado no iniciado");
+                byte[] data = chunkBuf.toByteArray();
+                String name = save(chunkName, chunkMime, new ByteArrayInputStream(data));
+                toast("Guardado en Descargas: " + name);
+                return true;
+            } catch (IOException | RuntimeException e) {
+                toast("No se pudo guardar: " + e.getMessage());
+                return false;
+            } finally {
+                chunkBuf = null;
+            }
+        }
+    }
+
     @JavascriptInterface
     public boolean saveBase64(String filename, String mime, String base64) {
         try {

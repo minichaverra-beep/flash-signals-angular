@@ -25,6 +25,16 @@ function formatEvent(event, data) {
 }
 
 /**
+ * El WebView del APK no entrega un SSE corto: lo deja en un buffer de ~4 KB.
+ * El relleno obliga a soltar el evento (snapshot, progreso y «terminó»).
+ */
+function paddedEvent(event, data) {
+  const body = formatEvent(event, data);
+  if (body.length >= 4096) return body;
+  return `${body}:${' '.repeat(4096)}\n\n`;
+}
+
+/**
  * @param {{ heartbeatMs?: number }} [opts]
  */
 function createJobEvents({ heartbeatMs = HEARTBEAT_MS } = {}) {
@@ -52,7 +62,7 @@ function createJobEvents({ heartbeatMs = HEARTBEAT_MS } = {}) {
   }
 
   function broadcast(event, data) {
-    const chunk = formatEvent(event, data);
+    const chunk = paddedEvent(event, data);
     for (const res of clients) write(res, chunk);
   }
 
@@ -66,7 +76,7 @@ function createJobEvents({ heartbeatMs = HEARTBEAT_MS } = {}) {
     res.flushHeaders?.();
     clients.add(res);
     write(res, `retry: ${RETRY_MS}\n\n`);
-    write(res, formatEvent(JOB_EVENTS.snapshot, snapshot));
+    write(res, paddedEvent(JOB_EVENTS.snapshot, snapshot));
     ensureHeartbeat();
     req.on('close', () => {
       clients.delete(res);

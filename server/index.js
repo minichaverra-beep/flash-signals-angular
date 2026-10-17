@@ -1205,7 +1205,7 @@ app.post('/api/signals/macd-quant/analyze', (req, res) => {
 
   const child = spawn(py, args, {
     cwd: TRADING_ROOT,
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    env: { ...process.env, ...mt5.brokerFeedEnv(), PYTHONIOENCODING: 'utf-8' },
     windowsHide: true,
     shell: false,
   });
@@ -1833,6 +1833,7 @@ async function sentWithExecutionTimes(historyId, market) {
   const sent = mt5Sent.get(profileId, key);
   if (!autoCapture.sentNeedsDeals(sent)) return sent;
   const settings = mt5Settings.get(profileId);
+  if (dataSource.isYahooOnly(settings)) return sent;
   const symbol = sent.symbol || settings.symbols?.[market];
   const fromMs = Date.parse(sent.at || '');
   if (!symbol || !Number.isFinite(fromMs)) return sent;
@@ -2462,7 +2463,9 @@ async function rerenderDetailChart(id, levels, sent, settings = mt5Settings.get(
     '-m', 'app.views.chart_rerender',
     '--chart', chartFull,
     '--entry', String(nums[0]), '--sl', String(nums[1]), '--tp', String(nums[2]),
-    '--note', `Reajustado con MT5 · ticket ${sent.order} · ${hhmm}`,
+    '--note', dataSource.isYahooOnly(settings)
+      ? `Reajustado · ${hhmm}`
+      : `Reajustado con MT5 · ticket ${sent.order} · ${hhmm}`,
     '--asset', asset,
     '--until', row.finishedAt || row.createdAt,
     '--decimals', String(CHART_DECIMALS[row.market]),

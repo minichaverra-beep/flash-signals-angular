@@ -77,6 +77,26 @@ describe('pushDuplicateOrder: exento de los límites diarios', () => {
     assert.equal(calls[0].max_daily_dd_pct, 4);
   });
 
+  it('en Android no pide capturas al puente aunque el ajuste diga mt5', async () => {
+    const prev = process.env.FS_DATA_SOURCE;
+    process.env.FS_DATA_SOURCE = 'yahoo';
+    let called = false;
+    globalThis.fetch = async () => {
+      called = true;
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+    try {
+      await assert.rejects(
+        () => pushOrder({ symbol: 'BTCUSDm', side: 'LONG' }, {}, { ...settings, dataSource: 'mt5' }),
+        /métricas salen solo de Yahoo/,
+      );
+      assert.equal(called, false);
+    } finally {
+      if (prev === undefined) delete process.env.FS_DATA_SOURCE;
+      else process.env.FS_DATA_SOURCE = prev;
+    }
+  });
+
   it('con MT5 desactivado no llama al puente', async () => {
     let called = false;
     globalThis.fetch = async () => {

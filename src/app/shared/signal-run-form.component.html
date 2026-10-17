@@ -67,6 +67,11 @@
     />
   </div>
 
+  <aside class="run-help">
+    <p class="run-help-kicker">Ayuda del runner</p>
+    <p>{{ runGuide }}</p>
+  </aside>
+
   <p class="msg" *ngIf="statusMessage" [class.err]="job?.status === 'error'" aria-live="polite">{{ statusMessage }}</p>
 </section>
 
