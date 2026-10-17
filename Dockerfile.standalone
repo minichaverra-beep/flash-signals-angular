@@ -15,16 +15,21 @@ COPY public ./public
 COPY src ./src
 RUN npx ng build --configuration=production
 
-FROM node:20-bookworm-slim AS runtime
+# Python 3.12: los .joblib se entrenaron con numpy 2.5, que no existe en 3.11.
+FROM python:3.12-slim-bookworm AS runtime
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip python3-venv ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  && python3 -m venv /opt/venv
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
-ENV PATH="/opt/venv/bin:${PATH}" \
-    PYTHON=/opt/venv/bin/python \
-    PYTHON_EXE=/opt/venv/bin/python \
+COPY --from=node:20-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:20-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+ENV PATH="/usr/local/bin:${PATH}" \
+    PYTHON=python \
+    PYTHON_EXE=python \
     MPLBACKEND=Agg \
     SIGNAL_RUNNER=bash \
     CURSOR_TRADING_ROOT=/trading \
