@@ -54,13 +54,14 @@ const {
   isChartStale,
   parseDataFreshness,
 } = require('./live-freshness');
+const { ensureTradingRoot } = require('./trading-source');
 
 const PORT = Number(process.env.PORT || 3847);
 /** Solo loopback: API local, no exponer a la LAN. */
 const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
-const TRADING_ROOT =
-  process.env.CURSOR_TRADING_ROOT ||
-  path.normalize(String.raw`D:\Danilo\Trading\Cursor Trading`);
+/** Se rellena al arrancar: caché bajada del endpoint, o una ruta explícita que no sea la carpeta local vieja. */
+let TRADING_ROOT = '';
+let tradingMeta = { source: 'pending', endpoint: null, sha: null, error: null };
 
 /** Contraseña para borrar filas / limpiar historial (modo lock). Local desk tool. */
 const HISTORY_UNLOCK_PASSWORD =
@@ -1028,6 +1029,10 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     tradingRoot: TRADING_ROOT,
     tradingRootExists: rootOk,
+    tradingSource: tradingMeta.source,
+    tradingEndpoint: tradingMeta.endpoint,
+    tradingSha: tradingMeta.sha,
+    tradingError: tradingMeta.error,
     jobStatus: currentJob.status,
     platform: process.platform,
     signalRunner: SIGNAL_RUNNER,
@@ -2872,16 +2877,24 @@ if (SERVE_WEB) {
 // Siempre último: errores de body-parser/rutas → JSON claro (incl. «Maximum call stack size exceeded»).
 app.use(jsonErrorHandler);
 
-void Promise.all([
-  historyStore.init(),
-  wikiStore.init(),
-  macdQuantStore.init(),
-  accountSettingsStore.init({ legacy: mt5Settings.get() }),
-])
+console.log('[trading] Cursor Trading se obtiene del endpoint (no de la carpeta local).');
+void ensureTradingRoot()
+  .then((info) => {
+    TRADING_ROOT = info.root;
+    tradingMeta = info;
+    if (info.error) console.warn(`[trading] ${info.source}: ${info.error}`);
+    return Promise.all([
+      historyStore.init(),
+      wikiStore.init(),
+      macdQuantStore.init(),
+      accountSettingsStore.init({ legacy: mt5Settings.get() }),
+    ]);
+  })
   .then(() => {
     app.listen(PORT, BIND_HOST, () => {
       console.log(`Flash Signals API → http://${BIND_HOST}:${PORT}`);
-      console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT}`);
+      console.log(`CURSOR_TRADING_ROOT = ${TRADING_ROOT} (${tradingMeta.source})`);
+      if (tradingMeta.endpoint) console.log(`Endpoint: ${tradingMeta.endpoint}`);
       console.log(`Existe: ${fs.existsSync(TRADING_ROOT)}`);
       console.log(`Runner señales: ${SIGNAL_RUNNER}`);
       console.log(dataSource.describeDataSource(mt5Settings.get()));

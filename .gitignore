@@ -63,6 +63,7 @@ data/mt5-settings.json
 data/mt5-sent.json
 # Secreto HMAC de tokens admin (auto-generado si no hay ADMIN_TOKEN_SECRET)
 data/admin-token-secret
+data/cursor-trading/
 
 # Temporales en Artifacts (versionar el resto: README y artefactos útiles)
 docs/Artifacts/**/*.tmp

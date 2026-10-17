@@ -103,17 +103,16 @@ if (-not (Test-Path -LiteralPath $serverModules)) {
   }
 }
 
-# Raíz del stack de señales (Cursor Trading)
-if (-not $env:CURSOR_TRADING_ROOT -or [string]::IsNullOrWhiteSpace($env:CURSOR_TRADING_ROOT)) {
-  $env:CURSOR_TRADING_ROOT = 'D:\Danilo\Trading\Cursor Trading'
-  Write-Host "CURSOR_TRADING_ROOT no estaba definido; usando default:" -ForegroundColor Yellow
-} else {
-  Write-Host "CURSOR_TRADING_ROOT (ya definido):" -ForegroundColor Green
+# El motor se baja al arrancar desde GitHub (flash-trading-signals).
+# No hace falta la carpeta D:\Danilo\Trading\Cursor Trading.
+if ($env:CURSOR_TRADING_ROOT -eq 'D:\Danilo\Trading\Cursor Trading' -and $env:CURSOR_TRADING_LOCAL -ne '1') {
+  Remove-Item Env:CURSOR_TRADING_ROOT
 }
-Write-Host "  $($env:CURSOR_TRADING_ROOT)"
-
-if (-not (Test-Path -LiteralPath $env:CURSOR_TRADING_ROOT)) {
-  Write-Warning "La ruta CURSOR_TRADING_ROOT no existe. La API arrancará, pero las señales fallarán al ejecutarse."
+if ($env:CURSOR_TRADING_ROOT) {
+  Write-Host "CURSOR_TRADING_ROOT (explícito): $($env:CURSOR_TRADING_ROOT)" -ForegroundColor Green
+} else {
+  Write-Host "Motor: endpoint GitHub flash-trading-signals (main)" -ForegroundColor Green
+  Write-Host "  caché en data\cursor-trading" -ForegroundColor DarkGray
 }
 
 if (-not $env:PORT -or [string]::IsNullOrWhiteSpace($env:PORT)) {

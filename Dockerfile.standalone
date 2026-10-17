@@ -3,7 +3,7 @@
 #
 # El workflow deja el motor en vendor/flash-trading-signals antes del build.
 # Local:
-#   git clone --depth 1 -b feature/android-mobile https://github.com/minichaverra-beep/flash-trading-signals.git vendor/flash-trading-signals
+#   git clone --depth 1 -b main https://github.com/minichaverra-beep/flash-trading-signals.git vendor/flash-trading-signals
 
 FROM node:20-bookworm-slim AS web
 
@@ -19,7 +19,7 @@ RUN npx ng build --configuration=production
 FROM python:3.12-slim-bookworm AS runtime
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates build-essential \
+  && apt-get install -y --no-install-recommends ca-certificates build-essential tar \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node:20-bookworm-slim /usr/local/bin/node /usr/local/bin/node
@@ -32,7 +32,8 @@ ENV PATH="/usr/local/bin:${PATH}" \
     PYTHON_EXE=python \
     MPLBACKEND=Agg \
     SIGNAL_RUNNER=bash \
-    CURSOR_TRADING_ROOT=/trading \
+    CURSOR_TRADING_CACHE=/data/cursor-trading \
+    CURSOR_TRADING_FALLBACK=/trading \
     SERVE_WEB=1 \
     WEB_DIST=/app/dist \
     BIND_HOST=0.0.0.0 \

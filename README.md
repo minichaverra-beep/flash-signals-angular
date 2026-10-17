@@ -20,7 +20,7 @@ UI local (Angular 19 + API Express) para orquestar señales **BTC / US30** del s
 - **npm**
 - **Python** del mismo entorno que usas con Cursor Trading (`requirements*.txt` del stack)
 - **PowerShell** (Windows)
-- Variable **`CURSOR_TRADING_ROOT`** apuntando a la raíz del repo trading (default abajo)
+- El motor **no** se lee de `D:\Danilo\Trading\Cursor Trading`. Al arrancar, la API lo descarga del endpoint de GitHub y lo guarda en `data\cursor-trading`.
 
 ### Sin Node/Angular: Docker
 
@@ -42,7 +42,8 @@ cd ..
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
-| `CURSOR_TRADING_ROOT` | `D:\Danilo\Trading\Cursor Trading` | Raíz del repo de señales |
+| `CURSOR_TRADING_ENDPOINT` | tarball de `flash-trading-signals` (`main`) | De dónde se baja todo el motor |
+| `CURSOR_TRADING_ROOT` | _(vacío)_ | Solo si quieres una copia local distinta. La carpeta `D:\Danilo\Trading\Cursor Trading` se ignora salvo `CURSOR_TRADING_LOCAL=1` |
 | `PORT` | `3847` | Puerto de la API |
 | `BIND_HOST` | `127.0.0.1` | Host de listen (solo loopback por defecto; Docker API usa `0.0.0.0`) |
 | `CORS_ORIGINS` | _(vacío)_ | Orígenes extra CSV para CORS (p.ej. `http://localhost:8080`) |
@@ -50,8 +51,9 @@ cd ..
 | `API_PORT` | `3847` | Puerto host del contenedor API |
 
 ```powershell
-$env:CURSOR_TRADING_ROOT = "D:\Danilo\Trading\Cursor Trading"
 $env:PORT = "3847"
+# opcional, otra copia:
+# $env:CURSOR_TRADING_ROOT = "E:\otro\flash-trading-signals"
 ```
 
 ## Calidad / SonarCloud
@@ -100,8 +102,7 @@ powershell -ExecutionPolicy Bypass -File .\run-api.ps1
 ### Manual / ambos a la vez
 
 ```powershell
-$env:CURSOR_TRADING_ROOT = "D:\Danilo\Trading\Cursor Trading"
-npm run api       # terminal 1
+npm run api       # terminal 1 — baja el motor del endpoint
 npm start         # terminal 2
 
 # opcional (concurrently):
@@ -174,7 +175,7 @@ docker run -d --name flash-signals -p 8080:8080 -v flash-data:/data ghcr.io/mini
 
 Abre http://localhost:8080. El historial queda en el volumen `flash-data`. Las señales corren dentro del contenedor (`SIGNAL_RUNNER=bash`). MT5 sigue siendo solo Windows.
 
-La publica `.github/workflows/publish-containers.yml` (push a `main` o `feature/android-mobile`, tag `v*`, o Actions a mano). La primera vez: **Packages** → `flash-signals` → **Package settings** → **Public**.
+La publica `.github/workflows/publish-containers.yml` (push a `main`, tag `v*`, o Actions a mano). La primera vez: **Packages** → `flash-signals` → **Package settings** → **Public**.
 
 ## Android (Termux + Ubuntu proot)
 

@@ -8,14 +8,14 @@ name: Publish containers
 
 on:
   push:
-    branches: [main, master, feature/android-mobile]
+    branches: [main, master]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       trading_ref:
         description: Rama de flash-trading-signals
         required: false
-        default: feature/android-mobile
+        default: main
 
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: minichaverra-beep/flash-trading-signals
-          ref: ${{ inputs.trading_ref || 'feature/android-mobile' }}
+          ref: ${{ inputs.trading_ref || 'main' }}
           path: app/vendor/flash-trading-signals
 
       - name: Set up Docker Buildx
@@ -57,7 +57,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/flash-signals
           tags: |
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/feature/android-mobile' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
