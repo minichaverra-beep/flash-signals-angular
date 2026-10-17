@@ -19,3 +19,9 @@ temp
 docs
 *.md
 !README.md
+vendor/flash-trading-signals/.git
+vendor/flash-trading-signals/live
+vendor/flash-trading-signals/tests
+vendor/flash-trading-signals/output
+vendor/flash-trading-signals/assets
+vendor/flash-trading-signals/**/__pycache__

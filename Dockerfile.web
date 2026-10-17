@@ -16,6 +16,10 @@ RUN npx ng build --configuration=production
 # Stage 2: sirve estáticos y proxy /api
 FROM nginx:1.27-alpine AS runtime
 
+LABEL org.opencontainers.image.source="https://github.com/minichaverra-beep/flash-signals-angular" \
+      org.opencontainers.image.description="Flash Signals — UI Angular" \
+      org.opencontainers.image.title="flash-signals-web"
+
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/flash-signals-angular/browser /usr/share/nginx/html
 

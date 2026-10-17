@@ -161,6 +161,21 @@ docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.api -t flas
 
 En `docker-compose.arm.yml` se fija `platform: linux/arm64` para los servicios.
 
+### Paquete en GitHub (Containers, gratis, sin clonar Cursor Trading)
+
+Registro: **Containers** (`ghcr.io`). El paquete público no se cobra y GitHub no lo suspende.
+
+La imagen `ghcr.io/minichaverra-beep/flash-signals` trae la UI, la API y el motor Python de [flash-trading-signals](https://github.com/minichaverra-beep/flash-trading-signals). No hace falta tener `Cursor Trading` en el disco.
+
+```powershell
+docker pull ghcr.io/minichaverra-beep/flash-signals:latest
+docker run -d --name flash-signals -p 8080:8080 -v flash-data:/data ghcr.io/minichaverra-beep/flash-signals:latest
+```
+
+Abre http://localhost:8080. El historial queda en el volumen `flash-data`. Las señales corren dentro del contenedor (`SIGNAL_RUNNER=bash`). MT5 sigue siendo solo Windows.
+
+La publica `.github/workflows/publish-containers.yml` (push a `main` o `feature/android-mobile`, tag `v*`, o Actions a mano). La primera vez: **Packages** → `flash-signals` → **Package settings** → **Public**.
+
 ## Android (Termux + Ubuntu proot)
 
 Corre API + UI + pipeline Python en el teléfono, sin servidor de pago. Las señales usan
