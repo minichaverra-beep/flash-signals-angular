@@ -13,11 +13,16 @@
   Uso interno: ejecuta la API en la consola actual (no vuelve a abrir otra ventana).
 .PARAMETER NoMt5
   No arranca el terminal MT5 ni los puentes.
+.PARAMETER DataSource
+  yahoo, mt5 o auto. Si se indica, fija FS_DATA_SOURCE solo en el proceso de
+  esta API. Sin el parámetro no se toca la variable (mismo comportamiento de siempre).
 #>
 [CmdletBinding()]
 param(
   [switch]$InWindow,
-  [switch]$NoMt5
+  [switch]$NoMt5,
+  [ValidateSet('yahoo', 'mt5', 'auto')]
+  [string]$DataSource
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,7 +39,11 @@ if (-not $InWindow) {
     $psExe = 'powershell.exe'
   }
   $argList = "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`" -InWindow"
+  if ($DataSource) { $argList += " -DataSource $DataSource" }
   Write-Host "Abriendo consola 'Flash Signals API' (puerto 3847)..." -ForegroundColor Cyan
+  if ($DataSource) {
+    Write-Host "FS_DATA_SOURCE=$DataSource en esa consola." -ForegroundColor Yellow
+  }
   Start-Process -FilePath $psExe -WorkingDirectory $ProjectRoot -ArgumentList $argList
 
   if (-not $NoMt5) {
@@ -119,8 +128,15 @@ if (-not $env:PORT -or [string]::IsNullOrWhiteSpace($env:PORT)) {
   $env:PORT = '3847'
 }
 
+if ($DataSource) {
+  $env:FS_DATA_SOURCE = $DataSource
+}
+
 Write-Host ""
 Write-Host "Arrancando API: npm run api  (http://localhost:$($env:PORT))" -ForegroundColor Green
+if ($DataSource) {
+  Write-Host "FS_DATA_SOURCE=$DataSource (forzado por -DataSource)." -ForegroundColor Yellow
+}
 Write-Host "Health: http://localhost:$($env:PORT)/api/health"
 Write-Host "Ctrl+C para detener."
 Write-Host ""

@@ -45,7 +45,7 @@ function marketOf(raw) {
   return market;
 }
 
-/** Modo solo Yahoo (Android): ATR con velas de Yahoo; sin ficha del símbolo ni saldo (eso es de MT5). */
+/** Modo sin MT5: ATR con Yahoo y, si falla, Binance/OKX/Stooq. Sin ficha del símbolo ni saldo. */
 async function yahooSnapshot(market, timeframe) {
   const key = `yahoo|${market}|${timeframe}`;
   const hit = snapshots.get(key);
@@ -57,7 +57,7 @@ async function yahooSnapshot(market, timeframe) {
     throw httpError(err.status || 502, err.message);
   }
   const atr = atrFromCandles(rates.rates, ATR_PERIOD);
-  if (!atr) throw httpError(422, `${rates.symbol}: Yahoo no devolvió velas suficientes para medir el movimiento`);
+  if (!atr) throw httpError(422, `${rates.sourceLabel || rates.symbol}: no hay velas suficientes para medir el movimiento`);
   const last = rates.rates.at(-1);
   const value = {
     symbol: rates.symbol,
@@ -69,7 +69,8 @@ async function yahooSnapshot(market, timeframe) {
     details: null,
     equity: null,
     currency: 'USD',
-    source: 'yahoo',
+    source: rates.source || 'yahoo',
+    sourceLabel: rates.sourceLabel || 'Yahoo',
   };
   snapshots.set(key, { at: Date.now(), value });
   return value;

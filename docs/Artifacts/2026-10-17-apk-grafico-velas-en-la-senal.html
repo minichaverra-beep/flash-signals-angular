@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gráfico de velas en la señal del APK · Flash Signals</title>
+  <meta name="description" content="Por qué la tarjeta de la señal en el APK salía sin velas, cómo se compone ahora en el servidor con entrada, SL y TP, y el orden Yahoo, Binance, OKX y Stooq cuando no hay MT5." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --fire: #ff8c00;
+      --gold: #ffd700;
+      --teal: #116d6e;
+      --ok: #3ecf8e;
+      --warn: #ffb020;
+      --err: #f07178;
+      --bg-deep: #1a1010;
+      --bg-elev: #2a1a1a;
+      --bg-card: #321e1e;
+      --bg-soft: #3a2626;
+      --stroke: color-mix(in srgb, var(--gold) 28%, transparent);
+      --text: #ffffff;
+      --muted: #d3d3d3;
+      --glow: 0 0 18px color-mix(in srgb, var(--fire) 45%, transparent);
+      --ok-dim: rgba(62, 207, 142, 0.14);
+      --err-dim: rgba(205, 24, 24, 0.16);
+      --warn-dim: rgba(255, 176, 32, 0.14);
+      --info-dim: rgba(17, 109, 110, 0.22);
+      --fire-dim: rgba(255, 140, 0, 0.14);
+      --radius: 12px;
+      --font: "Montserrat", "Segoe UI", system-ui, sans-serif;
+      --display: "Oswald", "Montserrat", sans-serif;
+      --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 480px at 8% -8%, color-mix(in srgb, var(--fire) 18%, transparent) 0%, transparent 55%),
+        radial-gradient(700px 420px at 92% 0%, color-mix(in srgb, var(--teal) 14%, transparent) 0%, transparent 50%),
+        linear-gradient(180deg, #120c0c 0%, var(--bg-deep) 45%, #1a1010 100%);
+    }
+    .shell { max-width: 1040px; margin: 0 auto; padding: 28px 22px 72px; }
+    .hero {
+      position: relative; overflow: hidden;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--fire) 10%, var(--bg-elev)) 0%, var(--bg-elev) 55%);
+      border: 1px solid var(--stroke); border-radius: 18px;
+      padding: 30px 30px 24px; margin-bottom: 18px; box-shadow: var(--glow);
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0 auto 0 0; width: 4px;
+      background: linear-gradient(180deg, var(--fire), var(--teal));
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 5px 11px; border-radius: 999px; border: 1px solid var(--stroke);
+      background: var(--bg-soft); color: var(--muted);
+    }
+    .chip.fire { color: var(--fire); border-color: color-mix(in srgb, var(--fire) 45%, transparent); background: var(--fire-dim); }
+    .chip.teal { color: #7ec8c9; border-color: color-mix(in srgb, var(--teal) 50%, transparent); background: var(--info-dim); }
+    .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: var(--ok-dim); }
+    .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-dim); }
+    h1 {
+      font-family: var(--display); font-size: clamp(1.45rem, 3.2vw, 2.05rem);
+      font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+      line-height: 1.15; margin-bottom: 10px;
+    }
+    h2 {
+      font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 14px; color: var(--gold);
+      display: flex; align-items: center; gap: 10px;
+    }
+    h3 { font-size: 0.95rem; margin: 16px 0 8px; color: #7ec8c9; }
+    p { margin-bottom: 10px; }
+    a { color: var(--fire); }
+    .hero-sub { color: var(--muted); font-size: 0.98rem; max-width: 72ch; }
+    .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+    .toc a {
+      font-size: 0.8rem; color: var(--muted); text-decoration: none;
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--stroke); background: var(--bg-elev);
+    }
+    .toc a:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+    section.card {
+      background: color-mix(in srgb, var(--bg-card) 85%, #1a1010);
+      border: 1px solid var(--stroke); border-radius: 16px;
+      padding: 22px 24px; margin-bottom: 16px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+    ul, ol { margin: 0 0 12px 1.3rem; }
+    li { margin-bottom: 6px; }
+    code {
+      font-family: var(--mono); font-size: 0.85em;
+      color: color-mix(in srgb, var(--gold) 60%, white);
+      background: rgba(0, 0, 0, 0.3); padding: 1px 6px; border-radius: 5px;
+    }
+    .code {
+      position: relative; margin: 10px 0 14px;
+      background: #0e0808; border: 1px solid var(--stroke); border-radius: var(--radius);
+    }
+    .code-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; border-bottom: 1px solid var(--stroke);
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    }
+    .code pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; color: #f3e6d0;
+    }
+    .copy {
+      font: inherit; font-size: 0.7rem; cursor: pointer;
+      color: var(--gold); background: transparent;
+      border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+      border-radius: 6px; padding: 2px 8px;
+    }
+    .copy:hover { background: rgba(255, 215, 0, 0.1); }
+    .note {
+      border-radius: var(--radius); padding: 12px 14px; margin: 12px 0;
+      border: 1px solid var(--stroke); background: var(--info-dim); font-size: 0.92rem;
+    }
+    .note.ok { background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+    .note.warn { background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+    .note.err { background: var(--err-dim); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+    .note strong:first-child { display: block; margin-bottom: 4px; }
+    .flow {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0 4px;
+    }
+    .flow div {
+      position: relative; padding: 12px; border-radius: var(--radius);
+      border: 1px solid var(--stroke); background: var(--bg-elev); font-size: 0.85rem;
+    }
+    .flow strong { display: block; color: var(--gold); font-size: 0.9rem; }
+    .flow small { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 8px 0 12px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--stroke); vertical-align: top; }
+    th { color: var(--gold); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .table-wrap { overflow-x: auto; }
+    .check { list-style: none; margin-left: 0; }
+    .check li { padding-left: 1.7rem; position: relative; }
+    .check li::before {
+      content: ""; position: absolute; left: 0; top: 0.3rem; width: 1rem; height: 1rem;
+      border: 2px solid var(--ok); border-radius: 4px;
+    }
+    footer { margin-top: 24px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="chips">
+        <span class="chip fire">APK Android</span>
+        <span class="chip teal">Sin MT5</span>
+        <span class="chip ok">Velas + entrada / SL / TP</span>
+        <span class="chip warn">2026-10-17</span>
+      </div>
+      <h1>El gráfico de velas en la imagen de la señal</h1>
+      <p class="hero-sub">
+        En el escritorio la ficha de la señal muestra las velas con la entrada, el SL y el TP.
+        En el APK esa misma ficha salía vacía, y la descarga también. Esta nota guarda la causa,
+        el arreglo y cómo llevarlo al teléfono.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Contenido">
+      <a href="#sintoma">Síntoma</a>
+      <a href="#causa">Causa</a>
+      <a href="#arreglo">Arreglo</a>
+      <a href="#fuentes">Fuentes de velas</a>
+      <a href="#telefono">Llevarlo al teléfono</a>
+      <a href="#probar">Probar en el PC</a>
+      <a href="#si-falla">Si sigue sin gráfico</a>
+    </nav>
+
+    <section class="card" id="sintoma">
+      <h2>Síntoma</h2>
+      <p>
+        Al ejecutar una señal en el APK, la tarjeta (precio, tendencia, probabilidad, banner
+        «Esperar», barras, riesgo, niveles y escenarios) se ve, pero <strong>falta el gráfico de velas</strong>.
+        La imagen descargada es esa misma tarjeta recortada: tampoco trae velas, entrada, SL ni TP.
+        En el escritorio el gráfico sí aparece.
+      </p>
+      <div class="note err">
+        <strong>Sin precio ni velas la señal no sirve</strong>
+        El gráfico tiene que generarse en la misma corrida, antes de pintar la tarjeta.
+        Si Yahoo no devuelve cotización ni velas, se prueba otra fuente gratuita.
+      </div>
+    </section>
+
+    <section class="card" id="causa">
+      <h2>Causa</h2>
+      <ul>
+        <li>La tarjeta del navegador es un canvas de Angular (<code>signal-share-card</code>). Pega encima el PNG de velas que escribe Python.</li>
+        <li>Si esa imagen no carga (el Python del teléfono no escribió el PNG, el WebView no la decodifica, o la URL llega vacía), el canvas <strong>omitía el bloque en silencio</strong>. La descarga era ese canvas.</li>
+        <li>El teléfono corre su propia copia del motor. Si el paquete era anterior al respaldo de velas, Yahoo fallaba en el móvil y no había PNG.</li>
+        <li><code>pack-for-android.ps1</code> podía pisar el motor local con la copia de GitHub cuando <code>main</code> iba por delante.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="arreglo">
+      <h2>Arreglo</h2>
+      <div class="flow">
+        <div><strong>1 · Velas</strong><small>Yahoo, y si falla Binance, OKX o Stooq. Sin MT5 en el APK.</small></div>
+        <div><strong>2 · PNG</strong><small>Python dibuja velas, entrada, SL y TP en la misma corrida.</small></div>
+        <div><strong>3 · Tarjeta</strong><small>El servidor compone la ficha completa con ese PNG.</small></div>
+        <div><strong>4 · Descarga</strong><small>En el APK se guarda la tarjeta del servidor, no el canvas vacío.</small></div>
+      </div>
+      <h3>Rutas</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Ruta</th><th>Para qué</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /api/signals/chart?market=btc&amp;v=…</code></td><td>PNG de velas de la corrida. Misma origen que el WebView (<code>127.0.0.1:3847</code>).</td></tr>
+            <tr><td><code>POST /api/signals/card</code></td><td>Compone la ficha y responde <code>cardUrl</code>, <code>chart</code> y <code>chartError</code>.</td></tr>
+            <tr><td><code>GET /api/signals/card?market=btc&amp;download=1</code></td><td>Descarga <code>senal-btc.png</code> con las velas incluidas.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        El precio de la ficha es el cierre de la última vela de la fuente que respondió.
+        Si ninguna responde, el registro de la corrida guarda <code>chartError</code> y la tarjeta muestra un aviso ámbar con el motivo.
+        Ya no se entrega una imagen “correcta” a la que solo le falta el gráfico.
+      </p>
+      <div class="note ok">
+        <strong>Comprobado en el PC</strong>
+        Con Yahoo y sin MT5 se escribió el PNG de BTC. Con Yahoo simulado en fallo, las velas salieron de Binance y el gráfico se escribió igual.
+        <code>GET /api/signals/card?market=btc&amp;download=1</code> respondió <code>image/png</code>.
+      </div>
+    </section>
+
+    <section class="card" id="fuentes">
+      <h2>Fuentes de velas sin MT5</h2>
+      <p>
+        <code>FS_DATA_SOURCE=yahoo</code> (lo exporta <code>android/start.sh</code> y <code>.\run-apk-web.ps1</code>) no abre el puente.
+        Cada petición corta a unos 10 segundos. El log nombra la fuente real, por ejemplo «Binance (Yahoo falló)».
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mercado</th><th>Orden si Yahoo falla</th></tr></thead>
+          <tbody>
+            <tr><td>BTC</td><td>Binance <code>BTCUSDT</code>, OKX <code>BTC-USDT</code>, Stooq <code>btcusd</code>, Coinbase</td></tr>
+            <tr><td>Oro (XAUUSD)</td><td>Binance futuros <code>XAUUSDT</code>, OKX <code>XAU-USDT-SWAP</code>, Stooq <code>xauusd</code></td></tr>
+            <tr><td>Dow (US30)</td><td>Binance y OKX se omiten: no listan el Dow. Sigue Stooq <code>^dji</code>. Nunca se usan velas de BTC.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note warn">
+        <strong>US30</strong>
+        Desde algunas redes Stooq pide verificación de navegador y no deja velas. Si pasa, el aviso de la tarjeta lo dice. En el escritorio con el puente, MT5 sigue siendo la primera fuente.
+      </div>
+    </section>
+
+    <section class="card" id="telefono">
+      <h2>Llevarlo al teléfono</h2>
+      <p>Un solo comando empaqueta la web, el servidor y el motor Python, compila el APK e intenta instalarlo. La API del PC tiene que estar detenida.</p>
+      <div class="code">
+        <div class="code-head">PowerShell · flash-signals-angular<button class="copy" type="button">Copiar</button></div>
+        <pre>.\android\release-android.ps1</pre>
+      </div>
+      <ul>
+        <li><code>[1/3]</code> empaqueta. Si el motor local (<code>data\cursor-trading</code>) tiene <code>.py</code> más nuevos que la copia de GitHub, usa esos archivos y no los pisa.</li>
+        <li><code>[2/3]</code> compila el APK con el paquete dentro.</li>
+        <li><code>[3/3]</code> lo instala por adb si el teléfono está conectado.</li>
+      </ul>
+      <p>Después, en Termux: Detener y luego Iniciar. Lanza la señal con ilustración (<code>-Ilustrate</code>).</p>
+      <div class="note">
+        <strong>El motor Python no va en git</strong>
+        Vive en <code>data/cursor-trading</code>, que está ignorado. El paquete del teléfono es el que lo lleva.
+        <code>-SkipPack</code> reutiliza el último paquete. <code>-RefreshEngine</code> fuerza la descarga desde GitHub.
+      </div>
+    </section>
+
+    <section class="card" id="probar">
+      <h2>Probar en el PC como si fuera el APK</h2>
+      <div class="code">
+        <div class="code-head">PowerShell<button class="copy" type="button">Copiar</button></div>
+        <pre>.\run-apk-web.ps1</pre>
+      </div>
+      <p>
+        Arranca la API en el puerto 3847 y Angular en <code>http://localhost:4400</code> con
+        <code>FS_DATA_SOURCE=yahoo</code>. No abre MetaTrader ni los puentes 8765 y 8766.
+        Las descargas en el navegador van a la carpeta del PC; la carpeta Descargas de Android solo existe dentro del APK.
+      </p>
+    </section>
+
+    <section class="card" id="si-falla">
+      <h2>Si sigue sin gráfico</h2>
+      <ul class="check">
+        <li>Mira el aviso ámbar bajo la tarjeta. Ahí está el motivo (<code>chartError</code>).</li>
+        <li>En el registro de la corrida busca <code>[datos]</code>, <code>ERROR chart</code> o <code>La tarjeta queda sin gráfico</code>.</li>
+        <li>Confirma que el paquete impreso por el script dice que usó la caché local con los archivos editados, y que no faltan <code>free_candles.py</code>, <code>mpl_safe.py</code> ni <code>signal_card.py</code>.</li>
+        <li>Reinicia el servidor de Termux después de instalar el paquete nuevo.</li>
+      </ul>
+      <div class="note warn">
+        <strong>Al arrancar la API del PC</strong>
+        <code>server/trading-source.js</code> puede volver a bajar GitHub y pisar <code>data/cursor-trading</code> si <code>main</code> del motor va por delante.
+        Para que no se pierda el respaldo de velas, esos cambios del motor tienen que estar publicados en el repo del motor.
+      </div>
+    </section>
+
+    <footer>Flash Signals · fuego y sombra · Danilo Chaverra · Gráfico de velas en la señal del APK · 2026-10-17</footer>
+  </main>
+  <script>
+    document.querySelectorAll('.copy').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const pre = btn.closest('.code').querySelector('pre');
+        try {
+          await navigator.clipboard.writeText(pre.innerText);
+          btn.textContent = 'Copiado';
+        } catch {
+          btn.textContent = 'Selecciona y copia';
+        }
+        setTimeout(() => (btn.textContent = 'Copiar'), 1600);
+      });
+    });
+  </script>
+</body>
+</html>

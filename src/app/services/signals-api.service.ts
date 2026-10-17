@@ -172,6 +172,12 @@ export interface JobStatus {
   logs: string[];
   error?: string | null;
   reportPath?: string | null;
+  /** PNG de esta corrida. Relativo (`/api/signals/chart?...`) para el WebView en 127.0.0.1:3847. */
+  chartPath?: string | null;
+  chartUrl?: string | null;
+  chartStale?: boolean;
+  /** Motivo (español) por el que la corrida no dejó PNG de entrada. Null si hay chartUrl. */
+  chartError?: string | null;
   summary?: SignalSummary | null;
   chartName?: string;
   /** id en hive box de señales (pipeline high/light/…) */
@@ -191,9 +197,22 @@ export interface LatestResponse {
   chartMtime?: string | null;
   /** PNG de una corrida anterior al reporte: la API no lo expone en chartUrl. */
   chartStale?: boolean;
+  /** Motivo (español) si no hay chartUrl. */
+  chartError?: string | null;
   mtime: string;
   summary: SignalSummary | null;
   preview: string;
+}
+
+/** POST /api/signals/card: tarjeta compuesta en el servidor (Python/Pillow) con el PNG de live/. */
+export interface SignalCardResponse {
+  ok: boolean;
+  /** `/api/signals/card?market=btc&v=<mtime>` (same-origin; `&download=1` para descargar). */
+  cardUrl: string;
+  /** true si el PNG de entrada quedó dentro de la tarjeta. */
+  chart: boolean;
+  chartError?: string | null;
+  posterSaved?: boolean;
 }
 
 export interface Mt5PushRequest {
@@ -687,6 +706,16 @@ export class SignalsApiService {
       `${this.base}/signals/latest`,
       { params: { market, tier } }
     );
+  }
+
+  /** Compone la tarjeta en el servidor con el modelo ya calculado (misma imagen en PC y APK). */
+  composeSignalCard(body: {
+    market: Market;
+    card: unknown;
+    includeChart?: boolean;
+    historyId?: number | null;
+  }): Observable<SignalCardResponse> {
+    return this.http.post<SignalCardResponse>(`${this.base}/signals/card`, body);
   }
 
   zentinel(market: Market): Observable<Record<string, unknown>> {

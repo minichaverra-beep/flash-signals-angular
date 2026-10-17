@@ -1,7 +1,8 @@
 /**
- * Velas OHLC de Yahoo Finance (chart API) para el modo «solo Yahoo» (Android, sin MT5):
- * ATR/volatilidad en el servidor sin pasar por el puente. Misma forma que `mt5.marketRates`:
- * { symbol, timeframe, bid, ask, tickTime, rates: [{ time, open, high, low, close }] }.
+ * Velas OHLC para el modo sin MT5 (FS_DATA_SOURCE=yahoo).
+ * Primero Yahoo chart (query1 y, si ningún ticker responde, query2). Si falla:
+ * Binance → OKX → Stooq (`candle-fallback.js`). El VIX no pasa por aquí.
+ * Misma forma que `mt5.marketRates`.
  */
 const TICKERS = {
   btc: ['BTC-USD'],
@@ -14,8 +15,8 @@ const FRAMES = {
 };
 const TIMEOUT_MS = 10_000;
 
-function url(ticker, { interval, range }) {
-  return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`;
+function chartUrl(ticker, { interval, range }, host) {
+  return `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${interval}&range=${range}`;
 }
 
 /** Respuesta de la chart API → velas completas (descarta huecos con null). */
@@ -41,26 +42,29 @@ async function marketRates({ market, timeframe = 'M5', count = 120 }, { fetchImp
   const frame = FRAMES[String(timeframe).toUpperCase()];
   if (!tickers || !frame) throw new Error(`Yahoo: mercado/marco no soportado (${market}/${timeframe})`);
   const failures = [];
-  for (const ticker of tickers) {
-    try {
-      const res = await fetchImpl(url(ticker, frame), {
-        headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { rates, lastPrice, tickTime } = parseChart(await res.json());
-      if (!rates.length) throw new Error('sin velas');
-      return {
-        symbol: ticker, timeframe: String(timeframe).toUpperCase(), bid: lastPrice, ask: lastPrice,
-        tickTime, rates: rates.slice(-count), source: 'yahoo',
-      };
-    } catch (err) {
-      failures.push(`${ticker}: ${err?.message || err}`);
+  for (const host of ['query1', 'query2']) {
+    for (const ticker of tickers) {
+      try {
+        const res = await fetchImpl(chartUrl(ticker, frame, host), {
+          headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { rates, lastPrice, tickTime } = parseChart(await res.json());
+        if (!rates.length) throw new Error('sin velas');
+        return {
+          symbol: ticker, timeframe: String(timeframe).toUpperCase(), bid: lastPrice, ask: lastPrice,
+          tickTime, rates: rates.slice(-count), source: 'yahoo', sourceLabel: 'Yahoo',
+        };
+      } catch (err) {
+        failures.push(`${ticker}: ${err?.message || err} (${host})`);
+      }
     }
   }
-  const err = new Error(`Yahoo no devolvió velas (${failures.join('; ')})`);
-  err.status = 502;
-  throw err;
+  const { fallbackAfterYahoo } = require('./candle-fallback');
+  return fallbackAfterYahoo({
+    market, timeframe: String(timeframe).toUpperCase(), count, failures, fetchImpl,
+  });
 }
 
-module.exports = { TICKERS, FRAMES, parseChart, marketRates };
+module.exports = { TICKERS, FRAMES, parseChart, marketRates, chartUrl };

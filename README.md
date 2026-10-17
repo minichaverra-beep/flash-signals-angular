@@ -182,15 +182,29 @@ La publica `.github/workflows/publish-containers.yml` (push a `main`, tag `v*`, 
 Corre API + UI + pipeline Python en el teléfono, sin servidor de pago. Las señales usan
 `Cursor Trading/scripts/analyze/analyze.sh` (equivalente bash de los `.ps1`). MT5 no está disponible (solo Windows).
 
-1. **PC** (con la API detenida): `.\android\pack-for-android.ps1` → genera `android\out\flash-android.tar.gz` y `termux-install.sh`.
+**Un solo comando (recomendado), con la API detenida:**
+
+```powershell
+.\android\release-android.ps1
+```
+
+Hace todo en orden: `[1/3]` empaqueta web + servidor + motor Python (llama a `pack-for-android.ps1` → `android\out\flash-android.tar.gz`,
+`termux-install.sh`, `VERSION`), `[2/3]` compila `FlashSignals.apk` con ese paquete embebido (`build-apk.ps1`, requiere `ANDROID_HOME`),
+`[3/3]` lo instala y abre la app si hay un teléfono por adb. Si el empaquetado falla, se detiene ahí. Opciones: `-SkipPack` (reutiliza el
+último paquete, sin reempaquetar), `-SkipBuild` (no recompila Angular), `-NoApk -Serve` (solo paquete nuevo y actualizar por Wi-Fi),
+`-TradingRoot <ruta>` (motor local). Guía corta: [`android/INSTALAR.md`](android/INSTALAR.md).
+Ya no hace falta ejecutar `pack-for-android.ps1` aparte; `build-apk.ps1` genera solo el APK (también empaqueta salvo `-SkipPack`).
+
+Instalación manual sin APK (Termux a pelo):
+
+1. **PC**: `.\android\pack-for-android.ps1` → genera `android\out\flash-android.tar.gz` y `termux-install.sh`.
+   El motor Python sale de `data\cursor-trading` (la caché que usa la API). Si tiene ediciones locales más nuevas que `.source-sha`
+   se empaqueta tal cual y no se baja GitHub (eso las pisaría); `-RefreshEngine` fuerza la descarga. El script falla si al paquete
+   le faltan `free_candles.py`, `mpl_safe.py`, `signal_card.py`, `server/signal-card.js` o el `dist/`.
 2. Copia ambos por USB a `Download/` del teléfono.
 3. Instala **Termux** desde F-Droid o GitHub (no Play Store) y ejecuta:
    `bash /sdcard/Download/termux-install.sh` (requiere internet la primera vez: apt, pip, npm).
 4. Arranca con `~/flash-start.sh` y abre `http://localhost:3847`.
-
-**APK (recomendado):** `.\android\release-android.ps1` (build + paquete + APK + instalación por adb; `-NoApk -Serve`
-para actualizar por Wi-Fi). Guía corta: [`android/INSTALAR.md`](android/INSTALAR.md).
-`.\android\build-apk.ps1` genera solo `android\out\FlashSignals.apk` con el paquete embebido.
 La app instala vía Termux (`RUN_COMMAND`), arranca el servidor y muestra la UI en un WebView. Requiere Termux (F-Droid) y,
 una vez, pegar en Termux `allow-external-apps = true` (la app copia el comando). Guía: `docs/Artifacts/2026-10-08-android-instalacion-termux.html`.
 
@@ -210,9 +224,9 @@ En Android 14+ activa *Opciones de desarrollador → Desactivar restricciones de
 |----------|-----|
 | `SIGNAL_RUNNER` | `powershell` (default Windows) · `bash` (Android/Linux) · `none` (default resto: 503 en `/run`) |
 | `SERVE_WEB=1` | La API sirve `dist/` en el mismo puerto (sin `ng serve`) |
-| `FS_DATA_SOURCE` | `yahoo` · `mt5` · `auto`. `android/start.sh` fija `yahoo` (no hereda otro valor): **en el APK no hay MT5**, así que gráficos, capturas de resultado (WIN/LOSS), tendencia H1, ATR y VIX usan solo velas de Yahoo (BTC-USD, YM=F/^DJI, GC=F) y ni se intenta el puente. Android/Termux y la cabecera `X-FS-Client: small` resuelven siempre a Yahoo aunque el ajuste diga `mt5` |
+| `FS_DATA_SOURCE` | `yahoo` · `mt5` · `auto`. `android/start.sh` fija `yahoo` (no hereda otro valor): **en el APK no hay MT5**. Gráficos, capturas, tendencia H1 y ATR piden primero Yahoo (BTC-USD, YM=F/^DJI, GC=F). Si Yahoo falla (error, vacío o timeout): Binance → OKX → Stooq, sin puente. BTC: `BTCUSDT` y `BTC-USDT`. Oro: futuros `XAUUSDT` y swap `XAU-USDT-SWAP` (el spot `XAU-USDT` no existe). US30 no está en Binance ni en OKX; el respaldo es Stooq `^dji` y, al final, Gate.io. VIX no usa esta cadena. Android/Termux y `X-FS-Client: small` siguen en este modo aunque el ajuste diga `mt5` |
 
-**Fuente de datos (`/configuracion` → «Fuente de datos para gráficos», solo admin; `dataSource` en `data/mt5-settings.json`):** defecto **Solo Yahoo**. El admin puede elegir *Solo Yahoo* o *MT5* (el escritorio de un admin usa el puente si elige MT5). El APK y la pantalla pequeña siguen en Yahoo. Sin sesión admin, gráficos y capturas usan Yahoo aunque el JSON guardado diga `mt5`. Con Yahoo solo, `brokerFeedEnv()` no pasa `FS_MT5_*` a Python (`FS_DATA_SOURCE=yahoo`) y el log del job indica la fuente (`[datos] Fuente: …`). El cálculo de lotes de la calculadora de volatilidad sigue necesitando MT5 (ficha del símbolo).
+**Fuente de datos (`/configuracion` → «Fuente de datos para gráficos», solo admin; `dataSource` en `data/mt5-settings.json`):** defecto **Solo Yahoo**. El admin puede elegir *Solo Yahoo* o *MT5* (el escritorio de un admin usa el puente si elige MT5). El APK y la pantalla pequeña siguen en el modo Yahoo (sin MT5). Sin sesión admin, gráficos y capturas usan ese modo aunque el JSON guardado diga `mt5`. Con `FS_DATA_SOURCE=yahoo`, `brokerFeedEnv()` no pasa `FS_MT5_*` a Python. Si Yahoo no devuelve velas, el orden de respaldo es **Yahoo → Binance → OKX → Stooq** (US30 se salta los cripto y va a Stooq). El rótulo del gráfico dice la fuente real, por ejemplo «Binance (Yahoo falló)». El log del job indica el modo (`[datos] Fuente: …`). El cálculo de lotes de la calculadora de volatilidad sigue necesitando MT5 (ficha del símbolo). El VIX no cambia de fuente.
 
 ## Contexto para agentes (Cursor / Claude)
 
@@ -291,6 +305,8 @@ Cómo añadir: copia el archivo a `docs/Artifacts` (o subcarpeta) → abre `/wik
 | `GET` | `/api/signals/status` | Job actual (logs / done / error) |
 | `GET` | `/api/signals/latest?market=btc&tier=high` | Último `.md` parseado en `live/` |
 | `GET` | `/api/signals/chart?market=btc` | PNG anotado (`btc_m5_chart_annotated.png` / US30) |
+| `POST` | `/api/signals/card` | Tarjeta (póster) compuesta en el servidor con Python/Pillow (`app/views/signal_card.py`) a partir del modelo que manda la UI + el PNG de `live/`. Devuelve `{ cardUrl, chart, chartError }`; con `historyId` queda como póster de esa fila |
+| `GET` | `/api/signals/card?market=btc[&download=1]` | Última tarjeta compuesta (misma imagen en PC y APK; el APK descarga esta). `latest`/job exponen `chartError` cuando falta el PNG |
 | `GET` | `/api/zentinel?market=btc` | Resumen de presets Zentinel locales |
 | `GET` | `/api/history` | Historial local (SQLite) |
 | `GET` | `/api/history/:id` | Detalle de una entrada |
@@ -335,10 +351,13 @@ Envía el **Plan concreto** de una señal `ENTRAR` (Entry / SL / TP) al terminal
 
 **Operación manual** (solo API, `POST /api/mt5/manual`): dirección, tipo (mercado / limit / stop), entrada, SL/TP opcionales y lotes (o riesgo % si hay SL). Ignora los chequeos de señal; token, bloqueo de cuenta REAL y Algo Trading siguen aplicando.
 
+`.\run-apk-web.ps1` arranca la misma API y la misma UI (`http://localhost:4400`) que `run-both.ps1`, con `run-api.ps1 -NoMt5 -DataSource yahoo`. Así `FS_DATA_SOURCE=yahoo` obliga a gráficos y capturas por Yahoo, sin `FS_MT5_*` y sin abrir `terminal64.exe` ni los puentes. Si el puerto 3847 o 4400 ya escucha, no abre otra ventana ni reinicia ese proceso. Las descargas siguen siendo las del navegador; `AndroidDownloader` solo existe dentro del APK.
+
 `run-api.ps1` y `run-both.ps1` preparan MT5 automáticamente: abren el terminal MetaTrader 5 si no está abierto, instalan la librería `MetaTrader5` si falta y lanzan el puente de Conf principal (y el de Conf secundaria si `MT5_TERMINAL_PATH_SECUNDARIA` está definido). Un puente que ya escucha no se duplica. `-NoMt5` lo omite. Solo falta activar **Algo Trading** en el terminal.
 
 ```powershell
 .\run-both.ps1                            # API + web + terminal MT5 + puente(s)
+.\run-apk-web.ps1                         # misma web, simulando el APK: Yahoo, sin MT5
 .\run-api.ps1 -NoMt5                      # solo la API
 # Manual:
 .\run-mt5-bridge.ps1                      # Conf principal: http://127.0.0.1:8765 (MT5_BRIDGE_TOKEN)
@@ -409,8 +428,9 @@ flash-signals-angular/
   server/db/                  # Hive box: schema + history-store (SQLite)
   data/                       # signals-history.sqlite (gitignored)
   proxy.conf.json             # /api → :3847
-  run-api.ps1                 # Arranca API (host)
+  run-api.ps1                 # Arranca API (host); -DataSource yahoo|mt5|auto
   run-local-web.ps1           # Arranca Angular (:4400)
+  run-apk-web.ps1             # Simula el APK en la web: Yahoo, sin MT5
   .vscode/                    # launch.json + tasks.json (F5 / hot reload)
   run-docker.ps1              # UI(+API) vía Docker
   run-docker-arm.ps1          # Docker ARM64

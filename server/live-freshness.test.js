@@ -10,6 +10,7 @@ const {
   CHART_MAX_LAG_MS,
   pickLatestChart,
   isChartStale,
+  chartFields,
   parseDataFreshness,
 } = require('./live-freshness');
 
@@ -52,6 +53,33 @@ describe('isChartStale', () => {
     assert.equal(isChartStale(report - CHART_MAX_LAG_MS + 1000, report), false);
     assert.equal(isChartStale(report + 1000, report), false);
     assert.equal(isChartStale(null, report), false);
+  });
+});
+
+describe('chartFields', () => {
+  const chart = { full: 'D:\\live\\btc_m5_chart_annotated.png', mtimeMs: 1_700_000_000_000 };
+
+  it('expone una URL relativa del mismo origen', () => {
+    const info = chartFields('btc', chart, chart.mtimeMs, chart.mtimeMs);
+    assert.equal(info.chartStale, false);
+    assert.equal(info.chartUrl, '/api/signals/chart?market=btc&v=1700000000000');
+    assert.equal(info.chartPath, chart.full);
+  });
+
+  it('un PNG escrito en esta corrida no se oculta aunque el reporte quede después', () => {
+    const started = chart.mtimeMs - 1000;
+    const report = chart.mtimeMs + 10 * 60 * 1000;
+    const info = chartFields('btc', chart, report, started);
+    assert.equal(info.chartStale, false);
+    assert.match(info.chartUrl, /^\/api\/signals\/chart\?market=btc&v=/);
+  });
+
+  it('un PNG de otra corrida no se sirve', () => {
+    const report = chart.mtimeMs + 10 * 60 * 1000;
+    const info = chartFields('btc', chart, report, report);
+    assert.equal(info.chartStale, true);
+    assert.equal(info.chartUrl, null);
+    assert.equal(info.chartPath, null);
   });
 });
 

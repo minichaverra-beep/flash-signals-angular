@@ -19,6 +19,8 @@ import {
   type ShareCardModel,
 } from './signal-share-card.model';
 import { renderSharePoster } from './signal-share-poster';
+import { loadChartImage, type ChartImageLoad } from './chart-image';
+import { isWebViewUa } from './file-download';
 
 /** Póster de la corrida terminada, descarga PNG y modal para compartir. */
 @Component({
@@ -41,7 +43,15 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
   note = '';
   shareOpen = false;
   savedPosterUrl: string | null = null;
+  /** Aviso en español cuando la tarjeta no lleva el gráfico de velas (y por qué). */
+  chartWarning: string | null = null;
 
+  /** true si el último pintado del canvas incluyó el PNG de velas. */
+  private chartDrawn = false;
+  /** Tarjeta compuesta por el servidor (misma imagen en PC y APK), si ya se pidió. */
+  private serverCardUrl: string | null = null;
+  private serverCardKey = '';
+  private serverCardTask: Promise<string | null> | null = null;
   private paintedKey = '';
   private paintToken = 0;
   private paintTask: Promise<void> | null = null;
@@ -50,6 +60,7 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
   /** Captura real de /signals/latest cuando el job no trae chartUrl. */
   private extraChart: string | null = null;
   private extraChartKey = '';
+  private extraChartError: string | null = null;
 
   get card(): ShareCardModel | null {
     return buildShareCard(this.job);
@@ -191,19 +202,89 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
     const card = this.card;
     const canvas = this.poster?.nativeElement;
     if (!card || !canvas) return;
+    let chart: ChartImageLoad | null = null;
+    this.chartDrawn = false;
     try {
       const src = await this.chartSource();
       if (token !== this.paintToken || !this.poster) return;
       renderSharePoster(this.poster.nativeElement, card, null);
-      const fonts = document.fonts?.ready ?? Promise.resolve();
-      const chartPromise = src ? loadChart(src) : Promise.resolve(null);
-      const [chart] = await Promise.all([chartPromise, fonts]);
+      // En el WebView del APK document.fonts.ready a veces no resuelve y el segundo
+      // pintado (el que lleva las velas) no llega. Las fuentes no bloquean el PNG.
+      const fonts = withTimeout(document.fonts?.ready ?? Promise.resolve(), 1200, undefined);
+      // El PNG se pide con fetch same-origin (blob → decode) y, si falla, se dice por qué.
+      const chartPromise: Promise<ChartImageLoad> = src
+        ? loadChartImage(src)
+        : Promise.resolve({ img: null, error: null, revoke: () => {} });
+      const loaded = await Promise.all([chartPromise, fonts]);
+      chart = loaded[0];
       if (token !== this.paintToken || !this.poster) return;
-      renderSharePoster(this.poster.nativeElement, this.card ?? card, chart);
-      await this.persistPoster(this.poster.nativeElement);
-    } catch {
-      /* el canvas queda con el último póster válido */
+      renderSharePoster(this.poster.nativeElement, this.card ?? card, chart.img);
+      this.chartDrawn = !!chart.img;
+      this.chartWarning = this.describeMissingChart(src, chart.error);
+      if (!chart.img && src) {
+        // El servidor sí tiene el PNG: que lo componga Python y se muestre esa imagen.
+        await this.serverCard(card, src);
+      } else {
+        await this.persistPoster(this.poster.nativeElement);
+      }
+    } catch (err) {
+      const detail = err instanceof Error && err.message ? `: ${err.message}` : '';
+      this.chartWarning = `No se pudo generar la imagen${detail}`;
+    } finally {
+      chart?.revoke();
     }
+  }
+
+  /** Motivo por el que la tarjeta queda sin velas. Null si no falta nada. */
+  private describeMissingChart(src: string | null, loadError: string | null): string | null {
+    if (src) return loadError;
+    const fromJob = (this.job.chartError || this.extraChartError || '').trim();
+    if (fromJob) return fromJob;
+    if (this.job.chartStale) return 'El PNG de live/ es de una corrida anterior al reporte';
+    return 'El motor no escribió el PNG de entrada en esta corrida (revisa el registro del job)';
+  }
+
+  /**
+   * Pide al servidor la tarjeta compuesta (Python/Pillow + PNG de live/).
+   * Devuelve su URL same-origin o null. Si el canvas se quedó sin velas, el marco pasa a esa imagen.
+   */
+  private serverCard(card: ShareCardModel, src: string | null): Promise<string | null> {
+    const key = this.posterKey();
+    if (this.serverCardUrl && this.serverCardKey === key) return Promise.resolve(this.serverCardUrl);
+    if (this.serverCardTask && this.serverCardKey === key) return this.serverCardTask;
+    const market = asMarket(this.job.market || this.job.summary?.market);
+    if (!market) return Promise.resolve(null);
+    this.serverCardKey = key;
+    this.serverCardTask = (async () => {
+      try {
+        const res = await firstValueFrom(
+          this.api.composeSignalCard({ market, card, includeChart: !!src, historyId: this.historyId() || null }),
+        );
+        if (!res?.ok || !res.cardUrl) return null;
+        this.serverCardUrl = res.cardUrl;
+        if (res.chart) {
+          if (!this.chartDrawn) {
+            this.savedPosterUrl = res.cardUrl;
+            this.missingPosterId = 0;
+            this.chartWarning = null;
+          }
+        } else if (src) {
+          this.chartWarning = `${this.chartWarning || 'Sin gráfico'} · servidor: ${res.chartError || 'tampoco encontró el PNG'}`;
+        }
+        return res.cardUrl;
+      } catch (err) {
+        const msg = (err as { error?: { error?: string }; message?: string } | null)?.error?.error
+          || (err as { message?: string } | null)?.message
+          || 'sin respuesta';
+        if (src && !this.chartDrawn) {
+          this.chartWarning = `${this.chartWarning || 'Sin gráfico'} · el servidor no pudo componer la tarjeta (${msg})`;
+        }
+        return null;
+      } finally {
+        this.serverCardTask = null;
+      }
+    })();
+    return this.serverCardTask;
   }
 
   /** PNG de la corrida: el del job, o el de latest si no está marcado como viejo. */
@@ -218,18 +299,39 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
     try {
       const latest = await firstValueFrom(this.api.latest(market, asTier(this.job.tier)));
       this.extraChart = latest.chartStale || !latest.chartUrl ? null : latest.chartUrl;
+      this.extraChartError = this.extraChart ? null : (latest.chartError || null);
     } catch {
       this.extraChart = null;
+      this.extraChartError = null;
     }
     return this.extraChart;
   }
 
+  /**
+   * Descarga del póster. En el APK (WebView) y cuando el canvas se quedó sin velas se prefiere la
+   * tarjeta compuesta por el servidor: misma imagen que en el PC, con el gráfico dentro.
+   * Si tampoco hay, se guarda el canvas y se avisa claramente de que va sin gráfico.
+   */
   private async savePng(): Promise<boolean> {
     const card = this.card;
     if (!card || this.busy) return false;
     this.busy = true;
     try {
       const canvas = await this.ensurePoster();
+      const src = await this.chartSource();
+      const wantsChart = !!src;
+      const preferServer = isWebViewUa() || (wantsChart && !this.chartDrawn);
+      if (preferServer) {
+        const url = await this.serverCard(card, src);
+        if (url) {
+          const result = await this.downloads.saveUrl(url, sharePngFilename(card));
+          if (result.ok) {
+            if (wantsChart && this.chartWarning) this.note = `Imagen guardada sin gráfico: ${this.chartWarning}`;
+            return true;
+          }
+          this.note = result.message;
+        }
+      }
       if (!canvas) {
         this.note = 'No se pudo generar la imagen.';
         return false;
@@ -240,8 +342,14 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
         return false;
       }
       const result = await this.downloads.saveBlob(blob, sharePngFilename(card));
-      if (!result.ok) this.note = result.message;
-      return result.ok;
+      if (!result.ok) {
+        this.note = result.message;
+        return false;
+      }
+      if (wantsChart && !this.chartDrawn) {
+        this.note = `Imagen guardada SIN el gráfico de velas: ${this.chartWarning || 'no se pudo cargar el PNG'}`;
+      }
+      return true;
     } catch {
       this.note = 'No se pudo generar la imagen.';
       return false;
@@ -333,16 +441,24 @@ export class SignalShareCardComponent implements AfterViewChecked, OnDestroy {
     return new File([png], posterShareFileName(card.symbol), { type: 'image/png' });
   }
 
-  /** El canvas recién pintado; si aún no existe, la imagen ya guardada. */
+  /** La tarjeta del servidor si el canvas quedó sin velas; si no, el canvas; si no, la imagen guardada. */
   private async shownPosterBlob(): Promise<Blob | null> {
     const canvas = await this.ensurePoster();
+    if (!this.chartDrawn && this.serverCardUrl) {
+      const served = await this.fetchPng(this.serverCardUrl);
+      if (served) return served;
+    }
     if (canvas && canvas.width > 0) {
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
       if (blob && blob.size > 0) return blob;
     }
     if (!this.savedPosterUrl) return null;
+    return this.fetchPng(this.savedPosterUrl);
+  }
+
+  private async fetchPng(url: string): Promise<Blob | null> {
     try {
-      const res = await fetch(this.savedPosterUrl);
+      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
       if (!res.ok) return null;
       const blob = await res.blob();
       if (blob.size <= 0) return null;
@@ -439,12 +555,19 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-function loadChart(src: string): Promise<HTMLImageElement | null> {
+function withTimeout<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise((resolve) => {
-    const img = new Image();
-    if (/^https?:\/\//i.test(src)) img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img.naturalWidth ? img : null);
-    img.onerror = () => resolve(null);
-    img.src = src;
+    const timer = setTimeout(() => resolve(fallback), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
   });
 }
+

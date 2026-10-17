@@ -51,10 +51,11 @@ const {
 } = require('./signal-runner');
 const {
   pickLatestChart,
-  isChartStale,
+  chartFields,
   parseDataFreshness,
 } = require('./live-freshness');
 const { ensureTradingRoot } = require('./trading-source');
+const signalCard = require('./signal-card');
 
 const PORT = Number(process.env.PORT || 3847);
 /** Solo loopback: API local, no exponer a la LAN. */
@@ -108,14 +109,14 @@ const REPORTS = {
     light: 'btc_m5_signal.md',
     high: 'btc_m5_high_signal.md',
     history: 'btc_m5_high_signal.md',
-    chart: 'btc_m5_chart_annotated.png',
+    chart: ['btc_m5_chart_annotated.png', 'btc_m5_chart.png'],
   },
   us30: {
     context: 'us30_m5_context.md',
     light: 'us30_m5_signal.md',
     high: 'us30_m5_high_signal.md',
     history: 'us30_m5_high_signal.md',
-    chart: 'us30_m5_chart_annotated.png',
+    chart: ['us30_m5_chart_annotated.png', 'us30_m5_chart.png'],
   },
   xauusd: {
     context: 'xauusd_m5_context.md',
@@ -273,7 +274,7 @@ async function persistJobSnapshot(job, extras = {}) {
       verdict: job.summary?.verdict || latest?.summary?.verdict || null,
       summary: job.summary || latest?.summary || null,
       reportPath: job.reportPath || latest?.reportPath || null,
-      chartPath: latest?.chartPath || null,
+      chartPath: job.chartPath || latest?.chartPath || null,
       preview: latest?.preview || null,
       command: job.command || null,
       exitCode: job.exitCode,
@@ -946,21 +947,22 @@ function parseSummary(md, market, tier) {
   };
 }
 
-/** Chart más reciente del mercado; si es de una corrida anterior al reporte no se expone. */
-function latestChartInfo(key, chartNames, reportMtimeMs) {
-  const chart = pickLatestChart(livePath(), chartNames);
-  if (!chart) {
-    return { chartPath: null, chartUrl: null, chartMtime: null, chartStale: false };
-  }
-  const chartStale = isChartStale(chart.mtimeMs, reportMtimeMs);
-  return {
-    chartPath: chartStale ? null : chart.full,
-    chartUrl: chartStale
-      ? null
-      : `/api/signals/chart?market=${key}&v=${Math.round(chart.mtimeMs)}`,
-    chartMtime: new Date(chart.mtimeMs).toISOString(),
-    chartStale,
-  };
+/**
+ * Chart más reciente del mercado.
+ * Sin `startedAtMs` (GET /latest) un PNG anterior al reporte no se expone.
+ * Con el inicio del job, el PNG escrito en esa corrida sí se expone.
+ */
+function latestChartInfo(key, chartNames, reportMtimeMs, startedAtMs) {
+  const info = chartFields(key, pickLatestChart(livePath(), chartNames), reportMtimeMs, startedAtMs);
+  return { ...info, chartError: describeMissingChart(info, chartNames) };
+}
+
+/** Motivo legible (español) cuando la tarjeta no va a tener gráfico. Null si hay chartUrl. */
+function describeMissingChart(info, chartNames) {
+  if (info.chartUrl) return null;
+  if (info.chartStale) return 'El PNG de live/ es de una corrida anterior al reporte (no se muestra para no pintar velas viejas)';
+  const names = [chartNames || []].flat().filter(Boolean).join(' / ') || 'PNG';
+  return `No hay PNG de entrada en live/ (${names}). El motor no lo escribió en esta corrida`;
 }
 
 function readLatest(market, tierHint) {
@@ -1095,6 +1097,81 @@ app.get('/api/signals/chart', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   applyDownloadHeaders(req, res, `grafico-${market}.png`);
   res.sendFile(chartFull);
+});
+
+/**
+ * Tarjeta de señal compuesta en el servidor (Python/Pillow) con el PNG de entrada de live/.
+ * Body: { market, card: ShareCardModel, includeChart?: boolean, historyId?: number }.
+ * Responde JSON { ok, cardUrl, chart, chartError }. El PNG se sirve en GET /api/signals/card.
+ * Si viene historyId, la tarjeta queda también como póster de esa fila del historial.
+ */
+app.post('/api/signals/card', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const market = normalizeMarket(body.market);
+  if (!market || !REPORTS[market]) return res.status(400).json({ error: MARKET_ERROR });
+  if (!TRADING_ROOT || !fs.existsSync(TRADING_ROOT)) {
+    return res.status(503).json({ error: 'Motor Cursor Trading no disponible: no se puede componer la tarjeta' });
+  }
+  const spec = signalCard.sanitizeCardSpec(body.card);
+  if (!signalCard.specHasContent(spec)) {
+    return res.status(400).json({ error: 'La tarjeta no trae datos que pintar' });
+  }
+  let chartPath = null;
+  let chartError = null;
+  if (body.includeChart !== false) {
+    const chart = pickLatestChart(livePath(), REPORTS[market].chart);
+    if (chart) chartPath = path.resolve(chart.full);
+    else chartError = describeMissingChart({ chartUrl: null, chartStale: false }, REPORTS[market].chart);
+  }
+  const outPath = path.join(signalCard.cardsDir(), signalCard.cardFileName(market));
+  try {
+    const result = await signalCard.composeSignalCard({
+      tradingRoot: TRADING_ROOT,
+      spec,
+      chartPath,
+      outPath,
+      env: { ...process.env, ...mt5.brokerFeedEnv(mt5Settings.get()) },
+    });
+    if (!result.ok) {
+      console.warn('[card] compositor:', result.error);
+      return res.status(500).json({ error: `No se pudo componer la tarjeta: ${result.error}` });
+    }
+    const mtimeMs = fs.statSync(outPath).mtimeMs;
+    const historyId = parseHistoryId(body.historyId);
+    let posterSaved = false;
+    if (historyId != null) {
+      try {
+        const saved = await historyStore.savePosterImage(historyId, fs.readFileSync(outPath), 'image/png');
+        posterSaved = !!saved.ok;
+      } catch (err) {
+        console.warn('[card] póster historial:', err.message);
+      }
+    }
+    res.json({
+      ok: true,
+      cardUrl: signalCard.cardUrl(market, mtimeMs),
+      chart: result.chart,
+      chartError: result.chart ? null : (result.chartError || chartError),
+      posterSaved,
+    });
+  } catch (err) {
+    console.error('[card] error:', err);
+    res.status(500).json({ error: 'No se pudo componer la tarjeta' });
+  }
+});
+
+/** Última tarjeta compuesta para el mercado (PNG). `?download=1` la descarga. */
+app.get('/api/signals/card', (req, res) => {
+  const market = normalizeMarket(req.query.market);
+  if (!market) return res.status(400).json({ error: MARKET_ERROR });
+  const file = signalCard.latestCardFile(market);
+  if (!file) {
+    return res.status(404).json({ error: 'Aún no hay tarjeta compuesta para este mercado. Genera una señal primero.' });
+  }
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'no-cache');
+  applyDownloadHeaders(req, res, `senal-${market}.png`);
+  res.sendFile(file.full);
 });
 
 /** Mini-chart MACD-quant H4 (soft-filter) desde live/<sym>_h4_macd_quant.png */
@@ -2856,7 +2933,30 @@ function launchSignalScript(job, scriptResolved, psArgs, env) {
       if (latest) {
         job.reportPath = latest.reportPath;
         job.summary = latest.summary;
+        const started = Date.parse(job.startedAt || '');
+        const reportMs = Date.parse(latest.mtime || '');
+        const chartInfo = latestChartInfo(
+          market,
+          REPORTS[market]?.chart,
+          Number.isFinite(reportMs) ? reportMs : null,
+          Number.isFinite(started) ? started : null,
+        );
+        job.chartPath = chartInfo.chartPath;
+        job.chartUrl = chartInfo.chartUrl;
+        job.chartStale = chartInfo.chartStale;
+        job.chartError = null;
         job.logs.push(`[ok] Reporte: ${latest.reportPath}`);
+        if (chartInfo.chartUrl) {
+          job.logs.push(`[ok] Gráfico de entrada: ${chartInfo.chartUrl}`);
+        } else if (job.flags?.ilustrate || job.flags?.noChart === false) {
+          const fail = [...job.logs].reverse().find((line) =>
+            /ERROR chart|WARN chart overlays|ERROR obteniendo velas|ERROR fetching velas|WARN captura/.test(line));
+          const detail = fail ? fail.replace(/^\[[^\]]+\]\s*/, '') : (chartInfo.chartError || 'no se escribió el PNG de entrada en esta corrida');
+          job.chartError = detail;
+          job.logs.push(`[error] La tarjeta queda sin gráfico. ${detail}`);
+        } else {
+          job.chartError = 'La corrida se lanzó sin -Ilustrate: no se pidió el PNG de entrada';
+        }
       } else {
         job.logs.push('[warn] Proceso OK pero no se encontró reporte live.');
       }

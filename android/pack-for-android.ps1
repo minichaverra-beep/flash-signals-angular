@@ -4,8 +4,10 @@
   Empaqueta Cursor Trading + Flash Signals para instalar en Android (Termux + Ubuntu proot).
 .DESCRIPTION
   1. Compila Angular (dist/) salvo -SkipBuild.
-  2. Copia ambos repos para el teléfono. El motor sale de la librería desplegada
-     (flash-trading-signals en GitHub), no de D:\Danilo\Trading\Cursor Trading.
+  2. Copia ambos repos para el teléfono. El motor sale de la caché data\cursor-trading
+     (la misma que usa la API en este PC). Si esa caché tiene cambios locales más nuevos
+     que su sello .source-sha (p. ej. free_candles.py, signal_card.py), se empaqueta TAL CUAL
+     y no se vuelve a bajar de GitHub (eso los pisaría). -RefreshEngine fuerza la descarga.
      No lleva el escritorio: scripts .ps1, Docker, el proyecto Gradle del APK,
      el secreto de admin del PC ni node_modules (Termux los instala con npm ci).
      Sí incluye models/, data/*.parquet y .pt.
@@ -20,7 +22,9 @@ param(
   [string]$TradingRoot = '',
   [string]$OutDir = '',
   [string]$Python = 'python',
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  # Vuelve a bajar el motor de GitHub aunque la caché local tenga cambios (los pisa).
+  [switch]$RefreshEngine
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +44,34 @@ function Test-EngineReady([string]$root) {
   return [bool]($root -and (Test-Path -LiteralPath (Join-Path $root 'scripts\analyze\analyze.sh')))
 }
 
+# Archivo .py de app/ más nuevo que el sello .source-sha = ediciones locales que GitHub no tiene.
+function Get-EngineLocalEdits([string]$root) {
+  $stamp = Join-Path $root '.source-sha'
+  if (-not (Test-Path -LiteralPath $stamp)) { return @() }
+  $since = (Get-Item -LiteralPath $stamp).LastWriteTimeUtc
+  $appDir = Join-Path $root 'app'
+  if (-not (Test-Path -LiteralPath $appDir)) { return @() }
+  return @(Get-ChildItem -LiteralPath $appDir -Recurse -File -Include *.py |
+    Where-Object { $_.LastWriteTimeUtc -gt $since -and $_.FullName -notmatch '__pycache__' } |
+    Sort-Object LastWriteTimeUtc -Descending)
+}
+
+# El teléfono necesita estos módulos del motor actual (gráfico con respaldo y tarjeta del servidor).
+$EngineRequiredFiles = @(
+  'app\models\free_candles.py',
+  'app\models\broker_feed.py',
+  'app\views\mpl_safe.py',
+  'app\views\illustrate_high_entry.py',
+  'app\views\signal_card.py',
+  'scripts\analyze\analyze.sh'
+)
+function Assert-EngineFiles([string]$root, [string]$label) {
+  $missing = @($EngineRequiredFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_)) })
+  if ($missing.Count) {
+    throw "El motor en $label no trae: $($missing -join ', '). El teléfono generaría la tarjeta sin gráfico."
+  }
+}
+
 function Resolve-DeployedTradingRoot([string]$requested) {
   if (-not $requested -and $env:CURSOR_TRADING_ROOT) { $requested = $env:CURSOR_TRADING_ROOT.Trim() }
   $legacy = $false
@@ -52,6 +84,17 @@ function Resolve-DeployedTradingRoot([string]$requested) {
   }
 
   $cache = if ($env:CURSOR_TRADING_CACHE) { $env:CURSOR_TRADING_CACHE } else { Join-Path $AppRoot 'data\cursor-trading' }
+  if (-not $RefreshEngine -and (Test-EngineReady $cache)) {
+    $edits = Get-EngineLocalEdits $cache
+    if ($edits.Count) {
+      Write-Host ">> Motor: caché local $cache con $($edits.Count) archivo(s) editados después del último sello:" -ForegroundColor Cyan
+      foreach ($e in ($edits | Select-Object -First 8)) {
+        Write-Host ("   {0:yyyy-MM-dd HH:mm}  {1}" -f $e.LastWriteTime, $e.FullName.Substring($cache.Length + 1)) -ForegroundColor DarkGray
+      }
+      Write-Host '   Se empaqueta tal cual (sin bajar GitHub, que los pisaría). Usa -RefreshEngine para forzar la descarga.' -ForegroundColor Yellow
+      return (Resolve-Path -LiteralPath $cache).Path
+    }
+  }
   Write-Host '>> Motor: librería desplegada flash-trading-signals (main)...' -ForegroundColor Cyan
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $headers = @{ 'User-Agent' = 'flash-signals-angular'; 'Accept' = 'application/vnd.github+json' }
@@ -106,6 +149,12 @@ function Resolve-DeployedTradingRoot([string]$requested) {
 }
 
 $TradingRoot = Resolve-DeployedTradingRoot $TradingRoot
+Assert-EngineFiles $TradingRoot $TradingRoot
+$newestPy = Get-ChildItem -LiteralPath (Join-Path $TradingRoot 'app') -Recurse -File -Include *.py |
+  Where-Object { $_.FullName -notmatch '__pycache__' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($newestPy) {
+  Write-Host ("   motor: {0}  (archivo más reciente {1:yyyy-MM-dd HH:mm} {2})" -f $TradingRoot, $newestPy.LastWriteTime, $newestPy.Name) -ForegroundColor DarkGray
+}
 
 if (-not $SkipBuild) {
   Write-Host '>> ng build (dist/)...' -ForegroundColor Cyan
@@ -151,6 +200,11 @@ function Copy-Repo([string]$src, [string]$name) {
 }
 Copy-Repo $TradingRoot 'Cursor Trading'
 Copy-Repo $AppRoot 'flash-signals-angular'
+# Lo que de verdad va en el paquete (no lo que había en el PC).
+Assert-EngineFiles (Join-Path $stage 'Cursor Trading') 'el paquete (Cursor Trading)'
+foreach ($must in @('server\index.js', 'server\signal-card.js', 'dist\flash-signals-angular\browser\index.html')) {
+  if (-not (Test-Path -LiteralPath (Join-Path $stage "flash-signals-angular\$must"))) { throw "Falta $must en el paquete" }
+}
 
 Write-Host '>> Fijando versiones Python del PC...' -ForegroundColor Cyan
 $freeze = & $Python -m pip freeze

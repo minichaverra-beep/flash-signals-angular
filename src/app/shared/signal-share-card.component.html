@@ -39,6 +39,9 @@
         <span>Compartir</span>
       </button>
     </div>
+    @if (chartWarning) {
+      <p class="note note-warn" role="status">Sin gráfico de velas en la tarjeta: {{ chartWarning }}</p>
+    }
     @if (note) { <p class="note">{{ note }}</p> }
 
     @if (shareOpen) {

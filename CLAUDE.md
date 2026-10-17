@@ -19,13 +19,13 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 4. API pensada para **localhost** (`BIND_HOST=127.0.0.1` por defecto). No publicar a Internet.
 5. **No commit** de secretos (`.env`, tokens, credenciales).
 6. Branding: *Flash Signals · fuego y sombra*, crédito **Danilo Chaverra**, `src/assets/logo.png`.
-7. **Fuente de datos:** `server/data-source.js` resuelve `yahoo|mt5|auto`. Defecto `yahoo`. Android/Termux, cabecera `X-FS-Client: small` y peticiones sin admin quedan siempre en Yahoo (aunque `data/mt5-settings.json` diga `mt5`). El desplegable de `/configuracion` solo lo ve un admin (`AuthService.isAdmin()`): Solo Yahoo o MT5; MT5 aplica en el escritorio de esa sesión. APK: `android/start.sh` fija `FS_DATA_SOURCE=yahoo`. En modo Yahoo `mt5.brokerFeedEnv()` devuelve solo `FS_DATA_SOURCE=yahoo`, Python (`broker_feed.yahoo_only()`) ignora MT5 y Binance, y ATR/VIX del servidor usan Yahoo (`yahoo-candles.js`). Todo código nuevo que lea velas debe respetar el modo; el móvil corre su **propia copia** del código (reempaquetar con `pack-for-android.ps1`).
+7. **Fuente de datos:** `server/data-source.js` resuelve `yahoo|mt5|auto`. Defecto `yahoo`. Android/Termux, cabecera `X-FS-Client: small` y peticiones sin admin quedan siempre en modo Yahoo (aunque `data/mt5-settings.json` diga `mt5`): no se abre el puente. El desplegable de `/configuracion` solo lo ve un admin (`AuthService.isAdmin()`): Solo Yahoo o MT5; MT5 aplica en el escritorio de esa sesión. APK: `android/start.sh` fija `FS_DATA_SOURCE=yahoo`. En ese modo `mt5.brokerFeedEnv()` devuelve solo `FS_DATA_SOURCE=yahoo` (nunca `FS_MT5_*`). Python (`broker_feed.yahoo_only()`) no llama a MT5. Si Yahoo falla, velas en orden Binance → OKX → Stooq (`app/models/free_candles.py`); US30 no se mapea a un par cripto. ATR usa la misma cadena (`server/yahoo-candles.js` + `server/candle-fallback.js`). El VIX sigue en `server/vix-source.js`. El gráfico nombra la fuente que respondió («Binance (Yahoo falló)», «OKX», «Stooq»). Todo código nuevo que lea velas debe respetar el modo; el móvil corre su **propia copia** del código (reempaquetar y publicar con un solo comando: `android\release-android.ps1`, que ya llama a `pack-for-android.ps1`; `-SkipPack` reutiliza el último paquete).
 
 ## Stack técnico
 
 - Angular 19 (`src/app/pages/historial` = página `/senales`, `src/app/shared/signal-run-form.component.ts`, `src/app/services/signals-api.service.ts`) — `ng serve` en **:4400**
 - Express 5 CommonJS en `server/` (deps en `server/package.json`) — API en **:3847**
-- Scripts host: `run-api.ps1`, `run-local-web.ps1`
+- Scripts host: `run-api.ps1`, `run-local-web.ps1`, `run-both.ps1`, `run-apk-web.ps1` (simula el APK: `-DataSource yahoo`, sin MT5)
 - Cursor/VS Code: `.vscode/launch.json` compound **API + Web** (F5, hot reload)
 - Docker: `Dockerfile.web`, `Dockerfile.api`, `docker-compose.yml`, `run-docker.ps1`, `run-docker-arm.ps1` (UI nginx **:8080**)
 
@@ -57,7 +57,8 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 - `POST /api/signals/run` — una job a la vez; persiste en hive box al completar
 - `GET /api/signals/status`, `latest`, `chart`
 - `GET /api/signals/events` — SSE del job en curso (`snapshot` al conectar, `job:started|progress|finished|failed`, `ping` cada 15 s). UI: `SignalJobService` (root) sobrevive a F5 / cambio de ruta
-- Imágenes (`/api/signals/chart`, `/api/signals/macd-chart`, `/api/history/:id/result-image`, `/api/signals/macd-quant/history/:id/chart`, `/api/artifacts/raw`) aceptan `?download=1[&filename=]` → `Content-Disposition: attachment` (`server/download-headers.js`; el nombre se sanea y nunca elige el archivo)
+- Imágenes (`/api/signals/chart`, `/api/signals/card`, `/api/signals/macd-chart`, `/api/history/:id/result-image`, `/api/signals/macd-quant/history/:id/chart`, `/api/artifacts/raw`) aceptan `?download=1[&filename=]` → `Content-Disposition: attachment` (`server/download-headers.js`; el nombre se sanea y nunca elige el archivo)
+- **Tarjeta/póster de la señal:** el canvas del navegador (`signal-share-poster.ts`) carga el PNG con `shared/chart-image.ts` (fetch same-origin → blob → decode; si falla, dice por qué en `chartWarning`). `POST /api/signals/card` (`server/signal-card.js` → Python `app/views/signal_card.py`, Pillow) compone la misma tarjeta en el servidor con el PNG de `live/`; el APK (WebView) descarga esa y, si el canvas se quedó sin velas, el marco muestra esa imagen. El job y `/api/signals/latest` llevan `chartError` (motivo en español) cuando no hay PNG. El motor que corre el PC y el que se empaqueta para el móvil es `data/cursor-trading` (ediciones locales se respetan en `pack-for-android.ps1`; `-RefreshEngine` las pisa con GitHub)
 - `GET /api/zentinel`
 - `GET|DELETE /api/history` (+ `/:id`)
 - `GET /api/artifacts`, `POST /api/artifacts/scan`, `GET /api/artifacts/item|raw?path=`
@@ -75,12 +76,16 @@ UI local **Angular 19** + API **Express** (`server/index.js`) que orquesta seña
 # Host con Node
 .\run-api.ps1
 .\run-local-web.ps1
+# Simular el APK en la web de escritorio (Yahoo, sin puentes ni terminal MT5):
+.\run-apk-web.ps1
 
 # Sin Node: Docker UI (+ API mock/limitada) o híbrido
 .\run-docker.ps1
 .\run-docker.ps1 -HostApi   # UI Docker + API Windows
 .\run-docker-arm.ps1        # ARM64
 ```
+
+`run-apk-web.ps1` abre `http://localhost:4400` y pasa `-DataSource yahoo` a la API (`FS_DATA_SOURCE=yahoo`). No emula `window.AndroidDownloader`: Descargar sigue siendo la descarga del navegador.
 
 ## Al cambiar código
 

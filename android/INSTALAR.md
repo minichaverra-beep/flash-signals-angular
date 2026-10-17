@@ -8,7 +8,7 @@ La app **Flash Signals** (APK propio) es un asistente: comprueba sola qué falta
 .\android\release-android.ps1
 ```
 
-Hace todo: build de Angular, paquete (`out\flash-android.tar.gz` + `VERSION`), APK con el paquete dentro (si hay Android SDK) y, si el teléfono está conectado por adb (USB o depuración inalámbrica), lo instala y abre la app.
+Hace todo, en orden: `[1/3]` build de Angular + paquete (`pack-for-android.ps1` → `out\flash-android.tar.gz` + `VERSION`), `[2/3]` APK con el paquete dentro (si hay Android SDK) y `[3/3]`, si el teléfono está conectado por adb (USB o depuración inalámbrica), lo instala y abre la app. No hace falta ejecutar `pack-for-android.ps1` aparte; si el paquete falla, el script se detiene ahí. `-SkipPack` reutiliza el último paquete sin reempaquetar.
 
 Detén antes la API (`run-api.ps1`) para que los `.sqlite` queden consistentes.
 

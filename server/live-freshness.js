@@ -43,6 +43,33 @@ function isChartStale(chartMtimeMs, reportMtimeMs) {
   return reportMtimeMs - chartMtimeMs > CHART_MAX_LAG_MS;
 }
 
+/** Holgura: el PNG puede cerrarse un instante antes del reloj de inicio del job. */
+const RUN_CHART_SLACK_MS = 15 * 1000;
+
+/**
+ * URL same-origin del PNG de esta corrida.
+ * Un chart escrito durante el job no se oculta aunque el .md quede varios minutos después.
+ * Un PNG anterior al job sigue oculto (chartStale) para no pintar velas viejas.
+ * @param {string} market
+ * @param {{ name?: string, full: string, mtimeMs: number } | null} chart
+ * @param {number | null} reportMtimeMs
+ * @param {number | null} [startedAtMs]
+ */
+function chartFields(market, chart, reportMtimeMs, startedAtMs) {
+  if (!chart) {
+    return { chartPath: null, chartUrl: null, chartMtime: null, chartStale: false };
+  }
+  const fromThisRun = Number.isFinite(startedAtMs) && chart.mtimeMs >= startedAtMs - RUN_CHART_SLACK_MS;
+  const chartStale = !fromThisRun && isChartStale(chart.mtimeMs, reportMtimeMs);
+  const chartUrl = `/api/signals/chart?market=${market}&v=${Math.round(chart.mtimeMs)}`;
+  return {
+    chartPath: chartStale ? null : chart.full,
+    chartUrl: chartStale ? null : chartUrl,
+    chartMtime: new Date(chart.mtimeMs).toISOString(),
+    chartStale,
+  };
+}
+
 /**
  * Lee «Última vela M5 **YYYY-MM-DD HH:MM UTC**» y «Datos desactualizados: …» del .md.
  * @returns {{ dataAsOf: string|null, dataStale: boolean, staleMessage: string|null }}
@@ -60,7 +87,9 @@ function parseDataFreshness(md) {
 
 module.exports = {
   CHART_MAX_LAG_MS,
+  RUN_CHART_SLACK_MS,
   pickLatestChart,
   isChartStale,
+  chartFields,
   parseDataFreshness,
 };

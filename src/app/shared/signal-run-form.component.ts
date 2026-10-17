@@ -104,20 +104,6 @@ export class SignalRunFormComponent implements OnInit, OnDestroy {
     return this.starting || this.jobs.running();
   }
 
-  /** Qué va a hacer el runner con la selección actual. */
-  get runGuide(): string {
-    if (this.apiOk === false) {
-      return 'La API no responde. En el teléfono, Actualizar y abrir deja la interfaz sola al terminar. En el PC: npm run api (puerto 3847).';
-    }
-    const market = this.markets.find((m) => m.id === this.market)?.label ?? this.market.toUpperCase();
-    const bias = this.bias === 'trend' ? 'la tendencia de la hora' : this.bias === 'bullish' ? 'alcista' : 'bajista';
-    const setup = this.setup === 'reverse' ? 'reversión' : 'ruptura';
-    if (this.busy) {
-      return `${market} en curso, sesgo ${bias}. Si Yahoo no conecta, el runner pide las velas a otro sitio. Si ese precio no se mueve, prueba el siguiente.`;
-    }
-    return `${market}, sesgo ${bias}, ${setup}. Un toque en Ejecutar señal. Si Yahoo no conecta, pide otro sitio; si ese precio está clavado, pasa al siguiente.`;
-  }
-
   get runLabel(): string {
     if (this.starting) return 'Iniciando…';
     const j = this.jobs.job();

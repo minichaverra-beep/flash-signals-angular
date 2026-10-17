@@ -179,30 +179,6 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.run-help {
-  margin-top: 0.9rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
-  background: color-mix(in srgb, var(--accent) 16%, var(--panel-deep));
-}
-
-.run-help p {
-  margin: 0;
-  color: var(--text);
-  line-height: 1.45;
-  font-size: 0.92rem;
-}
-
-.run-help-kicker {
-  margin-bottom: 0.25rem !important;
-  color: var(--accent-2) !important;
-  font-size: 0.75rem !important;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .msg {
   margin: 0.9rem 0 0;
   color: var(--ok);
